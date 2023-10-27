@@ -4,6 +4,12 @@ import taichi.math as tm
 from ..constants import *
 
 
+'''
+TODO:
+1. source parameter check, (m1>m2, q<1)
+'''
+
+
 @ti.dataclass
 class SourceParameters:
     M: ti.f64       # total mass
@@ -63,27 +69,27 @@ class PostNewtonianCoefficients:
                          (113.0/3.0 - 76.0/3.0*source_params.eta)*source_params.chi_s 
                         )
         self.varphi_4 = (5.0/72.0*(3058.673/7.056 + 5429.0/7.0*source_params.eta + 617.0*source_params.eta2) +
-                         (-405/8 + 200*source_params.eta) * source_params.chi_a * source_params.chi_a - 
-                         405/4 * source_params.delta * source_params.chi_s + 
-                         (-405/8 + 5/2*source_params.eta) * source_params.chi_s * source_params.chi_s
+                         (-405.0/8.0 + 200.0*source_params.eta) * source_params.chi_a * source_params.chi_a - 
+                         405.0/4.0 * source_params.delta * source_params.chi_a * source_params.chi_s + 
+                         (-405.0/8.0 + 5.0/2.0*source_params.eta) * source_params.chi_s * source_params.chi_s
                         )
         self.varphi_5 = (5.0/9.0 * (772.9/8.4 - 13.0*source_params.eta) * PI +
-                         () * source_params.delta * source_params.chi_a +
-                         () * source_params.chi_s * source_params.chi_s
+                         (-732.985/2.268 - 140.0/9.0*source_params.eta) * source_params.delta * source_params.chi_a +
+                         (-732.985/2.268 + 2426.0/8.1*source_params.eta + 340.0/9.0*source_params.eta2) * source_params.chi_s
                         )
-        self.varphi_5l= 3 * self.varphi_5
-        self.varphi_6 = ((11583.231236531/4.694215680 - 640./3.*PI*PI - 684.8/2.1*EULER_GAMMA + 
+        self.varphi_5l= 3.0 * self.varphi_5
+        self.varphi_6 = ((11583.231236531/4.694215680 - 640.0/3.0*PI*PI - 684.8/2.1*EULER_GAMMA + 
                             (-15737.765635/3.048192 + 225.5/1.2*PI*PI)*source_params.eta + 
                             76.055/1.728*source_params.eta2 - 
                             127.825/1.296*source_params.eta3 - 
                             tm.log(4.)*684.8/2.1) +
-                         2270.0/3.0 * PI * source_params.delta * source_params.chi_a
-                         (2270.0/3.0 * PI -  520.0*PI*source_params.eta) * source_params.chi_s
+                         2270.0/3.0*PI*source_params.delta*source_params.chi_a
+                         (2270.0/3.0 - 520.0*source_params.eta)*PI*source_params.chi_s
                         )
-        self.varphi_6l=-6848.0/21.0
-        self.varphi_7 = (77096675.0/254016.0*PI + 378515.0/1512.0*PI*source_params.eta- 74045.0/756.0*PI*source_params.eta2 + 
-                         (-25150083775./3048192. + 26804935.*source_params.eta/6048. - 1985.*source_params.eta2/48.)*source_params.delta*source_params.chi_a
-                         (-25150083775.0/3048192.0 + 10566655595.0*source_params.eta/762048. - 1042165.*source_params.eta2/3024. + 5345.*source_params.eta3/36.)*source_params.chi_s
+        self.varphi_6l=-684.8/2.1
+        self.varphi_7 = ((770.96675/2.54016 + 378.515/1.512*source_params.eta- 740.45/7.56*source_params.eta2)*PI + 
+                         (-25150.083775/3.048192 + 26804.935/6.048*source_params.eta - 198.5/4.8*source_params.eta2) * source_params.delta * source_params.chi_a
+                         (-25150.083775/3.048192 + 105666.55595/7.62048*source_params.eta - 1042.165/3.024*source_params.eta2 + 534.5/3.6*source_params.eta3) * source_params.chi_s
                         )
 
 

@@ -1,2 +1,2 @@
 # wf4ti
-GW waveform for taichi-lang
+GW waveform using taichi-lang

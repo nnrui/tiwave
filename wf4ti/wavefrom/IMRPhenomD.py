@@ -1,5 +1,6 @@
 import taichi as ti
 import taichi.math as tm
+import numpy as np
 
 from ..constants import *
 
@@ -9,6 +10,125 @@ TODO:
 1. source parameter check, (m1>m2, q<1)
 '''
 
+@ti.dataclass
+class UsefulPowers:
+    third: ti.f64
+    two_thirds: ti.f64
+    four_thirds: ti.f64
+    five_thirds: ti.f64
+    two: ti.f64
+    seven_thirds: ti.f64
+    eight_thirds: ti.f64
+    inv: ti.f64
+    m_seven_sixths: ti.f64
+    m_third: ti.f64
+    m_two_thirds: ti.f64
+    m_five_thirds: ti.f64
+
+    @ti.func
+    def initilizing_useful_powers(self, number):
+        pass
+
+useful_powers_of_pi = UsefulPowers()
+useful_powers_of_pi.initilizing_useful_powers(PI)
+
+QNMgrid_a     = np.loadtxt('../data/QNMData_a.txt')
+QNMgrid_fring = np.loadtxt('../data/QNMData_fring.txt')
+QNMgrid_fdamp = np.loadtxt('../data/QNMData_fdamp.txt')
+AMPLITUDE_INSPIRAL_fJoin = 0.014
+PHASE_INSPIRAL_fJoin = 0.018
+
+
+@ti.func
+def _intermediate_collocation_frequency_matrix(f1, f2, f3):
+    f1_2 = f1 * f1
+    f1_3 = f1_2 * f1
+    f1_4 = f1_3 * f1
+
+    f2_2 = f2 * f2
+    f2_3 = f2_2 * f2
+    f2_4 = f2_3 * f2
+
+    f3_2 = f3 * f3
+    f3_3 = f3_2 * f3
+    f3_4 = f3_3 * f3
+    return ti.Matrix([[1.0,  f1, f1_2,   f1_3, f1_4  ],
+                      [1.0,  f2, f2_2,   f2_3, f2_4  ],
+                      [1.0,  f3, f3_2,   f3_3, f3_4  ],
+                      [0.0, 1.0, 2*f1, 3*f1_2, 4*f1_3],
+                      [0.0, 1.0, 2*f3, 3*f3_2, 4*f3_3]], dt=ti.f64)
+
+
+@ti.func
+def _inspiral_amplitude_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+    return (1.0 + 
+            powers_of_Mf.two_thirds * pn_prefactors.amplitude_two_thirds + 
+            powers_of_Mf.one * pn_prefactors.one + 
+            powers_of_Mf.four_thirds * pn_prefactors.four_thirds +
+            powers_of_Mf.five_thirds * pn_prefactors.five_thirds +
+            powers_of_Mf.two * pn_prefactors.two +
+            powers_of_Mf.seven_thirds * amplitude_coefficients.rho_1 + 
+            powers_of_Mf.eight_thirds * amplitude_coefficients.rho_2 +
+            powers_of_Mf.three * amplitude_coefficients.rho_3
+            )
+
+@ti.func
+def _derivate_inspiral_amplitude_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+    return (powers_of_Mf.minus_two_thirds * pn_prefactors.amplitude_two_thirds + 
+            powers_of_Mf.one * pn_prefactors.one + 
+            powers_of_Mf.four_thirds * pn_prefactors.four_thirds +
+            powers_of_Mf.five_thirds * pn_prefactors.five_thirds +
+            powers_of_Mf.two * pn_prefactors.two +
+            powers_of_Mf.seven_thirds * amplitude_coefficients.rho_1 + 
+            powers_of_Mf.eight_thirds * amplitude_coefficients.rho_2 +
+            powers_of_Mf.three * amplitude_coefficients.rho_3
+            )
+
+@ti.func
+def _intermediate_amplitude_ansatz(freq, amplitude_coefficients):
+    pass
+
+@ti.func
+def _derivate_intermediate_amplitude_ansatz(freq, amplitude_coefficients):
+    pass
+@ti.func
+def _merge_ringdown_amplitude_ansatz(freq, amplitude_coefficients):
+    pass
+
+@ti.func
+def _derivate_merge_ringdown_amplitude_ansatz(freq, amplitude_coefficients):
+    pass
+
+
+
+
+
+@ti.func
+def _inspiral_phase_ansatz(freq, phase_coefficients, pn_prefactors):
+    pass
+
+@ti.func
+def _derivate_inspiral_phase_ansatz(freq, phase_coefficients, pn_prefactors):
+    pass
+
+@ti.func
+def _intermediate_phase_ansatz(freq, phase_coefficients):
+    pass
+
+@ti.func
+def _derivate_intermediate_phase_ansatz(freq, phase_coefficients):
+    pass
+@ti.func
+def _merge_ringdown_phase_ansatz(freq, phase_coefficients):
+    pass
+
+@ti.func
+def _derivate_merge_ringdown_phase_ansatz(freq, phase_coefficients):
+    pass
+
+
+
+
 
 @ti.dataclass
 class SourceParameters:
@@ -16,25 +136,58 @@ class SourceParameters:
     M_sec: ti.f64   # total mass in second
     eta: ti.f64     # symmetric_mass_ratio
     eta2: ti.f64    # eta^2
+    eta3: ti.f64
+    delta: ti.f64
+    chi_s: ti.f64
+    chi_a: ti.f64
     chi_PN: ti.f64
 
-    @ti.func
-    def generate_all_source_parameters(self, mass_1, mass_2, chi_1, chi_2):
+    final_spin: ti.f64
+    E_rad: ti.f64
+    f_ring: ti.f64
+    f_damp: ti.f64
+
+    def update_all_source_parameters(self, mass_1, mass_2, chi_1, chi_2):
+        # base parameters
         self.M = mass_1 + mass_2
         self.eta = mass_1 * mass_2 / (self.M * self.M)
         self.eta2 = self.eta * self.eta
         self.eta3 = self.eta2 * self.eta
-        self.delta = mass_1 - mass_2     # mass_1 > mass_2
+        self.delta = (mass_1 - mass_2)/self.M     # mass_1 > mass_2
         self.chi_s = (chi_1 + chi_2) * 0.5
         self.chi_a = (chi_1 - chi_2) * 0.5
         self.chi_PN = (mass_1*chi_1 + mass_2*chi_2)/self.M - 38.0/113.0*self.eta*(chi_1+chi_2)
-
+        # final spin (FinalSpin0815, Eq. (3.6) in arXiv:1508.07250)
+        S = (mass_1*mass_1*chi_1 + mass_2*mass_2*chi_2)/(self.M * self.M)
+        self.final_spin = S + self.eta * (3.4641016151377544 - 
+                                          4.399247300629289*self.eta +
+                                          9.397292189321194*self.eta2 - 
+                                          13.180949901606242*self.eta3 +
+                                          S*((-0.0850917821418767 - 5.837029316602263*self.eta) +
+                                             (0.1014665242971878 - 2.0967746996832157*self.eta)*S +
+                                             (-1.3546806617824356 + 4.108962025369336*self.eta)*S**2 +
+                                             (-0.8676969352555539 + 2.064046835273906*self.eta)*S**3
+                                             )
+                                         )
+        # total radiated energy (EradRational0815, Eq. (3.7) and (3.8) in arXiv:1508.07250)
+        S_hat = S/(1.0 - 2*self.eta)
+        self.E_rad = (self.eta * (0.055974469826360077 + 
+                                  0.5809510763115132 * self.eta - 
+                                  0.9606726679372312 * self.eta2 + 
+                                  3.352411249771192 * self.eta3
+                                 ) *
+                      (1.0 + (-0.0030302335878845507 - 2.0066110851351073*self.eta + 7.7050567802399215*self.eta2)*S_hat) /
+                      (1.0 + (-0.6714403054720589 - 1.4756929437702908*self.eta + 7.304676214885011*self.eta2)*S_hat)
+        )
+        # interpolation parameters
+        self.f_ring = np.interp(self.final_spin, QNMgrid_a, QNMgrid_fring) / (1.0 - self.E_rad)
+        self.f_damp = np.interp(self.final_spin, QNMgrid_a, QNMgrid_fdamp) / (1.0 - self.E_rad)
 
 
 
 # PN expansion coefficients
 @ti.dataclass
-class PostNewtonianCoefficients:
+class PostNewtonianPrefactors:
     # 3.5 PN phase
     varphi_0: ti.f64
     varphi_1: ti.f64
@@ -56,7 +209,7 @@ class PostNewtonianCoefficients:
     A_6: ti.f64
 
     @ti.func
-    def compute_PN_coefficients(self, source_params):
+    def compute_PN_prefactors(self, source_params):
         '''
         Using Eq.B6 - B13 and Eq.B14 - B19 in arXiv:1508.07253
         3PN spin-spin term not included
@@ -97,23 +250,26 @@ class PostNewtonianCoefficients:
 @ti.dataclass
 class PhaseCoefficients:
     # Inspiral (Region I)
-    sigma_0: ti.f64
     sigma_1: ti.f64
     sigma_2: ti.f64
     sigma_3: ti.f64
     sigma_4: ti.f64
     # Intermediate (Region IIa)
-    beta_0: ti.f64
     beta_1: ti.f64
     beta_2: ti.f64
     beta_3: ti.f64
     # Merge-ringdown (Region IIb)
-    alpha_0: ti.f64
     alpha_1: ti.f64
     alpha_2: ti.f64
     alpha_3: ti.f64
     alpha_4: ti.f64
     alpha_5: ti.f64
+    # connection coefficients
+    C1_Intermediate: ti.f64
+    C2_Intermediate: ti.f64
+    C1_mergeringdown: ti.f64
+    C2_mergeringdown: ti.f64
+
 
     @ti.func
     def compute_phase_coefficients(self, source_params):
@@ -207,6 +363,8 @@ class PhaseCoefficients:
                             (-0.017945336522161195 + 0.5965097794825992*source_params.eta - 2.0608879367971804*source_params.eta2) * source_params.xi * source_params.xi
                         ) * source_params.xi
                         )
+        
+
  
 
 # 11 amplitude coefficients
@@ -226,6 +384,10 @@ class AmplitudeCoefficient:
     gamma_1: ti.f64
     gamma_2: ti.f64
     gamma_3: ti.f64
+    # derived coefficients
+    f_peak: ti.f64
+    
+
 
     @ti.func
     def compute_amplitude_coefficients(self, source_params):
@@ -273,47 +435,203 @@ class AmplitudeCoefficient:
                             (-0.006134139870393713 - 0.38429253308696365*source_params.eta + 1.7561754421985984*source_params.eta2) * source_params.xi * source_params.xi
                         ) * source_params.xi
                         )
+        
+        if self.gamma_2 > 1.0:
+            self.f_peak = ti.abs(source_params.f_ring - source_params.f_damp*self.gamma3/self.gamma_2)
+        else:
+            self.f_peak = ti.abs(source_params.f_ring + (tm.sqrt(1-self.gamma_2*self.gamma_2) - 1) * source_params.f_damp*self.gamma3/self.gamma_2)
 
-
+        int_freq_mat = _intermediate_collocation_frequency_matrix(AMPLITUDE_INSPIRAL_fJoin, 0.5*(AMPLITUDE_INSPIRAL_fJoin + self.f_peak), self.f_peak)
+        v1 = _inspiral_amplitude_ansatz()
+        v2 = (0.8149838730507785 + 
+              2.5747553517454658*source_params.eta + 
+              (1.1610198035496786 - 2.3627771785551537*source_params.eta + 6.771038707057573*source_params.eta2 + 
+                    (0.7570782938606834 - 2.7256896890432474*source_params.eta + 7.1140380397149965*source_params.eta2) * source_params.xi + 
+                    (0.1766934149293479 - 0.7978690983168183*source_params.eta + 2.1162391502005153*source_params.eta2) * source_params.xi * source_params.xi
+              ) * source_params.xi
+              )
+        v3 = _merge_ringdown_amplitude_ansatz()
+        d1 = _derivate_inspiral_amplitude_ansatz()
+        d2 = _derivate_merge_ringdown_amplitude_ansatz()
+        self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = ti.solve(int_freq_mat, ti.Vector([v1, v2, v3, d1, d2]))
 
 
 @ti.data_oriented
 class IMRPhenomD(object):
 
-    def __init__(self, parameter_sanity_check=True):
+    def __init__(self, frequencies, waveform_container=None, returned_form='polarizations', parameter_sanity_check=True):
+        '''
+        Parameters
+        ==========
+        frequencies: ti.field of f64
+        waveform_container: ti.Struct.field or None
+            {} or {}
+        returned_form: str
+            `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
+        parameter_sanity_check: bool
 
+        Returns:
+        ========
+        array, the A channel without the prefactor which is determined by the TDI generation.
+
+        TODO:
+        check whether passed in `waveform_containter` consistent with `returned_form`
+        '''
         self.Mf_phase_ins_join = 0.018
         self.Mf_amp_ins_join = 0.014
         self.Mf_cut = 0.2
 
+        
+        self.frequencies = frequencies
         self.parameter_sanity_check = parameter_sanity_check
+
+        # initializing data struct
+        self.source_parameters = SourceParameters()
+        self.phase_coefficients = PhaseCoefficients()
+        self.amplitude_coefficients = AmplitudeCoefficient()
+
+        if waveform_container is not None:
+            self.waveform_container=waveform_container
+        else:
+            self._initialize_waveform_container(returned_form)
+            
+            
+    def _initialize_waveform_container(self, returned_form):
+        if returned_form == 'polarizations':
+            waveform_field = ti.Struct.field({'hplus': tm.vec2,
+                                              'hcross': tm.vec2,
+                                              'tf': ti.f64})
+        elif returned_form == 'amplitude_phase':
+            waveform_field = ti.Struct.field({'amplitude': ti.f64,
+                                              'hpase': ti.f64,
+                                              'tf': ti.f64})
+        
+        ti.root.dense(ti.i, self.frequencies.shape).place(waveform_field)
+        self.waveform_container = waveform_field
+        return None
+    
+    def update_waveform(self, parameters):
+        '''
+        this function is awkward, since no interpolation function in ti
+        '''
+        final_spin
+        f_damp
+        f_ring
+        
+        # // Calculate phenomenological parameters
+        # const REAL8 finspin = FinalSpin0815(eta, chi1, chi2); //FinalSpin0815 - 0815 is like a version number
+
+        # if (finspin < MIN_FINAL_SPIN)
+        #   XLAL_PRINT_WARNING("Final spin (Mf=%g) and ISCO frequency of this system are small, \
+        #                   the model might misbehave here.", finspin);
+
+        self._update_wavefrom_kernel(parameters)
+    
+
+
+    @ti.kernel
+    def _update_wavefrom_kernel(self, parameter):
+
+  IMRPhenomDAmplitudeCoefficients *pAmp;
+  pAmp = XLALMalloc(sizeof(IMRPhenomDAmplitudeCoefficients));
+  ComputeIMRPhenomDAmplitudeCoefficients(pAmp, eta, chi1, chi2, finspin);
+  if (!pAmp) XLAL_ERROR(XLAL_EFUNC);
+  if (extraParams==NULL)
+    extraParams=XLALCreateDict();
+  XLALSimInspiralWaveformParamsInsertPNSpinOrder(extraParams,LAL_SIM_INSPIRAL_SPIN_ORDER_35PN);
+  IMRPhenomDPhaseCoefficients *pPhi;
+  pPhi = XLALMalloc(sizeof(IMRPhenomDPhaseCoefficients));
+  ComputeIMRPhenomDPhaseCoefficients(pPhi, eta, chi1, chi2, finspin, extraParams);
+  if (!pPhi) XLAL_ERROR(XLAL_EFUNC);
+  PNPhasingSeries *pn = NULL;
+  XLALSimInspiralTaylorF2AlignedPhasing(&pn, m1, m2, chi1, chi2, extraParams);
+  if (!pn) XLAL_ERROR(XLAL_EFUNC);
+
+  // Subtract 3PN spin-spin term below as this is in LAL's TaylorF2 implementation
+  // (LALSimInspiralPNCoefficients.c -> XLALSimInspiralPNPhasing_F2), but
+  REAL8 testGRcor=1.0;
+  testGRcor += XLALSimInspiralWaveformParamsLookupNonGRDChi6(extraParams);
+
+  // was not available when PhenomD was tuned.
+  pn->v[6] -= (Subtract3PNSS(m1, m2, M, eta, chi1, chi2) * pn->v[0]) * testGRcor;
+
+  PhiInsPrefactors phi_prefactors;
+  status = init_phi_ins_prefactors(&phi_prefactors, pPhi, pn);
+  XLAL_CHECK(XLAL_SUCCESS == status, status, "init_phi_ins_prefactors failed");
+
+  // Compute coefficients to make phase C^1 continuous (phase and first derivative)
+  ComputeIMRPhenDPhaseConnectionCoefficients(pPhi, pn, &phi_prefactors, 1.0, 1.0);
+
+  //time shift so that peak amplitude is approximately at t=0
+  //For details see https://www.lsc-group.phys.uwm.edu/ligovirgo/cbcnote/WaveformsReview/IMRPhenomDCodeReview/timedomain
+  const REAL8 t0 = DPhiMRD(pAmp->fmaxCalc, pPhi, 1.0, 1.0);
+
+  AmpInsPrefactors amp_prefactors;
+  status = init_amp_ins_prefactors(&amp_prefactors, pAmp);
+  XLAL_CHECK(XLAL_SUCCESS == status, status, "init_amp_ins_prefactors failed");
+
+  // incorporating fRef
+  const REAL8 MfRef = M_sec * fRef;
+  UsefulPowers powers_of_fRef;
+  status = init_useful_powers(&powers_of_fRef, MfRef);
+  XLAL_CHECK(XLAL_SUCCESS == status, status, "init_useful_powers failed for MfRef");
+  const REAL8 phifRef = IMRPhenDPhase(MfRef, pPhi, pn, &powers_of_fRef, &phi_prefactors, 1.0, 1.0);
+
+  // factor of 2 b/c phi0 is orbital phase
+  const REAL8 phi_precalc = 2.*phi0 + phifRef;
+
+
+    /* Now generate the waveform */
+      #pragma omp parallel for
+      for (UINT4 i=0; i<freqs->length; i++) { // loop over frequency points in sequence
+      double Mf = M_sec * freqs->data[i];
+      int j = i + offset; // shift index for frequency series if needed
+
+      UsefulPowers powers_of_f;
+      status_in_for = init_useful_powers(&powers_of_f, Mf);
+      if (XLAL_SUCCESS != status_in_for)
+      {
+        XLALPrintError("init_useful_powers failed for Mf, status_in_for=%d", status_in_for);
+        status = status_in_for;
+      }
+      else {
+        REAL8 amp = IMRPhenDAmplitude(Mf, pAmp, &powers_of_f, &amp_prefactors);
+        REAL8 phi = IMRPhenDPhase(Mf, pPhi, pn, &powers_of_f, &phi_prefactors, 1.0, 1.0);
+
+        phi -= t0*(Mf-MfRef) + phi_precalc;
+        ((*htilde)->data->data)[j] = amp0 * amp * cexp(-I * phi);
+      }
+    }
+
+
+
 
     @ti.func
     def _parameter_check(self):
         return SUCCESS
         
-    @ti.func
-    def _amplitude_coefficients(self):
-        pass
 
-    @ti.func
-    def _phase_coefficients(self):
-        pass
 
     @ti.func
     def _connection_coefficients(self):
         pass
 
-    @ti.kernel
     def update_amplitude_phase_tf_field(self):
         pass
 
-    @ti.kernel
     def updata_hplus_hcross_tf_field(self):
         pass
+
 
     def np_array_view_amplitude_phase_tf(self):
         pass
         
     def np_array_view_hplus_hcross_tf(self):
+        pass
+
+    @ti.func
+    def find_frequency_bounds(self, source_params):
+        '''
+        find index of each region bounds for frequencies
+        '''
         pass

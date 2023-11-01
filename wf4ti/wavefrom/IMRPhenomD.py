@@ -58,9 +58,9 @@ def _intermediate_collocation_frequency_matrix(f1, f2, f3):
                       [0.0, 1.0, 2*f1, 3*f1_2, 4*f1_3],
                       [0.0, 1.0, 2*f3, 3*f3_2, 4*f3_3]], dt=ti.f64)
 
-
+# Amplitude ansatz
 @ti.func
-def _inspiral_amplitude_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+def _inspiral_amplitude_ansatz(powers_of_Mf, amplitude_prefactors, pn_prefactors):
     return (1.0 + 
             powers_of_Mf.two_thirds * pn_prefactors.amplitude_two_thirds + 
             powers_of_Mf.one * pn_prefactors.one + 
@@ -73,7 +73,7 @@ def _inspiral_amplitude_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefacto
             )
 
 @ti.func
-def _derivate_inspiral_amplitude_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+def _derivate_inspiral_amplitude_ansatz(powers_of_Mf, amplitude_prefactors, pn_prefactors):
     return (powers_of_Mf.minus_two_thirds * pn_prefactors.amplitude_two_thirds + 
             powers_of_Mf.one * pn_prefactors.one + 
             powers_of_Mf.four_thirds * pn_prefactors.four_thirds +
@@ -85,48 +85,93 @@ def _derivate_inspiral_amplitude_ansatz(powers_of_Mf, amplitude_coefficients, pn
             )
 
 @ti.func
-def _intermediate_amplitude_ansatz(freq, amplitude_coefficients):
+def _intermediate_amplitude_ansatz(powers_of_Mf, amplitude_prefactors):
     pass
 
 @ti.func
-def _derivate_intermediate_amplitude_ansatz(freq, amplitude_coefficients):
+def _derivate_intermediate_amplitude_ansatz(powers_of_Mf, amplitude_prefactors):
     pass
 @ti.func
-def _merge_ringdown_amplitude_ansatz(freq, amplitude_coefficients):
-    pass
-
-@ti.func
-def _derivate_merge_ringdown_amplitude_ansatz(freq, amplitude_coefficients):
-    pass
-
-
-
-
-
-@ti.func
-def _inspiral_phase_ansatz(freq, phase_coefficients, pn_prefactors):
+def _merge_ringdown_amplitude_ansatz(powers_of_Mf, amplitude_prefactors):
     pass
 
 @ti.func
-def _derivate_inspiral_phase_ansatz(freq, phase_coefficients, pn_prefactors):
+def _derivate_merge_ringdown_amplitude_ansatz(powers_of_Mf, amplitude_prefactors):
     pass
+
+
+
+
+# Phase ansatz
+@ti.func
+def _phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, source_params):
+    return (3.0/(128.0 * source_params.eta) * (pn_prefactors.prefactor_varphi_0 * powers_of_Mf.minus_five_thirds + 
+                                               pn_prefactors.prefactor_varphi_1 * powers_of_Mf.minus_four_thirds + 
+                                               pn_prefactors.prefactor_varphi_2 * powers_of_Mf.inv + 
+                                               pn_prefactors.prefactor_varphi_3 * powers_of_Mf.minus_two_thirds + 
+                                               pn_prefactors.prefactor_varphi_4 * powers_of_Mf.minus_thirds + 
+                                               pn_prefactors.prefactor_varphi_5 + 
+                                               pn_prefactors.prefactor_varphi_5l * powers_of_Mf.thirds_log + 
+                                               pn_prefactors.prefactor_varphi_6 * powers_of_Mf.thirds + 
+                                               pn_prefactors.prefactor_varphi_6l * powers_of_Mf.thirds * powers_of_Mf.thirds_log + 
+                                               pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
+                                              ) + 
+            (phase_prefactors.prefactor_sigma_1 * powers_of_Mf.one + 
+                0.75 * phase_prefactors.prefactor_sigma_2 * powers_of_Mf.four_thirds + 
+                0.6 * phase_prefactors.prefactor_sigma_3 * powers_of_Mf.five_thirds + 
+                0.5 * phase_prefactors.prefactor_sigma_4 * powers_of_Mf.two
+                ) / source_params.eta
+            )
 
 @ti.func
-def _intermediate_phase_ansatz(freq, phase_coefficients):
-    pass
+def _d_phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, source_params):
+    return (3.0/(128.0 * source_params.eta) * (-5.0 * pn_prefactors.prefactor_varphi_0 * powers_of_Mf.minus_five_thirds + 
+                                               -4.0 * pn_prefactors.prefactor_varphi_1 * powers_of_Mf.minus_four_thirds + 
+                                               -3.0 * pn_prefactors.prefactor_varphi_2 * powers_of_Mf.inv + 
+                                               -2.0 * pn_prefactors.prefactor_varphi_3 * powers_of_Mf.minus_two_thirds + 
+                                               -1.0 * pn_prefactors.prefactor_varphi_4 * powers_of_Mf.minus_thirds + 
+                                               pn_prefactors.prefactor_varphi_5l + 
+                                               pn_prefactors.prefactor_varphi_6 * powers_of_Mf.thirds + 
+                                               pn_prefactors.prefactor_varphi_6l * powers_of_Mf.thirds * (1 + powers_of_Mf.thirds_log) + 
+                                               2.0 * pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
+                                              ) / (3.0 * powers_of_Mf.one) + 
+            (phase_prefactors.prefactor_sigma_1  + 
+                phase_prefactors.prefactor_sigma_2 * powers_of_Mf.thirds + 
+                phase_prefactors.prefactor_sigma_3 * powers_of_Mf.two_thirds + 
+                phase_prefactors.prefactor_sigma_4 * powers_of_Mf.one
+                ) / source_params.eta
+            )
 
 @ti.func
-def _derivate_intermediate_phase_ansatz(freq, phase_coefficients):
-    pass
-@ti.func
-def _merge_ringdown_phase_ansatz(freq, phase_coefficients):
-    pass
+def _phase_intermediate_ansatz(powers_of_Mf, phase_prefactors, source_params):
+    return (phase_prefactors.prefactor_bate_1 * powers_of_Mf.one + 
+            phase_prefactors.prefactor_beta_2 * (3 * powers_of_Mf.thirds_log) -
+            phase_prefactors.prefactor_beta_3 / 3.0 * powers_of_Mf.minus_three
+            ) / source_params.eta
 
 @ti.func
-def _derivate_merge_ringdown_phase_ansatz(freq, phase_coefficients):
-    pass
+def _d_phase_intermediate_ansatz(powers_of_Mf, phase_prefactors, source_params):
+    return (phase_prefactors.prefactor_bate_1 + 
+            phase_prefactors.prefactor_beta_2 * powers_of_Mf.inv +
+            phase_prefactors.prefactor_beta_3 * powers_of_Mf.minus_four
+            ) / source_params.eta
 
+@ti.func
+def _phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, source_params):
+    return (phase_prefactors.prefactor_alpha_1 * powers_of_Mf.one - 
+            phase_prefactors.prefactor_alpha_2 * powers_of_Mf.minus_one +
+            4.0/3.0 * phase_prefactors.prefactor_alpha_3 * powers_of_Mf.three_fourth + 
+            # note that tm.atan2 return the value in [-pi, pi], make sure f_damp > 0
+            phase_prefactors.prefactor_alpha_4 * tm.atan2((powers_of_Mf.one - phase_prefactors.prefactor_alpha_5*source_params.f_ring), source_params.f_damp)
+            ) / source_params.eta
 
+@ti.func
+def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, source_params):
+    return (phase_prefactors.prefactor_alpha_1 + 
+            phase_prefactors.prefactor_alpha_2 * powers_of_Mf.minus_two +
+            phase_prefactors.prefactor_alpha_3 * powers_of_Mf.minus_one_fourth +
+            phase_prefactors.prefactor_alpha_4 / (source_params.f_damp + (powers_of_Mf.one - phase_prefactors.prefactor_alpha_5*source_params.f_ring)**2/source_params.f_damp)
+            )/source_params.eta
 
 
 
@@ -557,77 +602,78 @@ class IMRPhenomD(object):
 
     @ti.kernel
     def _update_wavefrom_kernel(self, parameter):
+        pass
 
-  IMRPhenomDAmplitudeCoefficients *pAmp;
-  pAmp = XLALMalloc(sizeof(IMRPhenomDAmplitudeCoefficients));
-  ComputeIMRPhenomDAmplitudeCoefficients(pAmp, eta, chi1, chi2, finspin);
-  if (!pAmp) XLAL_ERROR(XLAL_EFUNC);
-  if (extraParams==NULL)
-    extraParams=XLALCreateDict();
-  XLALSimInspiralWaveformParamsInsertPNSpinOrder(extraParams,LAL_SIM_INSPIRAL_SPIN_ORDER_35PN);
-  IMRPhenomDPhaseCoefficients *pPhi;
-  pPhi = XLALMalloc(sizeof(IMRPhenomDPhaseCoefficients));
-  ComputeIMRPhenomDPhaseCoefficients(pPhi, eta, chi1, chi2, finspin, extraParams);
-  if (!pPhi) XLAL_ERROR(XLAL_EFUNC);
-  PNPhasingSeries *pn = NULL;
-  XLALSimInspiralTaylorF2AlignedPhasing(&pn, m1, m2, chi1, chi2, extraParams);
-  if (!pn) XLAL_ERROR(XLAL_EFUNC);
+#   IMRPhenomDAmplitudeCoefficients *pAmp;
+#   pAmp = XLALMalloc(sizeof(IMRPhenomDAmplitudeCoefficients));
+#   ComputeIMRPhenomDAmplitudeCoefficients(pAmp, eta, chi1, chi2, finspin);
+#   if (!pAmp) XLAL_ERROR(XLAL_EFUNC);
+#   if (extraParams==NULL)
+#     extraParams=XLALCreateDict();
+#   XLALSimInspiralWaveformParamsInsertPNSpinOrder(extraParams,LAL_SIM_INSPIRAL_SPIN_ORDER_35PN);
+#   IMRPhenomDPhaseCoefficients *pPhi;
+#   pPhi = XLALMalloc(sizeof(IMRPhenomDPhaseCoefficients));
+#   ComputeIMRPhenomDPhaseCoefficients(pPhi, eta, chi1, chi2, finspin, extraParams);
+#   if (!pPhi) XLAL_ERROR(XLAL_EFUNC);
+#   PNPhasingSeries *pn = NULL;
+#   XLALSimInspiralTaylorF2AlignedPhasing(&pn, m1, m2, chi1, chi2, extraParams);
+#   if (!pn) XLAL_ERROR(XLAL_EFUNC);
 
-  // Subtract 3PN spin-spin term below as this is in LAL's TaylorF2 implementation
-  // (LALSimInspiralPNCoefficients.c -> XLALSimInspiralPNPhasing_F2), but
-  REAL8 testGRcor=1.0;
-  testGRcor += XLALSimInspiralWaveformParamsLookupNonGRDChi6(extraParams);
+#   // Subtract 3PN spin-spin term below as this is in LAL's TaylorF2 implementation
+#   // (LALSimInspiralPNCoefficients.c -> XLALSimInspiralPNPhasing_F2), but
+#   REAL8 testGRcor=1.0;
+#   testGRcor += XLALSimInspiralWaveformParamsLookupNonGRDChi6(extraParams);
 
-  // was not available when PhenomD was tuned.
-  pn->v[6] -= (Subtract3PNSS(m1, m2, M, eta, chi1, chi2) * pn->v[0]) * testGRcor;
+#   // was not available when PhenomD was tuned.
+#   pn->v[6] -= (Subtract3PNSS(m1, m2, M, eta, chi1, chi2) * pn->v[0]) * testGRcor;
 
-  PhiInsPrefactors phi_prefactors;
-  status = init_phi_ins_prefactors(&phi_prefactors, pPhi, pn);
-  XLAL_CHECK(XLAL_SUCCESS == status, status, "init_phi_ins_prefactors failed");
+#   PhiInsPrefactors phi_prefactors;
+#   status = init_phi_ins_prefactors(&phi_prefactors, pPhi, pn);
+#   XLAL_CHECK(XLAL_SUCCESS == status, status, "init_phi_ins_prefactors failed");
 
-  // Compute coefficients to make phase C^1 continuous (phase and first derivative)
-  ComputeIMRPhenDPhaseConnectionCoefficients(pPhi, pn, &phi_prefactors, 1.0, 1.0);
+#   // Compute coefficients to make phase C^1 continuous (phase and first derivative)
+#   ComputeIMRPhenDPhaseConnectionCoefficients(pPhi, pn, &phi_prefactors, 1.0, 1.0);
 
-  //time shift so that peak amplitude is approximately at t=0
-  //For details see https://www.lsc-group.phys.uwm.edu/ligovirgo/cbcnote/WaveformsReview/IMRPhenomDCodeReview/timedomain
-  const REAL8 t0 = DPhiMRD(pAmp->fmaxCalc, pPhi, 1.0, 1.0);
+#   //time shift so that peak amplitude is approximately at t=0
+#   //For details see https://www.lsc-group.phys.uwm.edu/ligovirgo/cbcnote/WaveformsReview/IMRPhenomDCodeReview/timedomain
+#   const REAL8 t0 = DPhiMRD(pAmp->fmaxCalc, pPhi, 1.0, 1.0);
 
-  AmpInsPrefactors amp_prefactors;
-  status = init_amp_ins_prefactors(&amp_prefactors, pAmp);
-  XLAL_CHECK(XLAL_SUCCESS == status, status, "init_amp_ins_prefactors failed");
+#   AmpInsPrefactors amp_prefactors;
+#   status = init_amp_ins_prefactors(&amp_prefactors, pAmp);
+#   XLAL_CHECK(XLAL_SUCCESS == status, status, "init_amp_ins_prefactors failed");
 
-  // incorporating fRef
-  const REAL8 MfRef = M_sec * fRef;
-  UsefulPowers powers_of_fRef;
-  status = init_useful_powers(&powers_of_fRef, MfRef);
-  XLAL_CHECK(XLAL_SUCCESS == status, status, "init_useful_powers failed for MfRef");
-  const REAL8 phifRef = IMRPhenDPhase(MfRef, pPhi, pn, &powers_of_fRef, &phi_prefactors, 1.0, 1.0);
+#   // incorporating fRef
+#   const REAL8 MfRef = M_sec * fRef;
+#   UsefulPowers powers_of_fRef;
+#   status = init_useful_powers(&powers_of_fRef, MfRef);
+#   XLAL_CHECK(XLAL_SUCCESS == status, status, "init_useful_powers failed for MfRef");
+#   const REAL8 phifRef = IMRPhenDPhase(MfRef, pPhi, pn, &powers_of_fRef, &phi_prefactors, 1.0, 1.0);
 
-  // factor of 2 b/c phi0 is orbital phase
-  const REAL8 phi_precalc = 2.*phi0 + phifRef;
+#   // factor of 2 b/c phi0 is orbital phase
+#   const REAL8 phi_precalc = 2.*phi0 + phifRef;
 
 
-    /* Now generate the waveform */
-      #pragma omp parallel for
-      for (UINT4 i=0; i<freqs->length; i++) { // loop over frequency points in sequence
-      double Mf = M_sec * freqs->data[i];
-      int j = i + offset; // shift index for frequency series if needed
+#     /* Now generate the waveform */
+#       #pragma omp parallel for
+#       for (UINT4 i=0; i<freqs->length; i++) { // loop over frequency points in sequence
+#       double Mf = M_sec * freqs->data[i];
+#       int j = i + offset; // shift index for frequency series if needed
 
-      UsefulPowers powers_of_f;
-      status_in_for = init_useful_powers(&powers_of_f, Mf);
-      if (XLAL_SUCCESS != status_in_for)
-      {
-        XLALPrintError("init_useful_powers failed for Mf, status_in_for=%d", status_in_for);
-        status = status_in_for;
-      }
-      else {
-        REAL8 amp = IMRPhenDAmplitude(Mf, pAmp, &powers_of_f, &amp_prefactors);
-        REAL8 phi = IMRPhenDPhase(Mf, pPhi, pn, &powers_of_f, &phi_prefactors, 1.0, 1.0);
+#       UsefulPowers powers_of_f;
+#       status_in_for = init_useful_powers(&powers_of_f, Mf);
+#       if (XLAL_SUCCESS != status_in_for)
+#       {
+#         XLALPrintError("init_useful_powers failed for Mf, status_in_for=%d", status_in_for);
+#         status = status_in_for;
+#       }
+#       else {
+#         REAL8 amp = IMRPhenDAmplitude(Mf, pAmp, &powers_of_f, &amp_prefactors);
+#         REAL8 phi = IMRPhenDPhase(Mf, pPhi, pn, &powers_of_f, &phi_prefactors, 1.0, 1.0);
 
-        phi -= t0*(Mf-MfRef) + phi_precalc;
-        ((*htilde)->data->data)[j] = amp0 * amp * cexp(-I * phi);
-      }
-    }
+#         phi -= t0*(Mf-MfRef) + phi_precalc;
+#         ((*htilde)->data->data)[j] = amp0 * amp * cexp(-I * phi);
+#       }
+#     }
 
 
 

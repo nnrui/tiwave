@@ -250,25 +250,25 @@ class PostNewtonianPrefactors:
 @ti.dataclass
 class PhaseCoefficients:
     # Inspiral (Region I)
-    sigma_1: ti.f64
-    sigma_2: ti.f64
-    sigma_3: ti.f64
-    sigma_4: ti.f64
+    prefactor_sigma_1: ti.f64
+    prefactor_sigma_2: ti.f64
+    prefactor_sigma_3: ti.f64
+    prefactor_sigma_4: ti.f64
     # Intermediate (Region IIa)
-    beta_1: ti.f64
-    beta_2: ti.f64
-    beta_3: ti.f64
+    prefactor_beta_1: ti.f64
+    prefactor_beta_2: ti.f64
+    prefactor_beta_3: ti.f64
     # Merge-ringdown (Region IIb)
-    alpha_1: ti.f64
-    alpha_2: ti.f64
-    alpha_3: ti.f64
-    alpha_4: ti.f64
-    alpha_5: ti.f64
+    prefactor_alpha_1: ti.f64
+    prefactor_alpha_2: ti.f64
+    prefactor_alpha_3: ti.f64
+    prefactor_alpha_4: ti.f64
+    prefactor_alpha_5: ti.f64
     # connection coefficients
     C1_Intermediate: ti.f64
     C2_Intermediate: ti.f64
-    C1_mergeringdown: ti.f64
-    C2_mergeringdown: ti.f64
+    C1_merge_ringdown: ti.f64
+    C2_merge_ringdown: ti.f64
 
 
     @ti.func
@@ -276,93 +276,119 @@ class PhaseCoefficients:
         '''
         Compute phase coefficients in Eq. 28, 16, 14 of arXiv:1508.07253
         '''
+        # phenomenological coefficients
         # Inspiral (Region I)
-        self.sigma_1 = (2096.551999295543 + 
-                        1463.7493168261553*source_params.eta + 
-                        (1312.5493286098522 + 18307.330017082117*source_params.eta - 43534.1440746107*source_params.eta2 + 
-                            (-833.2889543511114 + 32047.31997183187*source_params.eta - 108609.45037520859*source_params.eta2) * source_params.xi + 
-                            (452.25136398112204 + 8353.439546391714*source_params.eta - 44531.3250037322*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.sigma_2 = (-10114.056472621156 - 
-                        44631.01109458185*source_params.eta + 
-                        (-6541.308761668722 - 266959.23419307504*source_params.eta + 686328.3229317984*source_params.eta2 + 
-                            (3405.6372187679685 - 437507.7208209015*source_params.eta + 1.6318171307344697e6*source_params.eta2) * source_params.xi + 
-                            (-7462.648563007646 - 114585.25177153319*source_params.eta + 674402.4689098676*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.sigma_3 = (22933.658273436497 + 
-                        230960.00814979506*source_params.eta + 
-                        (14961.083974183695 + 1.1940181342318142e6*source_params.eta - 3.1042239693052764e6*source_params.eta2 + 
-                            (-3038.166617199259 + 1.8720322849093592e6*source_params.eta - 7.309145012085539e6*source_params.eta2) * source_params.xi + 
-                            (42738.22871475411 + 467502.018616601*source_params.eta - 3.064853498512499e6*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.sigma_4 = (-14621.71522218357 - 
-                        377812.8579387104*source_params.eta + 
-                        (-9608.682631509726 - 1.7108925257214056e6*source_params.eta + 4.332924601416521e6*source_params.eta2 + 
-                            (-22366.683262266528 - 2.5019716386377467e6*source_params.eta + 1.0274495902259542e7*source_params.eta2) * source_params.xi + 
-                            (-85360.30079034246 - 570025.3441737515*source_params.eta + 4.396844346849777e6*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
+        sigma_1 = (2096.551999295543 + 
+                   1463.7493168261553*source_params.eta + 
+                   (1312.5493286098522 + 18307.330017082117*source_params.eta - 43534.1440746107*source_params.eta2 + 
+                       (-833.2889543511114 + 32047.31997183187*source_params.eta - 108609.45037520859*source_params.eta2) * source_params.xi + 
+                       (452.25136398112204 + 8353.439546391714*source_params.eta - 44531.3250037322*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        sigma_2 = (-10114.056472621156 - 
+                   44631.01109458185*source_params.eta + 
+                   (-6541.308761668722 - 266959.23419307504*source_params.eta + 686328.3229317984*source_params.eta2 + 
+                       (3405.6372187679685 - 437507.7208209015*source_params.eta + 1.6318171307344697e6*source_params.eta2) * source_params.xi + 
+                       (-7462.648563007646 - 114585.25177153319*source_params.eta + 674402.4689098676*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        sigma_3 = (22933.658273436497 + 
+                   230960.00814979506*source_params.eta + 
+                   (14961.083974183695 + 1.1940181342318142e6*source_params.eta - 3.1042239693052764e6*source_params.eta2 + 
+                       (-3038.166617199259 + 1.8720322849093592e6*source_params.eta - 7.309145012085539e6*source_params.eta2) * source_params.xi + 
+                       (42738.22871475411 + 467502.018616601*source_params.eta - 3.064853498512499e6*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        sigma_4 = (-14621.71522218357 - 
+                   377812.8579387104*source_params.eta + 
+                   (-9608.682631509726 - 1.7108925257214056e6*source_params.eta + 4.332924601416521e6*source_params.eta2 + 
+                       (-22366.683262266528 - 2.5019716386377467e6*source_params.eta + 1.0274495902259542e7*source_params.eta2) * source_params.xi + 
+                       (-85360.30079034246 - 570025.3441737515*source_params.eta + 4.396844346849777e6*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
         # Intermediate (Region IIa)
-        self.beta_1 = (97.89747327985583 - 
-                       42.659730877489224*source_params.eta + 
-                       (153.48421037904913 - 1417.0620760768954*source_params.eta + 2752.8614143665027*source_params.eta2 + 
-                            (138.7406469558649 - 1433.6585075135881*source_params.eta + 2857.7418952430758*source_params.eta2) * source_params.xi + 
-                            (41.025109467376126 - 423.680737974639*source_params.eta + 850.3594335657173*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.beta_2 = (-3.282701958759534 - 
-                       9.051384468245866*source_params.eta + 
-                       (-12.415449742258042 + 55.4716447709787*source_params.eta - 106.05109938966335*source_params.eta2 + 
-                            (-11.953044553690658 + 76.80704618365418*source_params.eta - 155.33172948098394*source_params.eta2) * source_params.xi + 
-                            (-3.4129261592393263 + 25.572377569952536*source_params.eta - 54.408036707740465*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.beta_3 = (-0.000025156429818799565 + 
-                       0.000019750256942201327*source_params.eta + 
-                       (-0.000018370671469295915 + 0.000021886317041311973*source_params.eta + 0.00008250240316860033*source_params.eta2 + 
-                            (7.157371250566708e-6 - 0.000055780000112270685*source_params.eta + 0.00019142082884072178*source_params.eta2) * source_params.xi + 
-                            (5.447166261464217e-6 - 0.00003220610095021982*source_params.eta + 0.00007974016714984341*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
+        beta_1 = (97.89747327985583 - 
+                  42.659730877489224*source_params.eta + 
+                  (153.48421037904913 - 1417.0620760768954*source_params.eta + 2752.8614143665027*source_params.eta2 + 
+                       (138.7406469558649 - 1433.6585075135881*source_params.eta + 2857.7418952430758*source_params.eta2) * source_params.xi + 
+                       (41.025109467376126 - 423.680737974639*source_params.eta + 850.3594335657173*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        beta_2 = (-3.282701958759534 - 
+                  9.051384468245866*source_params.eta + 
+                  (-12.415449742258042 + 55.4716447709787*source_params.eta - 106.05109938966335*source_params.eta2 + 
+                       (-11.953044553690658 + 76.80704618365418*source_params.eta - 155.33172948098394*source_params.eta2) * source_params.xi + 
+                       (-3.4129261592393263 + 25.572377569952536*source_params.eta - 54.408036707740465*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        beta_3 = (-0.000025156429818799565 + 
+                  0.000019750256942201327*source_params.eta + 
+                  (-0.000018370671469295915 + 0.000021886317041311973*source_params.eta + 0.00008250240316860033*source_params.eta2 + 
+                       (7.157371250566708e-6 - 0.000055780000112270685*source_params.eta + 0.00019142082884072178*source_params.eta2) * source_params.xi + 
+                       (5.447166261464217e-6 - 0.00003220610095021982*source_params.eta + 0.00007974016714984341*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
         # Merge-ringdown (Region IIb)
-        self.alpha_1 = (43.31514709695348 + 
-                        638.6332679188081*source_params.eta + 
-                        (-32.85768747216059 + 2415.8938269370315*source_params.eta - 5766.875169379177*source_params.eta2 + 
-                            (-61.85459307173841 + 2953.967762459948*source_params.eta - 8986.29057591497*source_params.eta2) * source_params.xi + 
-                            (-21.571435779762044 + 981.2158224673428*source_params.eta - 3239.5664895930286*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.alpha_2 = (-0.07020209449091723 - 
-                        0.16269798450687084*source_params.eta + 
-                        (-0.1872514685185499 + 1.138313650449945*source_params.eta - 2.8334196304430046*source_params.eta2 + 
-                            (-0.17137955686840617 + 1.7197549338119527*source_params.eta - 4.539717148261272*source_params.eta2) * source_params.xi + 
-                            (-0.049983437357548705 + 0.6062072055948309*source_params.eta - 1.682769616644546*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.alpha_3 = (9.5988072383479 - 
-                        397.05438595557433*source_params.eta + 
-                        (16.202126189517813 - 1574.8286986717037*source_params.eta + 3600.3410843831093*source_params.eta2 + 
-                            (27.092429659075467 - 1786.482357315139*source_params.eta + 5152.919378666511*source_params.eta2) * source_params.xi + 
-                            (11.175710130033895 - 577.7999423177481*source_params.eta + 1808.730762932043*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.alpha_4 = (-0.02989487384493607 + 
-                        1.4022106448583738*source_params.eta + 
-                        (-0.07356049468633846 + 0.8337006542278661*source_params.eta + 0.2240008282397391*source_params.eta2 + 
-                            (-0.055202870001177226 + 0.5667186343606578*source_params.eta + 0.7186931973380503*source_params.eta2) * source_params.xi + 
-                            (-0.015507437354325743 + 0.15750322779277187*source_params.eta + 0.21076815715176228*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
-        self.alpha_5 = (0.9974408278363099 - 
-                        0.007884449714907203*source_params.eta + 
-                        (-0.059046901195591035 + 1.3958712396764088*source_params.eta - 4.516631601676276*source_params.eta2 + 
-                            (-0.05585343136869692 + 1.7516580039343603*source_params.eta - 5.990208965347804*source_params.eta2) * source_params.xi + 
-                            (-0.017945336522161195 + 0.5965097794825992*source_params.eta - 2.0608879367971804*source_params.eta2) * source_params.xi * source_params.xi
-                        ) * source_params.xi
-                        )
+        alpha_1 = (43.31514709695348 + 
+                   638.6332679188081*source_params.eta + 
+                   (-32.85768747216059 + 2415.8938269370315*source_params.eta - 5766.875169379177*source_params.eta2 + 
+                       (-61.85459307173841 + 2953.967762459948*source_params.eta - 8986.29057591497*source_params.eta2) * source_params.xi + 
+                       (-21.571435779762044 + 981.2158224673428*source_params.eta - 3239.5664895930286*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        alpha_2 = (-0.07020209449091723 - 
+                   0.16269798450687084*source_params.eta + 
+                   (-0.1872514685185499 + 1.138313650449945*source_params.eta - 2.8334196304430046*source_params.eta2 + 
+                       (-0.17137955686840617 + 1.7197549338119527*source_params.eta - 4.539717148261272*source_params.eta2) * source_params.xi + 
+                       (-0.049983437357548705 + 0.6062072055948309*source_params.eta - 1.682769616644546*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        alpha_3 = (9.5988072383479 - 
+                   397.05438595557433*source_params.eta + 
+                   (16.202126189517813 - 1574.8286986717037*source_params.eta + 3600.3410843831093*source_params.eta2 + 
+                       (27.092429659075467 - 1786.482357315139*source_params.eta + 5152.919378666511*source_params.eta2) * source_params.xi + 
+                       (11.175710130033895 - 577.7999423177481*source_params.eta + 1808.730762932043*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        alpha_4 = (-0.02989487384493607 + 
+                   1.4022106448583738*source_params.eta + 
+                   (-0.07356049468633846 + 0.8337006542278661*source_params.eta + 0.2240008282397391*source_params.eta2 + 
+                       (-0.055202870001177226 + 0.5667186343606578*source_params.eta + 0.7186931973380503*source_params.eta2) * source_params.xi + 
+                       (-0.015507437354325743 + 0.15750322779277187*source_params.eta + 0.21076815715176228*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        alpha_5 = (0.9974408278363099 - 
+                   0.007884449714907203*source_params.eta + 
+                   (-0.059046901195591035 + 1.3958712396764088*source_params.eta - 4.516631601676276*source_params.eta2 + 
+                       (-0.05585343136869692 + 1.7516580039343603*source_params.eta - 5.990208965347804*source_params.eta2) * source_params.xi + 
+                       (-0.017945336522161195 + 0.5965097794825992*source_params.eta - 2.0608879367971804*source_params.eta2) * source_params.xi * source_params.xi
+                   ) * source_params.xi
+                   )
+        # Corresponding prefactors (with powers of pi, used in assembling final wavefrom)
+        self.prefactor_sigma_1 = sigma_1
+        self.prefactor_sigma_2 = sigma_2
+        self.prefactor_sigma_3 = sigma_3
+        self.prefactor_sigma_4 = sigma_4
+        self.prefactor_beta_1 = beta_1
+        self.prefactor_beta_2 = beta_2
+        self.prefactor_beta_3 = beta_3
+        self.prefactor_alpha_1 = alpha_1 
+        self.prefactor_alpha_2 = alpha_2 
+        self.prefactor_alpha_3 = alpha_3 
+        self.prefactor_alpha_4 = alpha_4 
+        self.prefactor_alpha_5 = alpha_5 
+
+        # compute connection coefficients
+        # transition between inspiral (region I) and intermediate (region IIa)
+        self.C2_intermediate = _derivate_inspiral_phase_ansatz(PHASE_INSPIRAL_fJoin, self) - _derivate_intermediate_phase_ansatz(PHASE_INSPIRAL_fJoin, self)
+        self.C1_intermediate = _inspiral_phase_ansatz(PHASE_INSPIRAL_fJoin, self) - _intermediate_phase_ansatz(PHASE_INSPIRAL_fJoin, self) - self.C2_intermediate * PHASE_INSPIRAL_fJoin
+        # transition between intermediate (region IIa) and merge_ringdown (region IIb)
+        # note that incorporating C2_intermediate and C1_intermediate in intermediate part
+        phase_MRD_f_join = 0.5 * source_params.f_ring
+        self.C2_merge_ringdown = (_derivate_intermediate_phase_ansatz(phase_MRD_f_join, self) + self.C2_intermediate) - _derivate_merge_ringdown_phase_ansatz(phase_MRD_f_join, self)
+        self.C1_merge_ringdown = (_intermediate_phase_ansatz(phase_MRD_f_join, self) + self.C1_intermediate + self.C2_intermediate*phase_MRD_f_join) - _merge_ringdown_phase_ansatz(phase_MRD_f_join, self) - self.C2_merge_ringdown*phase_MRD_f_join
+
+
         
 
  

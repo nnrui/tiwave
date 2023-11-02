@@ -8,6 +8,8 @@ from ..constants import *
 '''
 TODO:
 1. source parameter check, (m1>m2, q<1)
+2. modify UsefulPowers, leave only necessory
+3. remove prefactor, becasue there is no power of pi except of pn coeffcients
 '''
 
 @ti.dataclass
@@ -60,47 +62,58 @@ def _intermediate_collocation_frequency_matrix(f1, f2, f3):
 
 # Amplitude ansatz
 @ti.func
-def _inspiral_amplitude_ansatz(powers_of_Mf, amplitude_prefactors, pn_prefactors):
+def _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
     return (1.0 + 
-            powers_of_Mf.two_thirds * pn_prefactors.amplitude_two_thirds + 
-            powers_of_Mf.one * pn_prefactors.one + 
-            powers_of_Mf.four_thirds * pn_prefactors.four_thirds +
-            powers_of_Mf.five_thirds * pn_prefactors.five_thirds +
-            powers_of_Mf.two * pn_prefactors.two +
-            powers_of_Mf.seven_thirds * amplitude_coefficients.rho_1 + 
-            powers_of_Mf.eight_thirds * amplitude_coefficients.rho_2 +
-            powers_of_Mf.three * amplitude_coefficients.rho_3
+            pn_prefactors.prefactor_A_2 * powers_of_Mf.two_thirds + 
+            pn_prefactors.prefactor_A_3 * powers_of_Mf.one + 
+            pn_prefactors.prefactor_A_4 * powers_of_Mf.four_thirds +
+            pn_prefactors.prefactor_A_5 * powers_of_Mf.five_thirds +
+            pn_prefactors.prefactor_A_6 * powers_of_Mf.two +
+            amplitude_coefficients.prefactor_rho_1 * powers_of_Mf.seven_thirds + 
+            amplitude_coefficients.prefactor_rho_2 * powers_of_Mf.eight_thirds +
+            amplitude_coefficients.prefactor_rho_3 * powers_of_Mf.three
             )
 
 @ti.func
-def _derivate_inspiral_amplitude_ansatz(powers_of_Mf, amplitude_prefactors, pn_prefactors):
-    return (powers_of_Mf.minus_two_thirds * pn_prefactors.amplitude_two_thirds + 
-            powers_of_Mf.one * pn_prefactors.one + 
-            powers_of_Mf.four_thirds * pn_prefactors.four_thirds +
-            powers_of_Mf.five_thirds * pn_prefactors.five_thirds +
-            powers_of_Mf.two * pn_prefactors.two +
-            powers_of_Mf.seven_thirds * amplitude_coefficients.rho_1 + 
-            powers_of_Mf.eight_thirds * amplitude_coefficients.rho_2 +
-            powers_of_Mf.three * amplitude_coefficients.rho_3
+def _d_amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+    return (2.0 * pn_prefactors.prefactor_A_2 * powers_of_Mf.minus_one_thirds + 
+            3.0 * pn_prefactors.prefactor_A_3 + 
+            4.0 * pn_prefactors.prefactor_A_4 * powers_of_Mf.one_thirds +
+            5.0 * pn_prefactors.prefactor_A_5 * powers_of_Mf.two_thirds +
+            6.0 * pn_prefactors.prefactor_A_6 * powers_of_Mf.one +
+            7.0 * amplitude_coefficients.prefactor_rho_1 * powers_of_Mf.four_thirds + 
+            8.0 * amplitude_coefficients.prefactor_rho_2 * powers_of_Mf.five_thirds +
+            9.0 * amplitude_coefficients.prefactor_rho_3 * powers_of_Mf.two
+            ) / 3.0
+
+@ti.func
+def _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients):
+    return (amplitude_coefficients.delta_0 +
+            amplitude_coefficients.delta_1 * powers_of_Mf.one + 
+            amplitude_coefficients.delta_2 * powers_of_Mf.tow + 
+            amplitude_coefficients.delta_3 * powers_of_Mf.three + 
+            amplitude_coefficients.delta_4 * powers_of_Mf.four
             )
 
 @ti.func
-def _intermediate_amplitude_ansatz(powers_of_Mf, amplitude_prefactors):
-    pass
+def _amplitude_merge_ringdown__ansatz(powers_of_Mf, amplitude_coefficients, source_params):
+    f_minus_fring = powers_of_Mf.one - source_params.f_ring
+    fdamp_gamma3 = amplitude_coefficients.gamma_3 * source_params.f_damp
+    return (amplitude_coefficients.gamma_1 * fdamp_gamma3 / 
+            (f_minus_fring**2 + fdamp_gamma3**2) *
+            tm.exp(-f_minus_fring * amplitude_coefficients.gamma_2 / fdamp_gamma3)
+            )
 
 @ti.func
-def _derivate_intermediate_amplitude_ansatz(powers_of_Mf, amplitude_prefactors):
-    pass
-@ti.func
-def _merge_ringdown_amplitude_ansatz(powers_of_Mf, amplitude_prefactors):
-    pass
-
-@ti.func
-def _derivate_merge_ringdown_amplitude_ansatz(powers_of_Mf, amplitude_prefactors):
-    pass
-
-
-
+def _d_amplitude_merge_ringdown__ansatz(powers_of_Mf, amplitude_coefficients, source_params):
+    fdamp_gamma3 = amplitude_coefficients.gamma_3 * source_params.f_damp
+    pow2_fdamp_gamma3 = fdamp_gamma3 * fdamp_gamma3
+    f_minus_fring = powers_of_Mf.one - source_params.f_ring
+    exp_factor = tm.exp(-f_minus_fring * amplitude_coefficients.gamma_2 / fdamp_gamma3)
+    pow2_plus_pow2 = f_minus_fring**2 + pow2_fdamp_gamma3
+    return (exp_factor / pow2_plus_pow2 * (-2*source_params.f_damp*amplitude_coefficients.gamma_1*amplitude_coefficients.gamma_3*f_minus_fring/pow2_plus_pow2 - 
+                                           amplitude_coefficients.gamma_1*amplitude_coefficients.gamma_3)
+            )
 
 # Phase ansatz
 @ti.func

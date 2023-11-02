@@ -3,6 +3,7 @@ import taichi.math as tm
 import numpy as np
 
 from ..constants import *
+from ..utilities import vec2_complex
 
 
 '''
@@ -39,6 +40,7 @@ QNMgrid_fring = np.loadtxt('../data/QNMData_fring.txt')
 QNMgrid_fdamp = np.loadtxt('../data/QNMData_fdamp.txt')
 AMPLITUDE_INSPIRAL_fJoin = 0.014
 PHASE_INSPIRAL_fJoin = 0.018
+FREQUENCY_CUT = 0.2
 
 
 @ti.func
@@ -96,7 +98,7 @@ def _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients):
             )
 
 @ti.func
-def _amplitude_merge_ringdown__ansatz(powers_of_Mf, amplitude_coefficients, source_params):
+def _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, source_params):
     f_minus_fring = powers_of_Mf.one - source_params.f_ring
     fdamp_gamma3 = amplitude_coefficients.gamma_3 * source_params.f_damp
     return (amplitude_coefficients.gamma_1 * fdamp_gamma3 / 
@@ -105,7 +107,7 @@ def _amplitude_merge_ringdown__ansatz(powers_of_Mf, amplitude_coefficients, sour
             )
 
 @ti.func
-def _d_amplitude_merge_ringdown__ansatz(powers_of_Mf, amplitude_coefficients, source_params):
+def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, source_params):
     fdamp_gamma3 = amplitude_coefficients.gamma_3 * source_params.f_damp
     pow2_fdamp_gamma3 = fdamp_gamma3 * fdamp_gamma3
     f_minus_fring = powers_of_Mf.one - source_params.f_ring
@@ -526,7 +528,7 @@ class AmplitudeCoefficient:
             self.f_peak = ti.abs(source_params.f_ring + (tm.sqrt(1-self.gamma_2*self.gamma_2) - 1) * source_params.f_damp*self.gamma3/self.gamma_2)
 
         int_freq_mat = _intermediate_collocation_frequency_matrix(AMPLITUDE_INSPIRAL_fJoin, 0.5*(AMPLITUDE_INSPIRAL_fJoin + self.f_peak), self.f_peak)
-        v1 = _inspiral_amplitude_ansatz()
+        v1 = _amplitude_inspiral_ansatz()
         v2 = (0.8149838730507785 + 
               2.5747553517454658*source_params.eta + 
               (1.1610198035496786 - 2.3627771785551537*source_params.eta + 6.771038707057573*source_params.eta2 + 
@@ -534,16 +536,16 @@ class AmplitudeCoefficient:
                     (0.1766934149293479 - 0.7978690983168183*source_params.eta + 2.1162391502005153*source_params.eta2) * source_params.xi * source_params.xi
               ) * source_params.xi
               )
-        v3 = _merge_ringdown_amplitude_ansatz()
-        d1 = _derivate_inspiral_amplitude_ansatz()
-        d2 = _derivate_merge_ringdown_amplitude_ansatz()
+        v3 = _amplitude_merge_ringdown_ansatz()
+        d1 = _d_amplitude_inspiral_ansatz()
+        d2 = _d_amplitude_merge_ringdown_ansatz()
         self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = ti.solve(int_freq_mat, ti.Vector([v1, v2, v3, d1, d2]))
 
 
 @ti.data_oriented
 class IMRPhenomD(object):
 
-    def __init__(self, frequencies, waveform_container=None, returned_form='polarizations', parameter_sanity_check=True):
+    def __init__(self, frequencies, waveform_container=None, returned_form='polarizations', include_tf=True, parameter_sanity_check=True):
         '''
         Parameters
         ==========
@@ -561,39 +563,59 @@ class IMRPhenomD(object):
         TODO:
         check whether passed in `waveform_containter` consistent with `returned_form`
         '''
-        self.Mf_phase_ins_join = 0.018
-        self.Mf_amp_ins_join = 0.014
-        self.Mf_cut = 0.2
-
-        
         self.frequencies = frequencies
         self.parameter_sanity_check = parameter_sanity_check
 
-        # initializing data struct
+        # initializing data struct with 0
         self.source_parameters = SourceParameters()
         self.phase_coefficients = PhaseCoefficients()
         self.amplitude_coefficients = AmplitudeCoefficient()
+        self.pn_prefactors = PostNewtonianPrefactors()
 
         if waveform_container is not None:
             self.waveform_container=waveform_container
+            ret_content = self.waveform_container.keys
+            if 'tf' in ret_content:
+                include_tf = True
+                ret_content.remove('tf')
+            else:
+                include_tf = False
+            if all([item in ret_content for item in ['hplus', 'hcros']]):
+                returned_form = 'polarizations'
+                [ret_content.remove(item) for item in ['hplus', 'hcros']]
+            elif all([item in ret_content for item in ['amplitude', 'phase']]):
+                returned_form = 'amplitude_phase'
+                [ret_content.remove(item) for item in ['amplitude', 'phase']]
+            if len(ret_content) > 0:
+                raise Exception(f'`waveform_container` contains additional unknown keys {ret_content}, check spellings')
+            self.returned_form = returned_form
+            self.include_tf = include_tf
+            print(f'Using `waveform_container` passed in, updating returned_form={self.returned_form}, include_tf={self.include_tf}')
         else:
-            self._initialize_waveform_container(returned_form)
+            self._initialize_waveform_container(returned_form, include_tf)
+            self.returned_form = returned_form
+            self.include_tf = include_tf
+            print(f'`waveform_container` is not given, initializing one with returned_form={returned_form}, include_tf={include_tf}')
             
-            
-    def _initialize_waveform_container(self, returned_form):
+
+    def _initialize_waveform_container(self, returned_form, include_tf):
+        ret_content = {}
         if returned_form == 'polarizations':
-            waveform_field = ti.Struct.field({'hplus': tm.vec2,
-                                              'hcross': tm.vec2,
-                                              'tf': ti.f64})
+            ret_content.update({'hplus': vec2_complex, 'hcross': vec2_complex})
         elif returned_form == 'amplitude_phase':
-            waveform_field = ti.Struct.field({'amplitude': ti.f64,
-                                              'hpase': ti.f64,
-                                              'tf': ti.f64})
+            ret_content.update({'amplitude': ti.f64, 'phase': ti.f64})
+        if include_tf:
+            ret_content.update({'tf': ti.f64})
         
+        waveform_field = ti.Struct.field(ret_content)
         ti.root.dense(ti.i, self.frequencies.shape).place(waveform_field)
-        self.waveform_container = waveform_field
+        if self.waveform_container is None:
+            self.waveform_container = waveform_field
+        else:
+            raise Exception('`waveform_container` have been given, cannot initializing new one.')
         return None
     
+
     def update_waveform(self, parameters):
         '''
         this function is awkward, since no interpolation function in ti

@@ -11,33 +11,32 @@ TODO:
 1. source parameter check, (m1>m2, q<1)
 2. modify UsefulPowers, leave only necessory
 3. remove prefactor, becasue there is no power of pi except of pn coeffcients
+4. using one matrix to compute all phenomenology coefficients
+5. add loop config for waveform_kernel
 '''
 
 @ti.dataclass
 class UsefulPowers:
     third: ti.f64
     two_thirds: ti.f64
+    one: ti.f64
     four_thirds: ti.f64
     five_thirds: ti.f64
     two: ti.f64
     seven_thirds: ti.f64
     eight_thirds: ti.f64
-    inv: ti.f64
-    m_seven_sixths: ti.f64
-    m_third: ti.f64
-    m_two_thirds: ti.f64
-    m_five_thirds: ti.f64
+    three: ti.f64
+    four: ti.f64
+    one_fourths: ti.f64
+    three_fourths: ti.f64
 
-    def py_initilizing_useful_powers(self, number):
+    @ti.pyfunc
+    def initilizing_useful_powers(self, number):
         pass
 
-    @ti.func
-    def ti_initilizing_useful_powers(self, number):
-        pass
 
-useful_powers_of_pi = UsefulPowers()
-useful_powers_of_pi.py_initilizing_useful_powers(PI)
-
+useful_powers_pi = UsefulPowers()
+useful_powers_pi.initilizing_useful_powers(PI)
 QNMgrid_a     = np.loadtxt('../data/QNMData_a.txt')
 QNMgrid_fring = np.loadtxt('../data/QNMData_fring.txt')
 QNMgrid_fdamp = np.loadtxt('../data/QNMData_fdamp.txt')
@@ -65,34 +64,44 @@ def _intermediate_collocation_frequency_matrix(f1, f2, f3):
                       [0.0, 1.0, 2*f1, 3*f1_2, 4*f1_3],
                       [0.0, 1.0, 2*f3, 3*f3_2, 4*f3_3]], dt=ti.f64)
 
+
 # Amplitude ansatz
 @ti.func
 def _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+    '''
+    Eq.30 in arXiv:1508.07253, without amp0
+    '''
     return (1.0 + 
             pn_prefactors.prefactor_A_2 * powers_of_Mf.two_thirds + 
             pn_prefactors.prefactor_A_3 * powers_of_Mf.one + 
             pn_prefactors.prefactor_A_4 * powers_of_Mf.four_thirds +
             pn_prefactors.prefactor_A_5 * powers_of_Mf.five_thirds +
             pn_prefactors.prefactor_A_6 * powers_of_Mf.two +
-            amplitude_coefficients.prefactor_rho_1 * powers_of_Mf.seven_thirds + 
-            amplitude_coefficients.prefactor_rho_2 * powers_of_Mf.eight_thirds +
-            amplitude_coefficients.prefactor_rho_3 * powers_of_Mf.three
+            amplitude_coefficients.rho_1 * powers_of_Mf.seven_thirds + 
+            amplitude_coefficients.rho_2 * powers_of_Mf.eight_thirds +
+            amplitude_coefficients.rho_3 * powers_of_Mf.three
             )
 
 @ti.func
 def _d_amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
-    return (2.0 * pn_prefactors.prefactor_A_2 * powers_of_Mf.minus_one_thirds + 
+    '''
+    without amp0
+    '''
+    return (2.0 * pn_prefactors.prefactor_A_2 / powers_of_Mf.third + 
             3.0 * pn_prefactors.prefactor_A_3 + 
-            4.0 * pn_prefactors.prefactor_A_4 * powers_of_Mf.one_thirds +
+            4.0 * pn_prefactors.prefactor_A_4 * powers_of_Mf.third +
             5.0 * pn_prefactors.prefactor_A_5 * powers_of_Mf.two_thirds +
             6.0 * pn_prefactors.prefactor_A_6 * powers_of_Mf.one +
-            7.0 * amplitude_coefficients.prefactor_rho_1 * powers_of_Mf.four_thirds + 
-            8.0 * amplitude_coefficients.prefactor_rho_2 * powers_of_Mf.five_thirds +
-            9.0 * amplitude_coefficients.prefactor_rho_3 * powers_of_Mf.two
+            7.0 * amplitude_coefficients.rho_1 * powers_of_Mf.four_thirds + 
+            8.0 * amplitude_coefficients.rho_2 * powers_of_Mf.five_thirds +
+            9.0 * amplitude_coefficients.rho_3 * powers_of_Mf.two
             ) / 3.0
 
 @ti.func
 def _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients):
+    '''
+    without amp0
+    '''
     return (amplitude_coefficients.delta_0 +
             amplitude_coefficients.delta_1 * powers_of_Mf.one + 
             amplitude_coefficients.delta_2 * powers_of_Mf.tow + 
@@ -102,6 +111,9 @@ def _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients):
 
 @ti.func
 def _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, source_params):
+    '''
+    without amp0
+    '''
     f_minus_fring = powers_of_Mf.one - source_params.f_ring
     fdamp_gamma3 = amplitude_coefficients.gamma_3 * source_params.f_damp
     return (amplitude_coefficients.gamma_1 * fdamp_gamma3 / 
@@ -111,6 +123,9 @@ def _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, sourc
 
 @ti.func
 def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, source_params):
+    '''
+    without amp0
+    '''
     fdamp_gamma3 = amplitude_coefficients.gamma_3 * source_params.f_damp
     pow2_fdamp_gamma3 = fdamp_gamma3 * fdamp_gamma3
     f_minus_fring = powers_of_Mf.one - source_params.f_ring
@@ -123,78 +138,97 @@ def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, sou
 # Phase ansatz
 @ti.func
 def _phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, source_params):
-    return (3.0/(128.0 * source_params.eta) * (pn_prefactors.prefactor_varphi_0 * powers_of_Mf.minus_five_thirds + 
-                                               pn_prefactors.prefactor_varphi_1 * powers_of_Mf.minus_four_thirds + 
-                                               pn_prefactors.prefactor_varphi_2 * powers_of_Mf.inv + 
-                                               pn_prefactors.prefactor_varphi_3 * powers_of_Mf.minus_two_thirds + 
-                                               pn_prefactors.prefactor_varphi_4 * powers_of_Mf.minus_thirds + 
-                                               pn_prefactors.prefactor_varphi_5 + 
-                                               pn_prefactors.prefactor_varphi_5l * powers_of_Mf.thirds_log + 
-                                               pn_prefactors.prefactor_varphi_6 * powers_of_Mf.thirds + 
-                                               pn_prefactors.prefactor_varphi_6l * powers_of_Mf.thirds * powers_of_Mf.thirds_log + 
-                                               pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
-                                              ) + 
-            (phase_prefactors.prefactor_sigma_1 * powers_of_Mf.one + 
-                0.75 * phase_prefactors.prefactor_sigma_2 * powers_of_Mf.four_thirds + 
-                0.6 * phase_prefactors.prefactor_sigma_3 * powers_of_Mf.five_thirds + 
-                0.5 * phase_prefactors.prefactor_sigma_4 * powers_of_Mf.two
-                ) / source_params.eta
+    '''
+    without 1/eta
+    '''
+    return (3.0/128.0 * (pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds + 
+                         pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds + 
+                         pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one + 
+                         pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds + 
+                         pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third + 
+                         pn_prefactors.prefactor_varphi_5 + 
+                         pn_prefactors.prefactor_varphi_5l * powers_of_Mf.third_log + 
+                         pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third + 
+                         pn_prefactors.prefactor_varphi_6l * powers_of_Mf.third * powers_of_Mf.third_log + 
+                         pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
+                        ) + 
+            (phase_prefactors.sigma_1 * powers_of_Mf.one + 
+             0.75 * phase_prefactors.sigma_2 * powers_of_Mf.four_thirds + 
+             0.6 * phase_prefactors.sigma_3 * powers_of_Mf.five_thirds + 
+             0.5 * phase_prefactors.sigma_4 * powers_of_Mf.two
+             )
             )
 
 @ti.func
 def _d_phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, source_params):
-    return (3.0/(128.0 * source_params.eta) * (-5.0 * pn_prefactors.prefactor_varphi_0 * powers_of_Mf.minus_five_thirds + 
-                                               -4.0 * pn_prefactors.prefactor_varphi_1 * powers_of_Mf.minus_four_thirds + 
-                                               -3.0 * pn_prefactors.prefactor_varphi_2 * powers_of_Mf.inv + 
-                                               -2.0 * pn_prefactors.prefactor_varphi_3 * powers_of_Mf.minus_two_thirds + 
-                                               -1.0 * pn_prefactors.prefactor_varphi_4 * powers_of_Mf.minus_thirds + 
-                                               pn_prefactors.prefactor_varphi_5l + 
-                                               pn_prefactors.prefactor_varphi_6 * powers_of_Mf.thirds + 
-                                               pn_prefactors.prefactor_varphi_6l * powers_of_Mf.thirds * (1 + powers_of_Mf.thirds_log) + 
-                                               2.0 * pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
-                                              ) / (3.0 * powers_of_Mf.one) + 
-            (phase_prefactors.prefactor_sigma_1  + 
-                phase_prefactors.prefactor_sigma_2 * powers_of_Mf.thirds + 
-                phase_prefactors.prefactor_sigma_3 * powers_of_Mf.two_thirds + 
-                phase_prefactors.prefactor_sigma_4 * powers_of_Mf.one
-                ) / source_params.eta
+    '''
+    without 1/eta
+    '''
+    return (3.0/128.0 * (-5.0 * pn_prefactors.prefactor_varphi_0 / powers_of_Mf.eight_thirds + 
+                         -4.0 * pn_prefactors.prefactor_varphi_1 / powers_of_Mf.seven_thirds + 
+                         -3.0 * pn_prefactors.prefactor_varphi_2 / powers_of_Mf.two + 
+                         -2.0 * pn_prefactors.prefactor_varphi_3 / powers_of_Mf.five_thirds + 
+                         -1.0 * pn_prefactors.prefactor_varphi_4 / powers_of_Mf.four_thirds + 
+                         pn_prefactors.prefactor_varphi_5l / powers_of_Mf.one+ 
+                         pn_prefactors.prefactor_varphi_6 / powers_of_Mf.two_thirds + 
+                         pn_prefactors.prefactor_varphi_6l / powers_of_Mf.two_thirds * (1 + powers_of_Mf.third_log) + 
+                         2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
+                        ) / 3.0 + 
+            (phase_prefactors.sigma_1  + 
+             phase_prefactors.sigma_2 * powers_of_Mf.third + 
+             phase_prefactors.sigma_3 * powers_of_Mf.two_thirds + 
+             phase_prefactors.sigma_4 * powers_of_Mf.one
+             )
             )
 
 @ti.func
 def _phase_intermediate_ansatz(powers_of_Mf, phase_prefactors, source_params):
-    return (phase_prefactors.prefactor_bate_1 * powers_of_Mf.one + 
-            phase_prefactors.prefactor_beta_2 * (3 * powers_of_Mf.thirds_log) -
-            phase_prefactors.prefactor_beta_3 / 3.0 * powers_of_Mf.minus_three
-            ) / source_params.eta
+    '''
+    without 1/eta
+    '''
+    return (phase_prefactors.bate_1 * powers_of_Mf.one + 
+            phase_prefactors.beta_2 * (3 * powers_of_Mf.third_log) -
+            phase_prefactors.beta_3 / 3.0 / powers_of_Mf.three
+            )
 
 @ti.func
 def _d_phase_intermediate_ansatz(powers_of_Mf, phase_prefactors, source_params):
-    return (phase_prefactors.prefactor_bate_1 + 
-            phase_prefactors.prefactor_beta_2 * powers_of_Mf.inv +
-            phase_prefactors.prefactor_beta_3 * powers_of_Mf.minus_four
-            ) / source_params.eta
+    '''
+    without 1/eta
+    '''
+    return (phase_prefactors.bate_1 + 
+            phase_prefactors.beta_2 / powers_of_Mf.one +
+            phase_prefactors.beta_3 / powers_of_Mf.four
+            )
 
 @ti.func
 def _phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, source_params):
-    return (phase_prefactors.prefactor_alpha_1 * powers_of_Mf.one - 
-            phase_prefactors.prefactor_alpha_2 * powers_of_Mf.minus_one +
-            4.0/3.0 * phase_prefactors.prefactor_alpha_3 * powers_of_Mf.three_fourth + 
+    '''
+    without 1/eta
+    '''
+    return (phase_prefactors.alpha_1 * powers_of_Mf.one - 
+            phase_prefactors.alpha_2 / powers_of_Mf.one +
+            4.0/3.0 * phase_prefactors.alpha_3 * powers_of_Mf.three_fourths + 
             # note that tm.atan2 return the value in [-pi, pi], make sure f_damp > 0
-            phase_prefactors.prefactor_alpha_4 * tm.atan2((powers_of_Mf.one - phase_prefactors.prefactor_alpha_5*source_params.f_ring), source_params.f_damp)
-            ) / source_params.eta
+            phase_prefactors.alpha_4 * tm.atan2((powers_of_Mf.one - phase_prefactors.alpha_5*source_params.f_ring), source_params.f_damp)
+            )
 
 @ti.func
 def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, source_params):
+    '''
+    without 1/eta
+    '''
     return (phase_prefactors.prefactor_alpha_1 + 
-            phase_prefactors.prefactor_alpha_2 * powers_of_Mf.minus_two +
-            phase_prefactors.prefactor_alpha_3 * powers_of_Mf.minus_one_fourth +
-            phase_prefactors.prefactor_alpha_4 / (source_params.f_damp + (powers_of_Mf.one - phase_prefactors.prefactor_alpha_5*source_params.f_ring)**2/source_params.f_damp)
-            )/source_params.eta
+            phase_prefactors.prefactor_alpha_2 / powers_of_Mf.two +
+            phase_prefactors.prefactor_alpha_3 / powers_of_Mf.one_fourths +
+            phase_prefactors.prefactor_alpha_4 / (source_params.f_damp + (powers_of_Mf.one - phase_prefactors.alpha_5*source_params.f_ring)**2/source_params.f_damp)
+            )
 
 
 
 @ti.dataclass
 class SourceParameters:
+    # base parameters
     M: ti.f64       # total mass
     M_sec: ti.f64   # total mass in second
     eta: ti.f64     # symmetric_mass_ratio
@@ -203,8 +237,10 @@ class SourceParameters:
     delta: ti.f64
     chi_s: ti.f64
     chi_a: ti.f64
+    chi_s2: ti.f64
+    chi_a2: ti.f64
     chi_PN: ti.f64
-
+    # derived parameters
     final_spin: ti.f64
     E_rad: ti.f64
     f_ring: ti.f64
@@ -219,6 +255,8 @@ class SourceParameters:
         self.delta = (mass_1 - mass_2)/self.M     # mass_1 > mass_2
         self.chi_s = (chi_1 + chi_2) * 0.5
         self.chi_a = (chi_1 - chi_2) * 0.5
+        self.chi_s2 = self.chi_s * self.chi_s
+        self.chi_a2 = self.chi_a * self.chi_a
         self.chi_PN = (mass_1*chi_1 + mass_2*chi_2)/self.M - 38.0/113.0*self.eta*(chi_1+chi_2)
         # final spin (FinalSpin0815, Eq. (3.6) in arXiv:1508.07250)
         S = (mass_1*mass_1*chi_1 + mass_2*mass_2*chi_2)/(self.M * self.M)
@@ -252,24 +290,24 @@ class SourceParameters:
 @ti.dataclass
 class PostNewtonianPrefactors:
     # 3.5 PN phase
-    varphi_0: ti.f64
-    varphi_1: ti.f64
-    varphi_2: ti.f64
-    varphi_3: ti.f64
-    varphi_4: ti.f64
-    varphi_5: ti.f64
-    varphi_5l: ti.f64
-    varphi_6: ti.f64
-    varphi_6l: ti.f64
-    varphi_7: ti.f64
+    prefactor_varphi_0: ti.f64
+    prefactor_varphi_1: ti.f64
+    prefactor_varphi_2: ti.f64
+    prefactor_varphi_3: ti.f64
+    prefactor_varphi_4: ti.f64
+    prefactor_varphi_5: ti.f64
+    prefactor_varphi_5l: ti.f64
+    prefactor_varphi_6: ti.f64
+    prefactor_varphi_6l: ti.f64
+    prefactor_varphi_7: ti.f64
     # 3 PN amplitude
-    A_0: ti.f64
-    A_1: ti.f64
-    A_2: ti.f64
-    A_3: ti.f64
-    A_4: ti.f64
-    A_5: ti.f64
-    A_6: ti.f64
+    prefactor_A_0: ti.f64
+    prefactor_A_1: ti.f64
+    prefactor_A_2: ti.f64
+    prefactor_A_3: ti.f64
+    prefactor_A_4: ti.f64
+    prefactor_A_5: ti.f64
+    prefactor_A_6: ti.f64
 
     @ti.func
     def compute_PN_prefactors(self, source_params):
@@ -277,92 +315,121 @@ class PostNewtonianPrefactors:
         Using Eq.B6 - B13 and Eq.B14 - B19 in arXiv:1508.07253
         3PN spin-spin term not included
         '''
-        self.varphi_0 = 1.0
-        self.varphi_1 = 0.0
-        self.varphi_2 = 3715.0/756.0 + 55.0/9.0*source_params.eta
-        self.varphi_3 = (-16.0*PI +
-                         (113.0/3.0*source_params.delta*source_params.chi_a) + 
-                         (113.0/3.0 - 76.0/3.0*source_params.eta)*source_params.chi_s 
-                        )
-        self.varphi_4 = (5.0/72.0*(3058.673/7.056 + 5429.0/7.0*source_params.eta + 617.0*source_params.eta2) +
-                         (-405.0/8.0 + 200.0*source_params.eta) * source_params.chi_a * source_params.chi_a - 
-                         405.0/4.0 * source_params.delta * source_params.chi_a * source_params.chi_s + 
-                         (-405.0/8.0 + 5.0/2.0*source_params.eta) * source_params.chi_s * source_params.chi_s
-                        )
-        self.varphi_5 = (5.0/9.0 * (772.9/8.4 - 13.0*source_params.eta) * PI +
-                         (-732.985/2.268 - 140.0/9.0*source_params.eta) * source_params.delta * source_params.chi_a +
-                         (-732.985/2.268 + 2426.0/8.1*source_params.eta + 340.0/9.0*source_params.eta2) * source_params.chi_s
-                        )
-        self.varphi_5l= 3.0 * self.varphi_5
-        self.varphi_6 = ((11583.231236531/4.694215680 - 640.0/3.0*PI*PI - 684.8/2.1*EULER_GAMMA + 
-                            (-15737.765635/3.048192 + 225.5/1.2*PI*PI)*source_params.eta + 
-                            76.055/1.728*source_params.eta2 - 
-                            127.825/1.296*source_params.eta3 - 
-                            tm.log(4.)*684.8/2.1) +
-                         2270.0/3.0*PI*source_params.delta*source_params.chi_a
-                         (2270.0/3.0 - 520.0*source_params.eta)*PI*source_params.chi_s
-                        )
-        self.varphi_6l=-684.8/2.1
-        self.varphi_7 = ((770.96675/2.54016 + 378.515/1.512*source_params.eta- 740.45/7.56*source_params.eta2)*PI + 
-                         (-25150.083775/3.048192 + 26804.935/6.048*source_params.eta - 198.5/4.8*source_params.eta2) * source_params.delta * source_params.chi_a
-                         (-25150.083775/3.048192 + 105666.55595/7.62048*source_params.eta - 1042.165/3.024*source_params.eta2 + 534.5/3.6*source_params.eta3) * source_params.chi_s
-                        )
+        # Phase
+        self.prefactor_varphi_0 = 1.0 / useful_powers_pi.five_thirds
+        self.prefactor_varphi_1 = 0.0 / useful_powers_pi.four_thirds
+        self.prefactor_varphi_2 = (3715.0/756.0 + 55.0/9.0*source_params.eta) / useful_powers_pi.one
+        self.prefactor_varphi_3 = (-16.0*PI +
+                                   (113.0/3.0*source_params.delta*source_params.chi_a) + 
+                                   (113.0/3.0 - 76.0/3.0*source_params.eta)*source_params.chi_s 
+                                  ) / useful_powers_pi.two_thirds
+        self.prefactor_varphi_4 = (5.0/72.0*(3058.673/7.056 + 5429.0/7.0*source_params.eta + 617.0*source_params.eta2) +
+                                   (-405.0/8.0 + 200.0*source_params.eta) * source_params.chi_a * source_params.chi_a - 
+                                   405.0/4.0 * source_params.delta * source_params.chi_a * source_params.chi_s + 
+                                   (-405.0/8.0 + 5.0/2.0*source_params.eta) * source_params.chi_s * source_params.chi_s
+                                  ) / useful_powers_pi.third
+        self.prefactor_varphi_5 = (5.0/9.0 * (772.9/8.4 - 13.0*source_params.eta) * PI +
+                                   (-732.985/2.268 - 140.0/9.0*source_params.eta) * source_params.delta * source_params.chi_a +
+                                   (-732.985/2.268 + 2426.0/8.1*source_params.eta + 340.0/9.0*source_params.eta2) * source_params.chi_s
+                                  )
+        self.prefactor_varphi_5l= 3.0 * self.varphi_5 * useful_powers_pi.third_log
+        self.prefactor_varphi_6 = ((11583.231236531/4.694215680 - 640.0/3.0*PI*PI - 684.8/2.1*EULER_GAMMA + 
+                                        (-15737.765635/3.048192 + 225.5/1.2*PI*PI)*source_params.eta + 
+                                        76.055/1.728*source_params.eta2 - 
+                                        127.825/1.296*source_params.eta3 - 
+                                        tm.log(4.)*684.8/2.1) +
+                                   2270.0/3.0*PI*source_params.delta*source_params.chi_a
+                                   (2270.0/3.0 - 520.0*source_params.eta)*PI*source_params.chi_s
+                                  ) * useful_powers_pi.third
+        self.prefactor_varphi_6l=-684.8/2.1 * useful_powers_pi.third * useful_powers_pi.third_log
+        self.prefactor_varphi_7 = ((770.96675/2.54016 + 378.515/1.512*source_params.eta- 740.45/7.56*source_params.eta2)*PI + 
+                                   (-25150.083775/3.048192 + 26804.935/6.048*source_params.eta - 198.5/4.8*source_params.eta2) * source_params.delta * source_params.chi_a
+                                   (-25150.083775/3.048192 + 105666.55595/7.62048*source_params.eta - 1042.165/3.024*source_params.eta2 + 534.5/3.6*source_params.eta3) * source_params.chi_s
+                                  ) * useful_powers_pi.two_third
+        # Amplitude
+        self.prefactor_A_0 = 1.0 
+        self.prefactor_A_1 = 0.0
+        self.prefactor_A_2 = (-3.23/2.24 + 4.51/1.68*source_params.eta) * useful_powers_pi.two_thirds
+        self.prefactor_A_3 = (27.0/8.0 * source_params.delta * source_params.chi_a + 
+                              (27.0/8.0 - 11.0/6.0*source_params.eta) * source_params.chi_s
+                              ) * useful_powers_pi.one
+        self.prefactor_A_4 = (-27.312085/8.128512 -
+                              19.75055/3.38688*source_params.eta + 
+                              10.5271/2.4192*source_params.eta2 +
+                              (-8.1/3.2 + 8.0*source_params.eta) * source_params.chi_a2 -
+                              8.1/1.6 * source_params.delta * source_params.chi_a * source_params.chi_s +
+                              (-8.1/3.2 + 17.0/8.0*source_params.eta) * source_params.chi_s2,
+                              ) * useful_powers_pi.four_thirds
+        self.prefactor_A_5 = (-8.5/6.4*PI+
+                              8.5/1.6*PI*source_params.eta+
+                              (28.5197/1.6128 - 1.579/4.032*source_params.eta) * source_params.delta * source_params.chi_a +
+                              (28.5197/1.6128 - 153.17/6.72*source_params.eta - 2.227/1.008*source_params.eta2) * source_params.chi_s
+                              ) * useful_powers_pi.five_thirds
+        self.prefactor_A_6 = (-177.520268561/8.583708672 +
+                              (545.384828789/5.007163392 - 20.5/4.8*useful_powers_pi.two) * source_params.eta -
+                              32.48849057/1.78827264 * source_params.eta2 +
+                              34.473079/6.386688 * source_params.eta3 + 
+                              (3.1/1.2*PI - 7.0/3.0*PI*source_params.eta) * source_params.chi_s +
+                              (161.4569/6.4512 - 187.3643/1.6128*source_params.eta + 216.7/4.2*source_params.eta2) * source_params.chi_a2 +
+                              (161.4569/6.4512 - 61.391/1.344*source_params.eta + 57.451/4.032*source_params.eta2) * source_params.chi_s2
+                              (3.1/1.2*PI + (161.4569/3.2256 - 165.961/2.688*source_params.eta)*source_params.chi_s) * source_params.delta * source_params.chi_a
+                              ) * useful_powers_pi.two
 
 
-# 14 phase coefficients
+
+# Phase coefficients
 @ti.dataclass
 class PhaseCoefficients:
     # Inspiral (Region I)
-    prefactor_sigma_1: ti.f64
-    prefactor_sigma_2: ti.f64
-    prefactor_sigma_3: ti.f64
-    prefactor_sigma_4: ti.f64
+    sigma_1: ti.f64
+    sigma_2: ti.f64
+    sigma_3: ti.f64
+    sigma_4: ti.f64
     # Intermediate (Region IIa)
-    prefactor_beta_1: ti.f64
-    prefactor_beta_2: ti.f64
-    prefactor_beta_3: ti.f64
+    beta_1: ti.f64
+    beta_2: ti.f64
+    beta_3: ti.f64
     # Merge-ringdown (Region IIb)
-    prefactor_alpha_1: ti.f64
-    prefactor_alpha_2: ti.f64
-    prefactor_alpha_3: ti.f64
-    prefactor_alpha_4: ti.f64
-    prefactor_alpha_5: ti.f64
+    alpha_1: ti.f64
+    alpha_2: ti.f64
+    alpha_3: ti.f64
+    alpha_4: ti.f64
+    alpha_5: ti.f64
     # connection coefficients
     C1_Intermediate: ti.f64
     C2_Intermediate: ti.f64
     C1_merge_ringdown: ti.f64
     C2_merge_ringdown: ti.f64
 
-
     @ti.func
     def compute_phase_coefficients(self, source_params):
         '''
         Compute phase coefficients in Eq. 28, 16, 14 of arXiv:1508.07253
         '''
-        # phenomenological coefficients
+        # phenomenological fitting coefficients
         # Inspiral (Region I)
-        sigma_1 = (2096.551999295543 + 
+        self.sigma_1 = (2096.551999295543 + 
                    1463.7493168261553*source_params.eta + 
                    (1312.5493286098522 + 18307.330017082117*source_params.eta - 43534.1440746107*source_params.eta2 + 
                        (-833.2889543511114 + 32047.31997183187*source_params.eta - 108609.45037520859*source_params.eta2) * source_params.xi + 
                        (452.25136398112204 + 8353.439546391714*source_params.eta - 44531.3250037322*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        sigma_2 = (-10114.056472621156 - 
+        self.sigma_2 = (-10114.056472621156 - 
                    44631.01109458185*source_params.eta + 
                    (-6541.308761668722 - 266959.23419307504*source_params.eta + 686328.3229317984*source_params.eta2 + 
                        (3405.6372187679685 - 437507.7208209015*source_params.eta + 1.6318171307344697e6*source_params.eta2) * source_params.xi + 
                        (-7462.648563007646 - 114585.25177153319*source_params.eta + 674402.4689098676*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        sigma_3 = (22933.658273436497 + 
+        self.sigma_3 = (22933.658273436497 + 
                    230960.00814979506*source_params.eta + 
                    (14961.083974183695 + 1.1940181342318142e6*source_params.eta - 3.1042239693052764e6*source_params.eta2 + 
                        (-3038.166617199259 + 1.8720322849093592e6*source_params.eta - 7.309145012085539e6*source_params.eta2) * source_params.xi + 
                        (42738.22871475411 + 467502.018616601*source_params.eta - 3.064853498512499e6*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        sigma_4 = (-14621.71522218357 - 
+        self.sigma_4 = (-14621.71522218357 - 
                    377812.8579387104*source_params.eta + 
                    (-9608.682631509726 - 1.7108925257214056e6*source_params.eta + 4.332924601416521e6*source_params.eta2 + 
                        (-22366.683262266528 - 2.5019716386377467e6*source_params.eta + 1.0274495902259542e7*source_params.eta2) * source_params.xi + 
@@ -370,21 +437,21 @@ class PhaseCoefficients:
                    ) * source_params.xi
                    )
         # Intermediate (Region IIa)
-        beta_1 = (97.89747327985583 - 
+        self.beta_1 = (97.89747327985583 - 
                   42.659730877489224*source_params.eta + 
                   (153.48421037904913 - 1417.0620760768954*source_params.eta + 2752.8614143665027*source_params.eta2 + 
                        (138.7406469558649 - 1433.6585075135881*source_params.eta + 2857.7418952430758*source_params.eta2) * source_params.xi + 
                        (41.025109467376126 - 423.680737974639*source_params.eta + 850.3594335657173*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        beta_2 = (-3.282701958759534 - 
+        self.beta_2 = (-3.282701958759534 - 
                   9.051384468245866*source_params.eta + 
                   (-12.415449742258042 + 55.4716447709787*source_params.eta - 106.05109938966335*source_params.eta2 + 
                        (-11.953044553690658 + 76.80704618365418*source_params.eta - 155.33172948098394*source_params.eta2) * source_params.xi + 
                        (-3.4129261592393263 + 25.572377569952536*source_params.eta - 54.408036707740465*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        beta_3 = (-0.000025156429818799565 + 
+        self.beta_3 = (-0.000025156429818799565 + 
                   0.000019750256942201327*source_params.eta + 
                   (-0.000018370671469295915 + 0.000021886317041311973*source_params.eta + 0.00008250240316860033*source_params.eta2 + 
                        (7.157371250566708e-6 - 0.000055780000112270685*source_params.eta + 0.00019142082884072178*source_params.eta2) * source_params.xi + 
@@ -392,71 +459,53 @@ class PhaseCoefficients:
                    ) * source_params.xi
                    )
         # Merge-ringdown (Region IIb)
-        alpha_1 = (43.31514709695348 + 
+        self.alpha_1 = (43.31514709695348 + 
                    638.6332679188081*source_params.eta + 
                    (-32.85768747216059 + 2415.8938269370315*source_params.eta - 5766.875169379177*source_params.eta2 + 
                        (-61.85459307173841 + 2953.967762459948*source_params.eta - 8986.29057591497*source_params.eta2) * source_params.xi + 
                        (-21.571435779762044 + 981.2158224673428*source_params.eta - 3239.5664895930286*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        alpha_2 = (-0.07020209449091723 - 
+        self.alpha_2 = (-0.07020209449091723 - 
                    0.16269798450687084*source_params.eta + 
                    (-0.1872514685185499 + 1.138313650449945*source_params.eta - 2.8334196304430046*source_params.eta2 + 
                        (-0.17137955686840617 + 1.7197549338119527*source_params.eta - 4.539717148261272*source_params.eta2) * source_params.xi + 
                        (-0.049983437357548705 + 0.6062072055948309*source_params.eta - 1.682769616644546*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        alpha_3 = (9.5988072383479 - 
+        self.alpha_3 = (9.5988072383479 - 
                    397.05438595557433*source_params.eta + 
                    (16.202126189517813 - 1574.8286986717037*source_params.eta + 3600.3410843831093*source_params.eta2 + 
                        (27.092429659075467 - 1786.482357315139*source_params.eta + 5152.919378666511*source_params.eta2) * source_params.xi + 
                        (11.175710130033895 - 577.7999423177481*source_params.eta + 1808.730762932043*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        alpha_4 = (-0.02989487384493607 + 
+        self.alpha_4 = (-0.02989487384493607 + 
                    1.4022106448583738*source_params.eta + 
                    (-0.07356049468633846 + 0.8337006542278661*source_params.eta + 0.2240008282397391*source_params.eta2 + 
                        (-0.055202870001177226 + 0.5667186343606578*source_params.eta + 0.7186931973380503*source_params.eta2) * source_params.xi + 
                        (-0.015507437354325743 + 0.15750322779277187*source_params.eta + 0.21076815715176228*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        alpha_5 = (0.9974408278363099 - 
+        self.alpha_5 = (0.9974408278363099 - 
                    0.007884449714907203*source_params.eta + 
                    (-0.059046901195591035 + 1.3958712396764088*source_params.eta - 4.516631601676276*source_params.eta2 + 
                        (-0.05585343136869692 + 1.7516580039343603*source_params.eta - 5.990208965347804*source_params.eta2) * source_params.xi + 
                        (-0.017945336522161195 + 0.5965097794825992*source_params.eta - 2.0608879367971804*source_params.eta2) * source_params.xi * source_params.xi
                    ) * source_params.xi
                    )
-        # Corresponding prefactors (with powers of pi, used in assembling final wavefrom)
-        self.prefactor_sigma_1 = sigma_1
-        self.prefactor_sigma_2 = sigma_2
-        self.prefactor_sigma_3 = sigma_3
-        self.prefactor_sigma_4 = sigma_4
-        self.prefactor_beta_1 = beta_1
-        self.prefactor_beta_2 = beta_2
-        self.prefactor_beta_3 = beta_3
-        self.prefactor_alpha_1 = alpha_1 
-        self.prefactor_alpha_2 = alpha_2 
-        self.prefactor_alpha_3 = alpha_3 
-        self.prefactor_alpha_4 = alpha_4 
-        self.prefactor_alpha_5 = alpha_5 
-
         # compute connection coefficients
         # transition between inspiral (region I) and intermediate (region IIa)
-        self.C2_intermediate = _derivate_inspiral_phase_ansatz(PHASE_INSPIRAL_fJoin, self) - _derivate_intermediate_phase_ansatz(PHASE_INSPIRAL_fJoin, self)
-        self.C1_intermediate = _inspiral_phase_ansatz(PHASE_INSPIRAL_fJoin, self) - _intermediate_phase_ansatz(PHASE_INSPIRAL_fJoin, self) - self.C2_intermediate * PHASE_INSPIRAL_fJoin
+        self.C2_intermediate = _d_phase_inspiral_ansatz(PHASE_INSPIRAL_fJoin, self) - _d_phase_intermediate_ansatz(PHASE_INSPIRAL_fJoin, self)
+        self.C1_intermediate = _phase_inspiral_ansatz(PHASE_INSPIRAL_fJoin, self) - _phase_intermediate_ansatz(PHASE_INSPIRAL_fJoin, self) - self.C2_intermediate * PHASE_INSPIRAL_fJoin
         # transition between intermediate (region IIa) and merge_ringdown (region IIb)
         # note that incorporating C2_intermediate and C1_intermediate in intermediate part
         phase_MRD_f_join = 0.5 * source_params.f_ring
-        self.C2_merge_ringdown = (_derivate_intermediate_phase_ansatz(phase_MRD_f_join, self) + self.C2_intermediate) - _derivate_merge_ringdown_phase_ansatz(phase_MRD_f_join, self)
-        self.C1_merge_ringdown = (_intermediate_phase_ansatz(phase_MRD_f_join, self) + self.C1_intermediate + self.C2_intermediate*phase_MRD_f_join) - _merge_ringdown_phase_ansatz(phase_MRD_f_join, self) - self.C2_merge_ringdown*phase_MRD_f_join
+        self.C2_merge_ringdown = (_d_phase_intermediate_ansatz(phase_MRD_f_join, self) + self.C2_intermediate) - _d_phase_merge_ringdown_ansatz(phase_MRD_f_join, self)
+        self.C1_merge_ringdown = (_phase_intermediate_ansatz(phase_MRD_f_join, self) + self.C1_intermediate + self.C2_intermediate*phase_MRD_f_join) - _phase_merge_ringdown_ansatz(phase_MRD_f_join, self) - self.C2_merge_ringdown*phase_MRD_f_join
 
 
-        
-
- 
-
-# 11 amplitude coefficients
+# Amplitude coefficients
 @ti.dataclass
 class AmplitudeCoefficient:
     # Inspiral (Region I)
@@ -475,11 +524,12 @@ class AmplitudeCoefficient:
     gamma_3: ti.f64
     # derived coefficients
     f_peak: ti.f64
-    
-
+    amplitude_merge_ringdown_f_join: ti.f64
+    amp0: ti.f64
 
     @ti.func
     def compute_amplitude_coefficients(self, source_params):
+        # Inspiral (Region I)
         self.rho_1 = (3931.8979897196696 - 
                       17395.758706812805*source_params.eta + 
                       (3132.375545898835 + 343965.86092361377*source_params.eta - 1.2162565819981997e6*source_params.eta2 + 
@@ -501,8 +551,7 @@ class AmplitudeCoefficient:
                             (-1.4535031953446497e6 + 1.7063528990822166e7*source_params.eta - 4.2748659731120914e7*source_params.eta2) * source_params.xi * source_params.xi
                         ) * source_params.xi
                         )
-        
-        
+        # Merge-ringdown (Region IIb)
         self.gamma_1 = (0.006927402739328343 + 
                         0.03020474290328911*source_params.eta + 
                         (0.006308024337706171 - 0.12074130661131138*source_params.eta + 0.26271598905781324*source_params.eta2 + 
@@ -524,13 +573,14 @@ class AmplitudeCoefficient:
                             (-0.006134139870393713 - 0.38429253308696365*source_params.eta + 1.7561754421985984*source_params.eta2) * source_params.xi * source_params.xi
                         ) * source_params.xi
                         )
-        
+        # compute delta_s in intermediate (Region IIa) and the derived coefficients
         if self.gamma_2 > 1.0:
             self.f_peak = ti.abs(source_params.f_ring - source_params.f_damp*self.gamma3/self.gamma_2)
         else:
             self.f_peak = ti.abs(source_params.f_ring + (tm.sqrt(1-self.gamma_2*self.gamma_2) - 1) * source_params.f_damp*self.gamma3/self.gamma_2)
-
-        int_freq_mat = _intermediate_collocation_frequency_matrix(AMPLITUDE_INSPIRAL_fJoin, 0.5*(AMPLITUDE_INSPIRAL_fJoin + self.f_peak), self.f_peak)
+        
+        self.amplitude_merge_ringdown_f_join = 0.5*(AMPLITUDE_INSPIRAL_fJoin + self.f_peak)
+        collocation_freq_mat = _intermediate_collocation_frequency_matrix(AMPLITUDE_INSPIRAL_fJoin, self.amplitude_merge_ringdown_f_join, self.f_peak)
         v1 = _amplitude_inspiral_ansatz()
         v2 = (0.8149838730507785 + 
               2.5747553517454658*source_params.eta + 
@@ -542,18 +592,48 @@ class AmplitudeCoefficient:
         v3 = _amplitude_merge_ringdown_ansatz()
         d1 = _d_amplitude_inspiral_ansatz()
         d2 = _d_amplitude_merge_ringdown_ansatz()
-        self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = ti.solve(int_freq_mat, ti.Vector([v1, v2, v3, d1, d2]))
+        self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = ti.solve(collocation_freq_mat, ti.Vector([v1, v2, v3, d1, d2]))
+
+        self.amp0 = tm.sqrt(2.0/3.0*source_params.eta/useful_powers_pi.third)
 
 
 @ti.func
-def _compute_amplitude(powers_of_Mf, phase_coefficients, pn_prefactors):
-    pass
+def _compute_amplitude(Mf, powers_of_Mf, amplitude_coefficients, pn_prefactors):
+    if Mf < AMPLITUDE_INSPIRAL_fJoin:
+        amplitude = _amplitude_inspiral_ansatz()
+    elif Mf > amplitude_coefficients.amplitude_merge_ringdown_f_join:
+        amplitude = _amplitude_merge_ringdown_ansatz()
+    else:
+        amplitude = _amplitude_intermediate_ansatz()
+    return amplitude
+
 @ti.func
-def _compute_phase(powers_of_Mf, phase_coefficients, pn_prefactors):
-    pass
+def _compute_phase(Mf, powers_of_Mf, phase_coefficients, pn_prefactors):
+    if Mf < PHASE_INSPIRAL_fJoin:
+        phase = _phase_inspiral_ansatz()
+    elif Mf > phase_coefficients.phase_merge_ringdown_f_join:
+        phase = _phase_merge_ringdown_ansatz()
+    else:
+        phase = _phase_intermediate_ansatz()
+    return phase
+
 @ti.func
-def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors):
-    pass
+def _compute_tf(Mf, powers_of_Mf, phase_coefficients, pn_prefactors):
+    if Mf < PHASE_INSPIRAL_fJoin:
+        phase = _phase_inspiral_ansatz()
+    elif Mf > phase_coefficients.phase_merge_ringdown_f_join:
+        phase = _phase_merge_ringdown_ansatz()
+    else:
+        phase = _phase_intermediate_ansatz()
+    return phase
+
+
+
+@ti.func
+def _get_polarization_from_amplitude_phase(ampplitude, phase):
+    return cross, plus
+
+
 
 @ti.data_oriented
 class IMRPhenomD(object):
@@ -562,7 +642,7 @@ class IMRPhenomD(object):
         '''
         Parameters
         ==========
-        frequencies: ti.field of f64
+        frequencies: ti.field of f64, note that frequencies may not uniform spaced
         waveform_container: ti.Struct.field or None
             {} or {}
         returned_form: str
@@ -586,6 +666,9 @@ class IMRPhenomD(object):
         self.pn_prefactors = PostNewtonianPrefactors()
 
         if waveform_container is not None:
+            if not (waveform_container.shape == frequencies.shape):
+                raise Exception('passed in `waveform_container` and `frequencies` have different shape')
+            
             self.waveform_container=waveform_container
             ret_content = self.waveform_container.keys
             if 'tf' in ret_content:
@@ -645,23 +728,30 @@ class IMRPhenomD(object):
         self.phase_coefficients.phase_phase_coefficients(source_params)
         self.pn_prefactors.compute_PN_prefactors(source_params)
         powers_of_Mf = UsefulPowers()
+
         for idx in self.frequencies:
             Mf = source_params.M_sec * self.frequencies[idx]
-            powers_of_Mf.ti_initilizing_useful_powers(Mf)
-            amplitude = _compute_amplitude(powers_of_Mf, self.amplitude_coefficients, self.pn_prefactors)
-            phase = _compute_phase(powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
-            # remember multiple amp0 and shift phase
-            if ti.static(self.returned_form == 'amplitude_phase'):
-                self.waveform_container[idx].amplitude = amplitude
-                self.waveform_container[idx].phase = phase
-            if ti.static(self.returned_form == 'polarization'):
-                self.waveform_container[idx].hcross
-                self.waveform_container[idx].hplus
-            if ti.static(self.include_tf):
-                self.waveform_container[idx].tf = _compute_tf(powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
-
-
-
+            if Mf < FREQUENCY_CUT:
+                powers_of_Mf.initilizing_useful_powers(Mf)            
+                amplitude = _compute_amplitude(Mf, powers_of_Mf, self.amplitude_coefficients, self.pn_prefactors)
+                phase = _compute_phase(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
+                # remember multiple amp0 and shift phase
+                if ti.static(self.returned_form == 'amplitude_phase'):
+                    self.waveform_container[idx].amplitude = amplitude
+                    self.waveform_container[idx].phase = phase
+                if ti.static(self.returned_form == 'polarization'):
+                    self.waveform_container[idx].hcross, self.waveform_container[idx].hplus = _get_polarization_from_amplitude_phase(amplitude, phase)
+                if ti.static(self.include_tf):
+                    self.waveform_container[idx].tf = _compute_tf(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
+            else:
+                if ti.static(self.returned_form == 'amplitude_phase'):
+                    self.waveform_container[idx].amplitude = 0.0
+                    self.waveform_container[idx].phase = 0.0
+                if ti.static(self.returned_form == 'polarization'):
+                    self.waveform_container[idx].hcross.fill(0.0)
+                    self.waveform_container[idx].hplus.fill(0.0)
+                if ti.static(self.include_tf):
+                    self.waveform_container[idx].tf = 0.0
 
     @ti.func
     def _parameter_check(self, source_params):

@@ -27,6 +27,7 @@ class UsefulPowers:
     four: ti.f64
     one_fourths: ti.f64
     three_fourths: ti.f64
+    seven_sixths: ti.f64
     log: ti.f64
 
     @ti.pyfunc
@@ -153,7 +154,7 @@ def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_r
 
 # Phase ansatz
 @ti.func
-def _phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors):
+def _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
     '''
     without 1/eta
     '''
@@ -168,15 +169,15 @@ def _phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors):
                          pn_prefactors.prefactor_varphi_6l * powers_of_Mf.third * (powers_of_Mf.log + useful_powers_pi.log) + 
                          pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
                         ) + 
-            (phase_prefactors.sigma_1 * powers_of_Mf.one + 
-             0.75 * phase_prefactors.sigma_2 * powers_of_Mf.four_thirds + 
-             0.6 * phase_prefactors.sigma_3 * powers_of_Mf.five_thirds + 
-             0.5 * phase_prefactors.sigma_4 * powers_of_Mf.two
+            (phase_coefficients.sigma_1 * powers_of_Mf.one + 
+             0.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds + 
+             0.6 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds + 
+             0.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
              )
             )
 
 @ti.func
-def _d_phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors):
+def _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
     '''
     without 1/eta
     '''
@@ -190,54 +191,54 @@ def _d_phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors):
                          pn_prefactors.prefactor_varphi_6l / powers_of_Mf.two_thirds * (3.0 + powers_of_Mf.log + useful_powers_pi.log) + 
                          2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
                         ) / 3.0 + 
-            (phase_prefactors.sigma_1  + 
-             phase_prefactors.sigma_2 * powers_of_Mf.third + 
-             phase_prefactors.sigma_3 * powers_of_Mf.two_thirds + 
-             phase_prefactors.sigma_4 * powers_of_Mf.one
+            (phase_coefficients.sigma_1  + 
+             phase_coefficients.sigma_2 * powers_of_Mf.third + 
+             phase_coefficients.sigma_3 * powers_of_Mf.two_thirds + 
+             phase_coefficients.sigma_4 * powers_of_Mf.one
              )
             )
 
 @ti.func
-def _phase_intermediate_ansatz(powers_of_Mf, phase_prefactors):
+def _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients):
     '''
     without 1/eta
     '''
-    return (phase_prefactors.bate_1 * powers_of_Mf.one + 
-            phase_prefactors.beta_2 * powers_of_Mf.log -
-            phase_prefactors.beta_3 / 3.0 / powers_of_Mf.three
+    return (phase_coefficients.bate_1 * powers_of_Mf.one + 
+            phase_coefficients.beta_2 * powers_of_Mf.log -
+            phase_coefficients.beta_3 / 3.0 / powers_of_Mf.three
             )
 
 @ti.func
-def _d_phase_intermediate_ansatz(powers_of_Mf, phase_prefactors):
+def _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients):
     '''
     without 1/eta
     '''
-    return (phase_prefactors.bate_1 + 
-            phase_prefactors.beta_2 / powers_of_Mf.one +
-            phase_prefactors.beta_3 / powers_of_Mf.four
+    return (phase_coefficients.bate_1 + 
+            phase_coefficients.beta_2 / powers_of_Mf.one +
+            phase_coefficients.beta_3 / powers_of_Mf.four
             )
 
 @ti.func
-def _phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, f_ring, f_damp):
+def _phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp):
     '''
     without 1/eta
     '''
-    return (phase_prefactors.alpha_1 * powers_of_Mf.one - 
-            phase_prefactors.alpha_2 / powers_of_Mf.one +
-            4.0/3.0 * phase_prefactors.alpha_3 * powers_of_Mf.three_fourths + 
+    return (phase_coefficients.alpha_1 * powers_of_Mf.one - 
+            phase_coefficients.alpha_2 / powers_of_Mf.one +
+            4.0/3.0 * phase_coefficients.alpha_3 * powers_of_Mf.three_fourths + 
             # note that tm.atan2 return the value in [-pi, pi], make sure f_damp > 0
-            phase_prefactors.alpha_4 * tm.atan2((powers_of_Mf.one - phase_prefactors.alpha_5*f_ring), f_damp)
+            phase_coefficients.alpha_4 * tm.atan2((powers_of_Mf.one - phase_coefficients.alpha_5*f_ring), f_damp)
             )
 
 @ti.func
-def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, f_ring, f_damp):
+def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp):
     '''
     without 1/eta
     '''
-    return (phase_prefactors.prefactor_alpha_1 + 
-            phase_prefactors.prefactor_alpha_2 / powers_of_Mf.two +
-            phase_prefactors.prefactor_alpha_3 / powers_of_Mf.one_fourths +
-            phase_prefactors.prefactor_alpha_4*f_damp / (f_damp**2 + (powers_of_Mf.one - phase_prefactors.alpha_5*f_ring)**2)
+    return (phase_coefficients.prefactor_alpha_1 + 
+            phase_coefficients.prefactor_alpha_2 / powers_of_Mf.two +
+            phase_coefficients.prefactor_alpha_3 / powers_of_Mf.one_fourths +
+            phase_coefficients.prefactor_alpha_4*f_damp / (f_damp**2 + (powers_of_Mf.one - phase_coefficients.alpha_5*f_ring)**2)
             )
 
 
@@ -614,35 +615,42 @@ class AmplitudeCoefficients:
         self.amp0 = tm.sqrt(2.0/3.0*source_params.eta/useful_powers_pi.third)
 
 
-# @ti.func
-# def _compute_amplitude(Mf, powers_of_Mf, amplitude_coefficients, pn_prefactors):
-#     if Mf < AMPLITUDE_INSPIRAL_fJoin:
-#         amplitude = _amplitude_inspiral_ansatz()
-#     elif Mf > amplitude_coefficients.amplitude_merge_ringdown_f_join:
-#         amplitude = _amplitude_merge_ringdown_ansatz()
-#     else:
-#         amplitude = _amplitude_intermediate_ansatz()
-#     return amplitude
+@ti.func
+def _compute_amplitude(powers_of_Mf, amplitude_coefficients, pn_prefactors, f_ring, f_damp):
+    if powers_of_Mf.one < AMPLITUDE_INSPIRAL_fJoin:
+        amplitude = _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors)
+    elif powers_of_Mf.one > amplitude_coefficients.f_peak:
+        amplitude = _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors, f_ring, f_damp)
+    else:
+        amplitude = _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients)
+    return amplitude * amplitude_coefficients.amp0 / powers_of_Mf.seven_sixths
 
-# @ti.func
-# def _compute_phase(Mf, powers_of_Mf, phase_coefficients, pn_prefactors):
-#     if Mf < PHASE_INSPIRAL_fJoin:
-#         phase = _phase_inspiral_ansatz()
-#     elif Mf > phase_coefficients.phase_merge_ringdown_f_join:
-#         phase = _phase_merge_ringdown_ansatz()
-#     else:
-#         phase = _phase_intermediate_ansatz()
-#     return phase
+@ti.func
+def _compute_phase(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp):
+    '''
+    without 1/eta
+    '''
+    if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
+        phase = _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
+    elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
+        phase = _phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp)
+    else:
+        phase = _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients)
+    return phase
 
-# @ti.func
-# def _compute_tf(Mf, powers_of_Mf, phase_coefficients, pn_prefactors):
-#     if Mf < PHASE_INSPIRAL_fJoin:
-#         phase = _phase_inspiral_ansatz()
-#     elif Mf > phase_coefficients.phase_merge_ringdown_f_join:
-#         phase = _phase_merge_ringdown_ansatz()
-#     else:
-#         phase = _phase_intermediate_ansatz()
-#     return phase
+@ti.func
+def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp):
+    '''
+    without 1/eta
+    '''
+    if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
+        tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
+    elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
+        tf = _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp)
+    else:
+        tf = _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients)
+    
+    return -tf/2/PI
 
 
 
@@ -652,128 +660,128 @@ class AmplitudeCoefficients:
 
 
 
-# @ti.data_oriented
-# class IMRPhenomD(object):
+@ti.data_oriented
+class IMRPhenomD(object):
 
-#     def __init__(self, frequencies, waveform_container=None, returned_form='polarizations', include_tf=True, parameter_sanity_check=True):
-#         '''
-#         Parameters
-#         ==========
-#         frequencies: ti.field of f64, note that frequencies may not uniform spaced
-#         waveform_container: ti.Struct.field or None
-#             {} or {}
-#         returned_form: str
-#             `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
-#         parameter_sanity_check: bool
+    def __init__(self, frequencies, waveform_container=None, returned_form='polarizations', include_tf=True, parameter_sanity_check=True):
+        '''
+        Parameters
+        ==========
+        frequencies: ti.field of f64, note that frequencies may not uniform spaced
+        waveform_container: ti.Struct.field or None
+            {} or {}
+        returned_form: str
+            `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
+        parameter_sanity_check: bool
 
-#         Returns:
-#         ========
-#         array, the A channel without the prefactor which is determined by the TDI generation.
+        Returns:
+        ========
+        array, the A channel without the prefactor which is determined by the TDI generation.
 
-#         TODO:
-#         check whether passed in `waveform_containter` consistent with `returned_form`
-#         '''
-#         self.frequencies = frequencies
-#         self.parameter_sanity_check = parameter_sanity_check
+        TODO:
+        check whether passed in `waveform_containter` consistent with `returned_form`
+        '''
+        self.frequencies = frequencies
+        self.parameter_sanity_check = parameter_sanity_check
 
-#         # initializing data struct with 0
-#         self.source_parameters = SourceParameters()
-#         self.phase_coefficients = PhaseCoefficients()
-#         self.amplitude_coefficients = AmplitudeCoefficients()
-#         self.pn_prefactors = PostNewtonianPrefactors()
+        # initializing data struct with 0
+        self.source_parameters = SourceParameters()
+        self.phase_coefficients = PhaseCoefficients()
+        self.amplitude_coefficients = AmplitudeCoefficients()
+        self.pn_prefactors = PostNewtonianPrefactors()
 
-#         if waveform_container is not None:
-#             if not (waveform_container.shape == frequencies.shape):
-#                 raise Exception('passed in `waveform_container` and `frequencies` have different shape')
+        if waveform_container is not None:
+            if not (waveform_container.shape == frequencies.shape):
+                raise Exception('passed in `waveform_container` and `frequencies` have different shape')
             
-#             self.waveform_container=waveform_container
-#             ret_content = self.waveform_container.keys
-#             if 'tf' in ret_content:
-#                 include_tf = True
-#                 ret_content.remove('tf')
-#             else:
-#                 include_tf = False
-#             if all([item in ret_content for item in ['hplus', 'hcros']]):
-#                 returned_form = 'polarizations'
-#                 [ret_content.remove(item) for item in ['hplus', 'hcros']]
-#             elif all([item in ret_content for item in ['amplitude', 'phase']]):
-#                 returned_form = 'amplitude_phase'
-#                 [ret_content.remove(item) for item in ['amplitude', 'phase']]
-#             if len(ret_content) > 0:
-#                 raise Exception(f'`waveform_container` contains additional unknown keys {ret_content}, check spellings')
-#             self.returned_form = returned_form
-#             self.include_tf = include_tf
-#             print(f'Using `waveform_container` passed in, updating returned_form={self.returned_form}, include_tf={self.include_tf}')
-#         else:
-#             self._initialize_waveform_container(returned_form, include_tf)
-#             self.returned_form = returned_form
-#             self.include_tf = include_tf
-#             print(f'`waveform_container` is not given, initializing one with returned_form={returned_form}, include_tf={include_tf}')
+            self.waveform_container=waveform_container
+            ret_content = self.waveform_container.keys
+            if 'tf' in ret_content:
+                include_tf = True
+                ret_content.remove('tf')
+            else:
+                include_tf = False
+            if all([item in ret_content for item in ['hplus', 'hcros']]):
+                returned_form = 'polarizations'
+                [ret_content.remove(item) for item in ['hplus', 'hcros']]
+            elif all([item in ret_content for item in ['amplitude', 'phase']]):
+                returned_form = 'amplitude_phase'
+                [ret_content.remove(item) for item in ['amplitude', 'phase']]
+            if len(ret_content) > 0:
+                raise Exception(f'`waveform_container` contains additional unknown keys {ret_content}, check spellings')
+            self.returned_form = returned_form
+            self.include_tf = include_tf
+            print(f'Using `waveform_container` passed in, updating returned_form={self.returned_form}, include_tf={self.include_tf}')
+        else:
+            self._initialize_waveform_container(returned_form, include_tf)
+            self.returned_form = returned_form
+            self.include_tf = include_tf
+            print(f'`waveform_container` is not given, initializing one with returned_form={returned_form}, include_tf={include_tf}')
             
 
-#     def _initialize_waveform_container(self, returned_form, include_tf):
-#         ret_content = {}
-#         if returned_form == 'polarizations':
-#             ret_content.update({'hplus': vec2_complex, 'hcross': vec2_complex})
-#         elif returned_form == 'amplitude_phase':
-#             ret_content.update({'amplitude': ti.f64, 'phase': ti.f64})
-#         if include_tf:
-#             ret_content.update({'tf': ti.f64})
+    def _initialize_waveform_container(self, returned_form, include_tf):
+        ret_content = {}
+        if returned_form == 'polarizations':
+            ret_content.update({'hplus': vec2_complex, 'hcross': vec2_complex})
+        elif returned_form == 'amplitude_phase':
+            ret_content.update({'amplitude': ti.f64, 'phase': ti.f64})
+        if include_tf:
+            ret_content.update({'tf': ti.f64})
         
-#         waveform_field = ti.Struct.field(ret_content)
-#         ti.root.dense(ti.i, self.frequencies.shape).place(waveform_field)
-#         if self.waveform_container is None:
-#             self.waveform_container = waveform_field
-#         else:
-#             raise Exception('`waveform_container` have been given, cannot initializing new one.')
-#         return None
+        waveform_field = ti.Struct.field(ret_content)
+        ti.root.dense(ti.i, self.frequencies.shape).place(waveform_field)
+        if self.waveform_container is None:
+            self.waveform_container = waveform_field
+        else:
+            raise Exception('`waveform_container` have been given, cannot initializing new one.')
+        return None
     
 
-#     def get_waveform(self, parameters):
-#         '''
-#         necessary preparation which need to be finished in python scope for waveform computation 
-#         (this function may be awkward, since no interpolation function in taichi-lang)
-#         '''
-#         source_params = self.source_parameters.update_all_source_parameters()
-#         self._get_wavefrom_kernel(source_params)
+    def get_waveform(self, parameters):
+        '''
+        necessary preparation which need to be finished in python scope for waveform computation 
+        (this function may be awkward, since no interpolation function in taichi-lang)
+        '''
+        source_params = self.source_parameters.update_all_source_parameters()
+        self._get_wavefrom_kernel(source_params)
     
-#     @ti.kernel
-#     def _get_wavefrom_kernel(self, source_params: SourceParameters):
-#         # todo
-#         # check whether the attri in python scope can be changed ?
-#         self.amplitude_coefficients.compute_phase_coefficients(source_params)
-#         self.phase_coefficients.phase_phase_coefficients(source_params)
-#         self.pn_prefactors.compute_PN_prefactors(source_params)
-#         powers_of_Mf = UsefulPowers()
+    @ti.kernel
+    def _get_wavefrom_kernel(self, source_params: SourceParameters):
+        # todo
+        # check whether the attri in python scope can be changed ?
+        self.amplitude_coefficients.compute_phase_coefficients(source_params)
+        self.phase_coefficients.phase_phase_coefficients(source_params)
+        self.pn_prefactors.compute_PN_prefactors(source_params)
+        powers_of_Mf = UsefulPowers()
 
-#         for idx in self.frequencies:
-#             Mf = source_params.M_sec * self.frequencies[idx]
-#             if Mf < FREQUENCY_CUT:
-#                 powers_of_Mf.updating(Mf)            
-#                 amplitude = _compute_amplitude(Mf, powers_of_Mf, self.amplitude_coefficients, self.pn_prefactors)
-#                 phase = _compute_phase(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
-#                 # remember multiple amp0 and shift phase
-#                 if ti.static(self.returned_form == 'amplitude_phase'):
-#                     self.waveform_container[idx].amplitude = amplitude
-#                     self.waveform_container[idx].phase = phase
-#                 if ti.static(self.returned_form == 'polarization'):
-#                     self.waveform_container[idx].hcross, self.waveform_container[idx].hplus = _get_polarization_from_amplitude_phase(amplitude, phase)
-#                 if ti.static(self.include_tf):
-#                     self.waveform_container[idx].tf = _compute_tf(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
-#             else:
-#                 if ti.static(self.returned_form == 'amplitude_phase'):
-#                     self.waveform_container[idx].amplitude = 0.0
-#                     self.waveform_container[idx].phase = 0.0
-#                 if ti.static(self.returned_form == 'polarization'):
-#                     self.waveform_container[idx].hcross.fill(0.0)
-#                     self.waveform_container[idx].hplus.fill(0.0)
-#                 if ti.static(self.include_tf):
-#                     self.waveform_container[idx].tf = 0.0
+        for idx in self.frequencies:
+            Mf = source_params.M_sec * self.frequencies[idx]
+            if Mf < FREQUENCY_CUT:
+                powers_of_Mf.updating(Mf)            
+                amplitude = _compute_amplitude(Mf, powers_of_Mf, self.amplitude_coefficients, self.pn_prefactors)
+                phase = _compute_phase(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
+                # remember multiple amp0 and shift phase
+                if ti.static(self.returned_form == 'amplitude_phase'):
+                    self.waveform_container[idx].amplitude = amplitude
+                    self.waveform_container[idx].phase = phase
+                if ti.static(self.returned_form == 'polarization'):
+                    self.waveform_container[idx].hcross, self.waveform_container[idx].hplus = _get_polarization_from_amplitude_phase(amplitude, phase)
+                if ti.static(self.include_tf):
+                    self.waveform_container[idx].tf = _compute_tf(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
+            else:
+                if ti.static(self.returned_form == 'amplitude_phase'):
+                    self.waveform_container[idx].amplitude = 0.0
+                    self.waveform_container[idx].phase = 0.0
+                if ti.static(self.returned_form == 'polarization'):
+                    self.waveform_container[idx].hcross.fill(0.0)
+                    self.waveform_container[idx].hplus.fill(0.0)
+                if ti.static(self.include_tf):
+                    self.waveform_container[idx].tf = 0.0
 
-#     @ti.func
-#     def _parameter_check(self, source_params):
-#         return SUCCESS
+    @ti.func
+    def _parameter_check(self, source_params):
+        return SUCCESS
 
-#     def np_array_view_waveform_container(self):
-#         pass
+    def np_array_view_waveform_container(self):
+        pass
         

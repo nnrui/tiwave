@@ -9,8 +9,6 @@ from ..utilities import vec2_complex
 '''
 TODO:
 1. source parameter check, (m1>m2, q<1)
-2. modify UsefulPowers, leave only necessory
-3. remove prefactor, becasue there is no power of pi except of pn coeffcients
 4. using one matrix to compute all phenomenology coefficients
 5. add loop config for waveform_kernel
 '''
@@ -29,14 +27,13 @@ class UsefulPowers:
     four: ti.f64
     one_fourths: ti.f64
     three_fourths: ti.f64
+    log: ti.f64
 
     @ti.pyfunc
-    def initilizing_useful_powers(self, number):
+    def updating(self, number: ti.f64):
         pass
 
 
-useful_powers_pi = UsefulPowers()
-useful_powers_pi.initilizing_useful_powers(PI)
 QNMgrid_a     = np.loadtxt('../data/QNMData_a.txt')
 QNMgrid_fring = np.loadtxt('../data/QNMData_fring.txt')
 QNMgrid_fdamp = np.loadtxt('../data/QNMData_fdamp.txt')
@@ -44,9 +41,28 @@ AMPLITUDE_INSPIRAL_fJoin = 0.014
 PHASE_INSPIRAL_fJoin = 0.018
 FREQUENCY_CUT = 0.2
 
+useful_powers_pi = UsefulPowers()
+useful_powers_pi.updating(PI)
+
+powers_phase_intermediate_f_join = UsefulPowers()
+powers_phase_intermediate_f_join.updating(PHASE_INSPIRAL_fJoin)
+
+
+powers_amplitude_intermediate_f_join = UsefulPowers()
+powers_amplitude_intermediate_f_join.updating(AMPLITUDE_INSPIRAL_fJoin)
+
+powers_phase_merge_ringdown_f_join = UsefulPowers()
+powers_amplitude_f_mid = UsefulPowers()
+powers_amplitude_f_peak = UsefulPowers()
+
+
 
 @ti.func
-def _intermediate_collocation_frequency_matrix(f1, f2, f3):
+def _intermediate_collocation_frequency_matrix(f1: ti.f64, f2: ti.f64, f3:ti.f64) -> ti.types.matrix(5, 5, ti.f64):
+    '''
+    Used to solve the system of equations of delta_i for intermediate aplitude.
+    Eq. 21-26 in arxiv: 1508.07253
+    '''
     f1_2 = f1 * f1
     f1_3 = f1_2 * f1
     f1_4 = f1_3 * f1
@@ -110,34 +126,34 @@ def _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients):
             )
 
 @ti.func
-def _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, source_params):
+def _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_ring, f_damp):
     '''
     without amp0
     '''
-    f_minus_fring = powers_of_Mf.one - source_params.f_ring
-    fdamp_gamma3 = amplitude_coefficients.gamma_3 * source_params.f_damp
+    f_minus_fring = powers_of_Mf.one - f_ring
+    fdamp_gamma3 = amplitude_coefficients.gamma_3 * f_damp
     return (amplitude_coefficients.gamma_1 * fdamp_gamma3 / 
             (f_minus_fring**2 + fdamp_gamma3**2) *
             tm.exp(-f_minus_fring * amplitude_coefficients.gamma_2 / fdamp_gamma3)
             )
 
 @ti.func
-def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, source_params):
+def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_ring, f_damp):
     '''
     without amp0
     '''
-    fdamp_gamma3 = amplitude_coefficients.gamma_3 * source_params.f_damp
+    fdamp_gamma3 = amplitude_coefficients.gamma_3 * f_damp
     pow2_fdamp_gamma3 = fdamp_gamma3 * fdamp_gamma3
-    f_minus_fring = powers_of_Mf.one - source_params.f_ring
+    f_minus_fring = powers_of_Mf.one - f_ring
     exp_factor = tm.exp(-f_minus_fring * amplitude_coefficients.gamma_2 / fdamp_gamma3)
     pow2_plus_pow2 = f_minus_fring**2 + pow2_fdamp_gamma3
-    return (exp_factor / pow2_plus_pow2 * (-2*source_params.f_damp*amplitude_coefficients.gamma_1*amplitude_coefficients.gamma_3*f_minus_fring/pow2_plus_pow2 - 
-                                           amplitude_coefficients.gamma_1*amplitude_coefficients.gamma_3)
+    return (exp_factor / pow2_plus_pow2 * (-2*f_damp*amplitude_coefficients.gamma_1*amplitude_coefficients.gamma_3*f_minus_fring/pow2_plus_pow2 - 
+                                           amplitude_coefficients.gamma_1*amplitude_coefficients.gamma_2)
             )
 
 # Phase ansatz
 @ti.func
-def _phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, source_params):
+def _phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors):
     '''
     without 1/eta
     '''
@@ -147,9 +163,9 @@ def _phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, source
                          pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds + 
                          pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third + 
                          pn_prefactors.prefactor_varphi_5 + 
-                         pn_prefactors.prefactor_varphi_5l * powers_of_Mf.third_log + 
+                         pn_prefactors.prefactor_varphi_5l * (powers_of_Mf.log + useful_powers_pi.log) + 
                          pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third + 
-                         pn_prefactors.prefactor_varphi_6l * powers_of_Mf.third * powers_of_Mf.third_log + 
+                         pn_prefactors.prefactor_varphi_6l * powers_of_Mf.third * (powers_of_Mf.log + useful_powers_pi.log) + 
                          pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
                         ) + 
             (phase_prefactors.sigma_1 * powers_of_Mf.one + 
@@ -160,7 +176,7 @@ def _phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, source
             )
 
 @ti.func
-def _d_phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, source_params):
+def _d_phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors):
     '''
     without 1/eta
     '''
@@ -171,7 +187,7 @@ def _d_phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, sour
                          -1.0 * pn_prefactors.prefactor_varphi_4 / powers_of_Mf.four_thirds + 
                          pn_prefactors.prefactor_varphi_5l / powers_of_Mf.one+ 
                          pn_prefactors.prefactor_varphi_6 / powers_of_Mf.two_thirds + 
-                         pn_prefactors.prefactor_varphi_6l / powers_of_Mf.two_thirds * (1 + powers_of_Mf.third_log) + 
+                         pn_prefactors.prefactor_varphi_6l / powers_of_Mf.two_thirds * (3.0 + powers_of_Mf.log + useful_powers_pi.log) + 
                          2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
                         ) / 3.0 + 
             (phase_prefactors.sigma_1  + 
@@ -182,17 +198,17 @@ def _d_phase_inspiral_ansatz(powers_of_Mf, phase_prefactors, pn_prefactors, sour
             )
 
 @ti.func
-def _phase_intermediate_ansatz(powers_of_Mf, phase_prefactors, source_params):
+def _phase_intermediate_ansatz(powers_of_Mf, phase_prefactors):
     '''
     without 1/eta
     '''
     return (phase_prefactors.bate_1 * powers_of_Mf.one + 
-            phase_prefactors.beta_2 * (3 * powers_of_Mf.third_log) -
+            phase_prefactors.beta_2 * powers_of_Mf.log -
             phase_prefactors.beta_3 / 3.0 / powers_of_Mf.three
             )
 
 @ti.func
-def _d_phase_intermediate_ansatz(powers_of_Mf, phase_prefactors, source_params):
+def _d_phase_intermediate_ansatz(powers_of_Mf, phase_prefactors):
     '''
     without 1/eta
     '''
@@ -202,7 +218,7 @@ def _d_phase_intermediate_ansatz(powers_of_Mf, phase_prefactors, source_params):
             )
 
 @ti.func
-def _phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, source_params):
+def _phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, f_ring, f_damp):
     '''
     without 1/eta
     '''
@@ -210,20 +226,19 @@ def _phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, source_params):
             phase_prefactors.alpha_2 / powers_of_Mf.one +
             4.0/3.0 * phase_prefactors.alpha_3 * powers_of_Mf.three_fourths + 
             # note that tm.atan2 return the value in [-pi, pi], make sure f_damp > 0
-            phase_prefactors.alpha_4 * tm.atan2((powers_of_Mf.one - phase_prefactors.alpha_5*source_params.f_ring), source_params.f_damp)
+            phase_prefactors.alpha_4 * tm.atan2((powers_of_Mf.one - phase_prefactors.alpha_5*f_ring), f_damp)
             )
 
 @ti.func
-def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, source_params):
+def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_prefactors, f_ring, f_damp):
     '''
     without 1/eta
     '''
     return (phase_prefactors.prefactor_alpha_1 + 
             phase_prefactors.prefactor_alpha_2 / powers_of_Mf.two +
             phase_prefactors.prefactor_alpha_3 / powers_of_Mf.one_fourths +
-            phase_prefactors.prefactor_alpha_4 / (source_params.f_damp + (powers_of_Mf.one - phase_prefactors.alpha_5*source_params.f_ring)**2/source_params.f_damp)
+            phase_prefactors.prefactor_alpha_4*f_damp / (f_damp**2 + (powers_of_Mf.one - phase_prefactors.alpha_5*f_ring)**2)
             )
-
 
 
 @ti.dataclass
@@ -252,7 +267,7 @@ class SourceParameters:
         self.eta = mass_1 * mass_2 / (self.M * self.M)
         self.eta2 = self.eta * self.eta
         self.eta3 = self.eta2 * self.eta
-        self.delta = (mass_1 - mass_2)/self.M     # mass_1 > mass_2
+        self.delta = (mass_1 - mass_2)/self.M     # make sure mass_1 > mass_2
         self.chi_s = (chi_1 + chi_2) * 0.5
         self.chi_a = (chi_1 - chi_2) * 0.5
         self.chi_s2 = self.chi_s * self.chi_s
@@ -332,7 +347,7 @@ class PostNewtonianPrefactors:
                                    (-732.985/2.268 - 140.0/9.0*source_params.eta) * source_params.delta * source_params.chi_a +
                                    (-732.985/2.268 + 2426.0/8.1*source_params.eta + 340.0/9.0*source_params.eta2) * source_params.chi_s
                                   )
-        self.prefactor_varphi_5l= 3.0 * self.varphi_5 * useful_powers_pi.third_log
+        self.prefactor_varphi_5l= self.varphi_5
         self.prefactor_varphi_6 = ((11583.231236531/4.694215680 - 640.0/3.0*PI*PI - 684.8/2.1*EULER_GAMMA + 
                                         (-15737.765635/3.048192 + 225.5/1.2*PI*PI)*source_params.eta + 
                                         76.055/1.728*source_params.eta2 - 
@@ -341,11 +356,11 @@ class PostNewtonianPrefactors:
                                    2270.0/3.0*PI*source_params.delta*source_params.chi_a
                                    (2270.0/3.0 - 520.0*source_params.eta)*PI*source_params.chi_s
                                   ) * useful_powers_pi.third
-        self.prefactor_varphi_6l=-684.8/2.1 * useful_powers_pi.third * useful_powers_pi.third_log
+        self.prefactor_varphi_6l=-684.8/6.3 * useful_powers_pi.third
         self.prefactor_varphi_7 = ((770.96675/2.54016 + 378.515/1.512*source_params.eta- 740.45/7.56*source_params.eta2)*PI + 
                                    (-25150.083775/3.048192 + 26804.935/6.048*source_params.eta - 198.5/4.8*source_params.eta2) * source_params.delta * source_params.chi_a
                                    (-25150.083775/3.048192 + 105666.55595/7.62048*source_params.eta - 1042.165/3.024*source_params.eta2 + 534.5/3.6*source_params.eta3) * source_params.chi_s
-                                  ) * useful_powers_pi.two_third
+                                  ) * useful_powers_pi.two_thirds
         # Amplitude
         self.prefactor_A_0 = 1.0 
         self.prefactor_A_1 = 0.0
@@ -376,7 +391,6 @@ class PostNewtonianPrefactors:
                               ) * useful_powers_pi.two
 
 
-
 # Phase coefficients
 @ti.dataclass
 class PhaseCoefficients:
@@ -400,9 +414,10 @@ class PhaseCoefficients:
     C2_Intermediate: ti.f64
     C1_merge_ringdown: ti.f64
     C2_merge_ringdown: ti.f64
+    phase_merge_ringdown_f_join: ti.f64
 
     @ti.func
-    def compute_phase_coefficients(self, source_params):
+    def compute_phase_coefficients(self, source_params, pn_prefactors):
         '''
         Compute phase coefficients in Eq. 28, 16, 14 of arXiv:1508.07253
         '''
@@ -496,18 +511,19 @@ class PhaseCoefficients:
                    )
         # compute connection coefficients
         # transition between inspiral (region I) and intermediate (region IIa)
-        self.C2_intermediate = _d_phase_inspiral_ansatz(PHASE_INSPIRAL_fJoin, self) - _d_phase_intermediate_ansatz(PHASE_INSPIRAL_fJoin, self)
-        self.C1_intermediate = _phase_inspiral_ansatz(PHASE_INSPIRAL_fJoin, self) - _phase_intermediate_ansatz(PHASE_INSPIRAL_fJoin, self) - self.C2_intermediate * PHASE_INSPIRAL_fJoin
+        self.C2_intermediate = _d_phase_inspiral_ansatz(powers_phase_intermediate_f_join, self, pn_prefactors) - _d_phase_intermediate_ansatz(powers_phase_intermediate_f_join, self)
+        self.C1_intermediate = _phase_inspiral_ansatz(powers_phase_intermediate_f_join, self, pn_prefactors) - _phase_intermediate_ansatz(powers_phase_intermediate_f_join, self) - self.C2_intermediate * PHASE_INSPIRAL_fJoin
         # transition between intermediate (region IIa) and merge_ringdown (region IIb)
         # note that incorporating C2_intermediate and C1_intermediate in intermediate part
         phase_MRD_f_join = 0.5 * source_params.f_ring
-        self.C2_merge_ringdown = (_d_phase_intermediate_ansatz(phase_MRD_f_join, self) + self.C2_intermediate) - _d_phase_merge_ringdown_ansatz(phase_MRD_f_join, self)
-        self.C1_merge_ringdown = (_phase_intermediate_ansatz(phase_MRD_f_join, self) + self.C1_intermediate + self.C2_intermediate*phase_MRD_f_join) - _phase_merge_ringdown_ansatz(phase_MRD_f_join, self) - self.C2_merge_ringdown*phase_MRD_f_join
-
+        powers_phase_merge_ringdown_f_join.updating(phase_MRD_f_join)
+        self.C2_merge_ringdown = (_d_phase_intermediate_ansatz(powers_phase_merge_ringdown_f_join, self) + self.C2_intermediate) - _d_phase_merge_ringdown_ansatz(powers_phase_merge_ringdown_f_join, self, source_params.f_ring, source_params.f_damp)
+        self.C1_merge_ringdown = (_phase_intermediate_ansatz(powers_phase_merge_ringdown_f_join, self) + self.C1_intermediate + self.C2_intermediate*phase_MRD_f_join) - _phase_merge_ringdown_ansatz(powers_phase_merge_ringdown_f_join, self, source_params.f_ring, source_params.f_damp) - self.C2_merge_ringdown*phase_MRD_f_join
+        self.phase_merge_ringdown_f_join = phase_MRD_f_join
 
 # Amplitude coefficients
 @ti.dataclass
-class AmplitudeCoefficient:
+class AmplitudeCoefficients:
     # Inspiral (Region I)
     rho_1: ti.f64
     rho_2: ti.f64
@@ -524,11 +540,10 @@ class AmplitudeCoefficient:
     gamma_3: ti.f64
     # derived coefficients
     f_peak: ti.f64
-    amplitude_merge_ringdown_f_join: ti.f64
     amp0: ti.f64
 
     @ti.func
-    def compute_amplitude_coefficients(self, source_params):
+    def compute_amplitude_coefficients(self, source_params, pn_prefactors):
         # Inspiral (Region I)
         self.rho_1 = (3931.8979897196696 - 
                       17395.758706812805*source_params.eta + 
@@ -578,10 +593,12 @@ class AmplitudeCoefficient:
             self.f_peak = ti.abs(source_params.f_ring - source_params.f_damp*self.gamma3/self.gamma_2)
         else:
             self.f_peak = ti.abs(source_params.f_ring + (tm.sqrt(1-self.gamma_2*self.gamma_2) - 1) * source_params.f_damp*self.gamma3/self.gamma_2)
-        
-        self.amplitude_merge_ringdown_f_join = 0.5*(AMPLITUDE_INSPIRAL_fJoin + self.f_peak)
-        collocation_freq_mat = _intermediate_collocation_frequency_matrix(AMPLITUDE_INSPIRAL_fJoin, self.amplitude_merge_ringdown_f_join, self.f_peak)
-        v1 = _amplitude_inspiral_ansatz()
+        powers_amplitude_f_peak.updating(self.f_peak)
+
+        f_mid = 0.5*(AMPLITUDE_INSPIRAL_fJoin + self.f_peak)
+        powers_amplitude_f_mid.updating(f_mid)
+        collocation_freq_mat = _intermediate_collocation_frequency_matrix(AMPLITUDE_INSPIRAL_fJoin, f_mid, self.f_peak)
+        v1 = _amplitude_inspiral_ansatz(powers_amplitude_intermediate_f_join, self, pn_prefactors)
         v2 = (0.8149838730507785 + 
               2.5747553517454658*source_params.eta + 
               (1.1610198035496786 - 2.3627771785551537*source_params.eta + 6.771038707057573*source_params.eta2 + 
@@ -589,174 +606,174 @@ class AmplitudeCoefficient:
                     (0.1766934149293479 - 0.7978690983168183*source_params.eta + 2.1162391502005153*source_params.eta2) * source_params.xi * source_params.xi
               ) * source_params.xi
               )
-        v3 = _amplitude_merge_ringdown_ansatz()
-        d1 = _d_amplitude_inspiral_ansatz()
-        d2 = _d_amplitude_merge_ringdown_ansatz()
+        v3 = _amplitude_merge_ringdown_ansatz(powers_amplitude_f_peak, self, source_params.f_ring, source_params.f_damp)
+        d1 = _d_amplitude_inspiral_ansatz(powers_amplitude_intermediate_f_join, self, pn_prefactors)
+        d2 = _d_amplitude_merge_ringdown_ansatz(powers_amplitude_f_peak, self, source_params.f_ring, source_params.f_damp)
         self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = ti.solve(collocation_freq_mat, ti.Vector([v1, v2, v3, d1, d2]))
 
         self.amp0 = tm.sqrt(2.0/3.0*source_params.eta/useful_powers_pi.third)
 
 
-@ti.func
-def _compute_amplitude(Mf, powers_of_Mf, amplitude_coefficients, pn_prefactors):
-    if Mf < AMPLITUDE_INSPIRAL_fJoin:
-        amplitude = _amplitude_inspiral_ansatz()
-    elif Mf > amplitude_coefficients.amplitude_merge_ringdown_f_join:
-        amplitude = _amplitude_merge_ringdown_ansatz()
-    else:
-        amplitude = _amplitude_intermediate_ansatz()
-    return amplitude
+# @ti.func
+# def _compute_amplitude(Mf, powers_of_Mf, amplitude_coefficients, pn_prefactors):
+#     if Mf < AMPLITUDE_INSPIRAL_fJoin:
+#         amplitude = _amplitude_inspiral_ansatz()
+#     elif Mf > amplitude_coefficients.amplitude_merge_ringdown_f_join:
+#         amplitude = _amplitude_merge_ringdown_ansatz()
+#     else:
+#         amplitude = _amplitude_intermediate_ansatz()
+#     return amplitude
 
-@ti.func
-def _compute_phase(Mf, powers_of_Mf, phase_coefficients, pn_prefactors):
-    if Mf < PHASE_INSPIRAL_fJoin:
-        phase = _phase_inspiral_ansatz()
-    elif Mf > phase_coefficients.phase_merge_ringdown_f_join:
-        phase = _phase_merge_ringdown_ansatz()
-    else:
-        phase = _phase_intermediate_ansatz()
-    return phase
+# @ti.func
+# def _compute_phase(Mf, powers_of_Mf, phase_coefficients, pn_prefactors):
+#     if Mf < PHASE_INSPIRAL_fJoin:
+#         phase = _phase_inspiral_ansatz()
+#     elif Mf > phase_coefficients.phase_merge_ringdown_f_join:
+#         phase = _phase_merge_ringdown_ansatz()
+#     else:
+#         phase = _phase_intermediate_ansatz()
+#     return phase
 
-@ti.func
-def _compute_tf(Mf, powers_of_Mf, phase_coefficients, pn_prefactors):
-    if Mf < PHASE_INSPIRAL_fJoin:
-        phase = _phase_inspiral_ansatz()
-    elif Mf > phase_coefficients.phase_merge_ringdown_f_join:
-        phase = _phase_merge_ringdown_ansatz()
-    else:
-        phase = _phase_intermediate_ansatz()
-    return phase
-
-
-
-@ti.func
-def _get_polarization_from_amplitude_phase(ampplitude, phase):
-    return cross, plus
+# @ti.func
+# def _compute_tf(Mf, powers_of_Mf, phase_coefficients, pn_prefactors):
+#     if Mf < PHASE_INSPIRAL_fJoin:
+#         phase = _phase_inspiral_ansatz()
+#     elif Mf > phase_coefficients.phase_merge_ringdown_f_join:
+#         phase = _phase_merge_ringdown_ansatz()
+#     else:
+#         phase = _phase_intermediate_ansatz()
+#     return phase
 
 
 
-@ti.data_oriented
-class IMRPhenomD(object):
+# @ti.func
+# def _get_polarization_from_amplitude_phase(ampplitude, phase):
+#     return cross, plus
 
-    def __init__(self, frequencies, waveform_container=None, returned_form='polarizations', include_tf=True, parameter_sanity_check=True):
-        '''
-        Parameters
-        ==========
-        frequencies: ti.field of f64, note that frequencies may not uniform spaced
-        waveform_container: ti.Struct.field or None
-            {} or {}
-        returned_form: str
-            `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
-        parameter_sanity_check: bool
 
-        Returns:
-        ========
-        array, the A channel without the prefactor which is determined by the TDI generation.
 
-        TODO:
-        check whether passed in `waveform_containter` consistent with `returned_form`
-        '''
-        self.frequencies = frequencies
-        self.parameter_sanity_check = parameter_sanity_check
+# @ti.data_oriented
+# class IMRPhenomD(object):
 
-        # initializing data struct with 0
-        self.source_parameters = SourceParameters()
-        self.phase_coefficients = PhaseCoefficients()
-        self.amplitude_coefficients = AmplitudeCoefficient()
-        self.pn_prefactors = PostNewtonianPrefactors()
+#     def __init__(self, frequencies, waveform_container=None, returned_form='polarizations', include_tf=True, parameter_sanity_check=True):
+#         '''
+#         Parameters
+#         ==========
+#         frequencies: ti.field of f64, note that frequencies may not uniform spaced
+#         waveform_container: ti.Struct.field or None
+#             {} or {}
+#         returned_form: str
+#             `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
+#         parameter_sanity_check: bool
 
-        if waveform_container is not None:
-            if not (waveform_container.shape == frequencies.shape):
-                raise Exception('passed in `waveform_container` and `frequencies` have different shape')
+#         Returns:
+#         ========
+#         array, the A channel without the prefactor which is determined by the TDI generation.
+
+#         TODO:
+#         check whether passed in `waveform_containter` consistent with `returned_form`
+#         '''
+#         self.frequencies = frequencies
+#         self.parameter_sanity_check = parameter_sanity_check
+
+#         # initializing data struct with 0
+#         self.source_parameters = SourceParameters()
+#         self.phase_coefficients = PhaseCoefficients()
+#         self.amplitude_coefficients = AmplitudeCoefficients()
+#         self.pn_prefactors = PostNewtonianPrefactors()
+
+#         if waveform_container is not None:
+#             if not (waveform_container.shape == frequencies.shape):
+#                 raise Exception('passed in `waveform_container` and `frequencies` have different shape')
             
-            self.waveform_container=waveform_container
-            ret_content = self.waveform_container.keys
-            if 'tf' in ret_content:
-                include_tf = True
-                ret_content.remove('tf')
-            else:
-                include_tf = False
-            if all([item in ret_content for item in ['hplus', 'hcros']]):
-                returned_form = 'polarizations'
-                [ret_content.remove(item) for item in ['hplus', 'hcros']]
-            elif all([item in ret_content for item in ['amplitude', 'phase']]):
-                returned_form = 'amplitude_phase'
-                [ret_content.remove(item) for item in ['amplitude', 'phase']]
-            if len(ret_content) > 0:
-                raise Exception(f'`waveform_container` contains additional unknown keys {ret_content}, check spellings')
-            self.returned_form = returned_form
-            self.include_tf = include_tf
-            print(f'Using `waveform_container` passed in, updating returned_form={self.returned_form}, include_tf={self.include_tf}')
-        else:
-            self._initialize_waveform_container(returned_form, include_tf)
-            self.returned_form = returned_form
-            self.include_tf = include_tf
-            print(f'`waveform_container` is not given, initializing one with returned_form={returned_form}, include_tf={include_tf}')
+#             self.waveform_container=waveform_container
+#             ret_content = self.waveform_container.keys
+#             if 'tf' in ret_content:
+#                 include_tf = True
+#                 ret_content.remove('tf')
+#             else:
+#                 include_tf = False
+#             if all([item in ret_content for item in ['hplus', 'hcros']]):
+#                 returned_form = 'polarizations'
+#                 [ret_content.remove(item) for item in ['hplus', 'hcros']]
+#             elif all([item in ret_content for item in ['amplitude', 'phase']]):
+#                 returned_form = 'amplitude_phase'
+#                 [ret_content.remove(item) for item in ['amplitude', 'phase']]
+#             if len(ret_content) > 0:
+#                 raise Exception(f'`waveform_container` contains additional unknown keys {ret_content}, check spellings')
+#             self.returned_form = returned_form
+#             self.include_tf = include_tf
+#             print(f'Using `waveform_container` passed in, updating returned_form={self.returned_form}, include_tf={self.include_tf}')
+#         else:
+#             self._initialize_waveform_container(returned_form, include_tf)
+#             self.returned_form = returned_form
+#             self.include_tf = include_tf
+#             print(f'`waveform_container` is not given, initializing one with returned_form={returned_form}, include_tf={include_tf}')
             
 
-    def _initialize_waveform_container(self, returned_form, include_tf):
-        ret_content = {}
-        if returned_form == 'polarizations':
-            ret_content.update({'hplus': vec2_complex, 'hcross': vec2_complex})
-        elif returned_form == 'amplitude_phase':
-            ret_content.update({'amplitude': ti.f64, 'phase': ti.f64})
-        if include_tf:
-            ret_content.update({'tf': ti.f64})
+#     def _initialize_waveform_container(self, returned_form, include_tf):
+#         ret_content = {}
+#         if returned_form == 'polarizations':
+#             ret_content.update({'hplus': vec2_complex, 'hcross': vec2_complex})
+#         elif returned_form == 'amplitude_phase':
+#             ret_content.update({'amplitude': ti.f64, 'phase': ti.f64})
+#         if include_tf:
+#             ret_content.update({'tf': ti.f64})
         
-        waveform_field = ti.Struct.field(ret_content)
-        ti.root.dense(ti.i, self.frequencies.shape).place(waveform_field)
-        if self.waveform_container is None:
-            self.waveform_container = waveform_field
-        else:
-            raise Exception('`waveform_container` have been given, cannot initializing new one.')
-        return None
+#         waveform_field = ti.Struct.field(ret_content)
+#         ti.root.dense(ti.i, self.frequencies.shape).place(waveform_field)
+#         if self.waveform_container is None:
+#             self.waveform_container = waveform_field
+#         else:
+#             raise Exception('`waveform_container` have been given, cannot initializing new one.')
+#         return None
     
 
-    def get_waveform(self, parameters):
-        '''
-        necessary preparation which need to be finished in python scope for waveform computation 
-        (this function may be awkward, since no interpolation function in taichi-lang)
-        '''
-        source_params = self.source_parameters.update_all_source_parameters()
-        self._get_wavefrom_kernel(source_params)
+#     def get_waveform(self, parameters):
+#         '''
+#         necessary preparation which need to be finished in python scope for waveform computation 
+#         (this function may be awkward, since no interpolation function in taichi-lang)
+#         '''
+#         source_params = self.source_parameters.update_all_source_parameters()
+#         self._get_wavefrom_kernel(source_params)
     
-    @ti.kernel
-    def _get_wavefrom_kernel(self, source_params: SourceParameters):
-        # todo
-        # check whether the attri in python scope can be changed ?
-        self.amplitude_coefficients.compute_phase_coefficients(source_params)
-        self.phase_coefficients.phase_phase_coefficients(source_params)
-        self.pn_prefactors.compute_PN_prefactors(source_params)
-        powers_of_Mf = UsefulPowers()
+#     @ti.kernel
+#     def _get_wavefrom_kernel(self, source_params: SourceParameters):
+#         # todo
+#         # check whether the attri in python scope can be changed ?
+#         self.amplitude_coefficients.compute_phase_coefficients(source_params)
+#         self.phase_coefficients.phase_phase_coefficients(source_params)
+#         self.pn_prefactors.compute_PN_prefactors(source_params)
+#         powers_of_Mf = UsefulPowers()
 
-        for idx in self.frequencies:
-            Mf = source_params.M_sec * self.frequencies[idx]
-            if Mf < FREQUENCY_CUT:
-                powers_of_Mf.initilizing_useful_powers(Mf)            
-                amplitude = _compute_amplitude(Mf, powers_of_Mf, self.amplitude_coefficients, self.pn_prefactors)
-                phase = _compute_phase(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
-                # remember multiple amp0 and shift phase
-                if ti.static(self.returned_form == 'amplitude_phase'):
-                    self.waveform_container[idx].amplitude = amplitude
-                    self.waveform_container[idx].phase = phase
-                if ti.static(self.returned_form == 'polarization'):
-                    self.waveform_container[idx].hcross, self.waveform_container[idx].hplus = _get_polarization_from_amplitude_phase(amplitude, phase)
-                if ti.static(self.include_tf):
-                    self.waveform_container[idx].tf = _compute_tf(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
-            else:
-                if ti.static(self.returned_form == 'amplitude_phase'):
-                    self.waveform_container[idx].amplitude = 0.0
-                    self.waveform_container[idx].phase = 0.0
-                if ti.static(self.returned_form == 'polarization'):
-                    self.waveform_container[idx].hcross.fill(0.0)
-                    self.waveform_container[idx].hplus.fill(0.0)
-                if ti.static(self.include_tf):
-                    self.waveform_container[idx].tf = 0.0
+#         for idx in self.frequencies:
+#             Mf = source_params.M_sec * self.frequencies[idx]
+#             if Mf < FREQUENCY_CUT:
+#                 powers_of_Mf.updating(Mf)            
+#                 amplitude = _compute_amplitude(Mf, powers_of_Mf, self.amplitude_coefficients, self.pn_prefactors)
+#                 phase = _compute_phase(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
+#                 # remember multiple amp0 and shift phase
+#                 if ti.static(self.returned_form == 'amplitude_phase'):
+#                     self.waveform_container[idx].amplitude = amplitude
+#                     self.waveform_container[idx].phase = phase
+#                 if ti.static(self.returned_form == 'polarization'):
+#                     self.waveform_container[idx].hcross, self.waveform_container[idx].hplus = _get_polarization_from_amplitude_phase(amplitude, phase)
+#                 if ti.static(self.include_tf):
+#                     self.waveform_container[idx].tf = _compute_tf(Mf, powers_of_Mf, self.phase_coefficients, self.pn_prefactors)
+#             else:
+#                 if ti.static(self.returned_form == 'amplitude_phase'):
+#                     self.waveform_container[idx].amplitude = 0.0
+#                     self.waveform_container[idx].phase = 0.0
+#                 if ti.static(self.returned_form == 'polarization'):
+#                     self.waveform_container[idx].hcross.fill(0.0)
+#                     self.waveform_container[idx].hplus.fill(0.0)
+#                 if ti.static(self.include_tf):
+#                     self.waveform_container[idx].tf = 0.0
 
-    @ti.func
-    def _parameter_check(self, source_params):
-        return SUCCESS
+#     @ti.func
+#     def _parameter_check(self, source_params):
+#         return SUCCESS
 
-    def np_array_view_waveform_container(self):
-        pass
+#     def np_array_view_waveform_container(self):
+#         pass
         

@@ -1,6 +1,7 @@
 import taichi as ti
 import taichi.math as tm
 import numpy as np
+import os
 
 from ..constants import *
 from ..utilities import vec2_complex
@@ -47,9 +48,10 @@ class UsefulPowers:
         self.seven_sixths = ti.sqrt(self.seven_thirds)
         self.log = ti.log(number)
 
-QNMgrid_a     = np.loadtxt('../data/QNMData_a.txt')
-QNMgrid_fring = np.loadtxt('../data/QNMData_fring.txt')
-QNMgrid_fdamp = np.loadtxt('../data/QNMData_fdamp.txt')
+print(os.path.join(os.path.dirname(__file__), 'data/QNMData_a.txt'))
+QNMgrid_a     = np.loadtxt(os.path.join(os.path.dirname(__file__), 'data/QNMData_a.txt'))
+QNMgrid_fring = np.loadtxt(os.path.join(os.path.dirname(__file__), 'data/QNMData_fring.txt'))
+QNMgrid_fdamp = np.loadtxt(os.path.join(os.path.dirname(__file__), 'data/QNMData_fdamp.txt'))
 AMPLITUDE_INSPIRAL_fJoin = 0.014
 PHASE_INSPIRAL_fJoin = 0.018
 FREQUENCY_CUT = 0.2
@@ -765,10 +767,8 @@ class IMRPhenomD(object):
         
         waveform_field = ti.Struct.field(ret_content)
         ti.root.dense(ti.i, self.frequencies.shape).place(waveform_field)
-        if self.waveform_container is None:
-            self.waveform_container = waveform_field
-        else:
-            raise Exception('`waveform_container` have been given, cannot initializing new one.')
+        self.waveform_container = waveform_field
+        print('`waveform_container` is initialized by a ti.field with zero filled.')
         return None
     
 

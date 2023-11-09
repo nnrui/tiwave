@@ -9,6 +9,7 @@ from ..utilities import vec2_complex
 
 '''
 TODO:
+check _get_polarization_from_amplitude_phase, add shperical harmonic
 1. source parameter check, (m1>m2, q<1)
 4. using one matrix to compute all phenomenology coefficients
 5. add loop config for waveform_kernel
@@ -258,16 +259,19 @@ def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_d
 
 @ti.dataclass
 class SourceParameters:
-    # base parameters
-    mass_1: ti.f64
-    mass_2: ti.f64
+    # passed in parameters
+    M: ti.f64       # total mass
+    q: ti.f64
     chi_1: ti.f64
     chi_2: ti.f64
-    dL_SI: ti.f64
+    dL_Mpc: ti.f64
     iota: ti.f64
-    f_ref: ti.f64
-    phi_0: ti.f64
-    M: ti.f64       # total mass
+    phase_ref: ti.f64
+    tc: ti.f64
+    # base parameters
+    dL_SI: ti.f64
+    mass_1: ti.f64
+    mass_2: ti.f64
     M_sec: ti.f64   # total mass in second
     eta: ti.f64     # symmetric_mass_ratio
     eta2: ti.f64    # eta^2
@@ -285,16 +289,22 @@ class SourceParameters:
     f_damp: ti.f64
 
     def generate_all_source_parameters(self, parameters):
-        self.mass_1 = parameters['mass_1']   # in solar_mass
-        self.mass_2 = parameters['mass_2']
+        # total 11 parameters: m1, m1, chi1, chi2, iota, psi, tc, phi0, dL, lon, lat
+        # 3 only used in response function: psi, lon, lat
+        # mass is in the unit of solar mass
+        # dL is in the unit of Mpc
+        self.M = parameters['total_mass']
+        self.q = parameters['mass_ratio']
         self.chi_1 = parameters['chi_1']
         self.chi_2 = parameters['chi_2']
-        self.dL_SI = parameters['luminosity_distance'] * 1e6 * PC_SI
+        self.dL_Mpc = parameters['luminosity_distance']
         self.iota = parameters['inclination']
-        self.f_ref = parameters['f_ref']
-        self.phi_0 = parameters['phi_0']
+        self.phase_ref = parameters['reference_phase']
+        self.tc = parameters['coalescence_time']
         # base parameters
-        self.M = self.mass_1 + self.mass_2
+        self.mass_1 = self.M / (1+self.q)
+        self.mass_2 = self.M - self.mass_1
+        self.dL_SI = self.dL_Mpc * 1e6 * PC_SI
         self.M_sec = self.M * MTSUN_SI
         self.eta = self.mass_1 * self.mass_2 / (self.M * self.M)
         self.eta2 = self.eta * self.eta
@@ -680,9 +690,7 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp)
         tf = _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp)
     else:
         tf = _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients)
-    
-    return -tf/2/PI
-
+    return tf/2/PI
 
 
 @ti.func
@@ -700,7 +708,7 @@ def _get_polarization_from_amplitude_phase(amplitude, phase, iota):
 @ti.data_oriented
 class IMRPhenomD(object):
 
-    def __init__(self, frequencies, waveform_container=None, returned_form='polarizations', include_tf=True, parameter_sanity_check=True):
+    def __init__(self, frequencies, waveform_container=None, reference_frequency=None, returned_form='polarizations', include_tf=True, parameter_sanity_check=False):
         '''
         Parameters
         ==========
@@ -719,18 +727,22 @@ class IMRPhenomD(object):
         check whether passed in `waveform_containter` consistent with `returned_form`
         '''
         self.frequencies = frequencies
+        if reference_frequency is None:
+            self.reference_frequency = self.frequencies[0]
+        elif reference_frequency <= 0.0:
+            raise Exception(f'you are set reference_frequency={reference_frequency}, which must be postive.')
+        else:
+            self.reference_frequency = reference_frequency
+            
         self.parameter_sanity_check = parameter_sanity_check
-
-        # initializing data struct with 0, and instantiating fields for global accessing
-        self.source_parameters = SourceParameters.field(shape=())
-        self.phase_coefficients = PhaseCoefficients.field(shape=())
-        self.amplitude_coefficients = AmplitudeCoefficients.field(shape=())
-        self.pn_prefactors = PostNewtonianPrefactors.field(shape=())
+        if self.parameter_sanity_check:
+            print('`parameter_sanity_check` is turn-on, make sure taichi is initialized with debug mode')
+        else:
+            print('`parameter_sanity_check` is disable, make sure all parameters passed in are valid.')
 
         if waveform_container is not None:
             if not (waveform_container.shape == frequencies.shape):
                 raise Exception('passed in `waveform_container` and `frequencies` have different shape')
-            
             self.waveform_container=waveform_container
             ret_content = self.waveform_container.keys
             if 'tf' in ret_content:
@@ -755,6 +767,11 @@ class IMRPhenomD(object):
             self.include_tf = include_tf
             print(f'`waveform_container` is not given, initializing one with returned_form={returned_form}, include_tf={include_tf}')
             
+        # initializing data struct with 0, and instantiating fields for global accessing
+        self.source_parameters = SourceParameters.field(shape=())
+        self.phase_coefficients = PhaseCoefficients.field(shape=())
+        self.amplitude_coefficients = AmplitudeCoefficients.field(shape=())
+        self.pn_prefactors = PostNewtonianPrefactors.field(shape=())
 
     def _initialize_waveform_container(self, returned_form, include_tf):
         ret_content = {}
@@ -767,10 +784,10 @@ class IMRPhenomD(object):
         
         waveform_field = ti.Struct.field(ret_content)
         ti.root.dense(ti.i, self.frequencies.shape).place(waveform_field)
-        self.waveform_container = waveform_field
-        print('`waveform_container` is initialized by a ti.field with zero filled.')
-        return None
-    
+        if hasattr(self, 'waveform_container') and self.waveform_container is not None:
+            raise Exception('`waveform_container` is not None, you are trying to override the original')
+        else:
+            self.waveform_container = waveform_field
 
     def get_waveform(self, parameters):
         '''
@@ -782,14 +799,18 @@ class IMRPhenomD(object):
     
     @ti.kernel
     def _get_wavefrom_kernel(self):
+        if ti.static(self.parameter_sanity_check):
+            self._parameter_check()
+    
         self.pn_prefactors[None].compute_PN_prefactors(self.source_parameters[None])
-        self.amplitude_coefficients[None].compute_phase_coefficients(self.source_parameters[None], self.pn_prefactors[None])
-        self.phase_coefficients[None].phase_phase_coefficients(self.source_parameters[None], self.pn_prefactors[None])
+        self.amplitude_coefficients[None].compute_amplitude_coefficients(self.source_parameters[None], self.pn_prefactors[None])
+        self.phase_coefficients[None].compute_phase_coefficients(self.source_parameters[None], self.pn_prefactors[None])
 
-        t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak), self.phase_coefficients[None], self.pn_prefactors[None].f_ring, self.pn_prefactors[None].f_damp)
-        Mf_ref = self.source_parameters[None].M_sec * self.source_parameters[None].f_ref
-        phase_ref = _compute_phase(powers_of_Mf.updating(Mf_ref), self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
-        phase_shift = 2.0*self.source_parameters[None].phi_0 + phase_ref
+        t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak), self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
+        time_shift = t0 - 2*PI*self.source_parameters[None].tc
+        Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
+        phase_ref_temp = _compute_phase(powers_of_Mf.updating(Mf_ref), self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
+        phase_shift = 2.0*self.source_parameters[None].phase_ref + phase_ref_temp
 
         for idx in self.frequencies:
             Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
@@ -798,7 +819,7 @@ class IMRPhenomD(object):
                 amplitude = _compute_amplitude(powers_of_Mf, self.amplitude_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
                 phase = _compute_phase(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
                 phase /= self.source_parameters[None].eta
-                phase -= t0*(Mf-Mf_ref) + phase_shift
+                phase -= time_shift * (Mf-Mf_ref) + phase_shift
                 # remember multiple amp0 and shift phase and 1/eta
                 if ti.static(self.returned_form == 'amplitude_phase'):
                     self.waveform_container[idx].amplitude = amplitude
@@ -808,7 +829,7 @@ class IMRPhenomD(object):
                 if ti.static(self.include_tf):
                     tf = _compute_tf(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
                     tf /= self.source_parameters[None].eta
-                    tf += t0
+                    tf += (self.pn_prefactors[None].tc - t0/2/PI)
                     self.waveform_container[idx].tf = tf
             else:
                 if ti.static(self.returned_form == 'amplitude_phase'):
@@ -821,9 +842,33 @@ class IMRPhenomD(object):
                     self.waveform_container[idx].tf = 0.0
 
     @ti.func
-    def _parameter_check(self, source_params):
-        return SUCCESS
+    def _parameter_check(self):
+        assert(self.source_parameters[None].mass_1 > self.source_parameters[None].mass_2, 
+               f'require m1 > m2, you are passing m1: {self.source_parameters[None].mass_1}, m2:{self.source_parameters[None].mass_2}')
+        assert(self.source_parameters[None].q > 0.0 and self.source_parameters[None].q < 1.0, 
+               f'require 0 < q < 1, you are passing q: {self.source_parameters[None].q}')
+        assert(self.source_parameters[None].chi_1 > -1.0 and self.source_parameters[None].chi_1 < 1.0, 
+               f'require -1 < chi_1 < 1, you are passing chi_1: {self.source_parameters[None].chi_1}')
+        assert(self.source_parameters[None].chi_2 > -1.0 and self.source_parameters[None].chi_2 < 1.0, 
+               f'require -1 < chi_2 < 1, you are passing chi_2: {self.source_parameters[None].chi_2}')
 
-    def np_array_view_waveform_container(self):
-        pass
+        # TODO more parameter check 
         
+    def np_array_of_waveform_container(self):
+        ret = {}
+        if self.returned_form=='polarization':
+            hcross_array = self.waveform_container.hcross.to_numpy().view(dtype=np.complex128)
+            hplus_array = self.waveform_container.hplus.to_numpy().view(dtype=np.complex128)
+            ret['hcross'] = hcross_array
+            ret['hplus_array'] = hplus_array
+        elif self.returned_form=='amplitude_phase':
+            amp_array = self.waveform_container.amplitude.to_numpy()
+            phase_array = self.waveform_container.phase.to_numpy()
+            ret['amplitude'] = amp_array
+            ret['phase'] = phase_array
+        if self.include_tf:
+            tf_array = self.waveform_container.tf.to_numpy()
+            ret['tf'] = tf_array
+        return ret
+        
+

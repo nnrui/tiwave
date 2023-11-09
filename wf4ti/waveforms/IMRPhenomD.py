@@ -149,7 +149,7 @@ def _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients):
     '''
     return (amplitude_coefficients.delta_0 +
             amplitude_coefficients.delta_1 * powers_of_Mf.one + 
-            amplitude_coefficients.delta_2 * powers_of_Mf.tow + 
+            amplitude_coefficients.delta_2 * powers_of_Mf.two + 
             amplitude_coefficients.delta_3 * powers_of_Mf.three + 
             amplitude_coefficients.delta_4 * powers_of_Mf.four
             )
@@ -231,7 +231,7 @@ def _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients):
     '''
     without 1/eta
     '''
-    return (phase_coefficients.bate_1 * powers_of_Mf.one + 
+    return (phase_coefficients.beta_1 * powers_of_Mf.one + 
             phase_coefficients.beta_2 * powers_of_Mf.log -
             phase_coefficients.beta_3 / 3.0 / powers_of_Mf.three
             )
@@ -241,7 +241,7 @@ def _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients):
     '''
     without 1/eta
     '''
-    return (phase_coefficients.bate_1 + 
+    return (phase_coefficients.beta_1 + 
             phase_coefficients.beta_2 / powers_of_Mf.one +
             phase_coefficients.beta_3 / powers_of_Mf.four
             )
@@ -263,10 +263,10 @@ def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_d
     '''
     without 1/eta
     '''
-    return (phase_coefficients.prefactor_alpha_1 + 
-            phase_coefficients.prefactor_alpha_2 / powers_of_Mf.two +
-            phase_coefficients.prefactor_alpha_3 / powers_of_Mf.fourth +
-            phase_coefficients.prefactor_alpha_4*f_damp / (f_damp**2 + (powers_of_Mf.one - phase_coefficients.alpha_5*f_ring)**2)
+    return (phase_coefficients.alpha_1 + 
+            phase_coefficients.alpha_2 / powers_of_Mf.two +
+            phase_coefficients.alpha_3 / powers_of_Mf.fourth +
+            phase_coefficients.alpha_4*f_damp / (f_damp**2 + (powers_of_Mf.one - phase_coefficients.alpha_5*f_ring)**2)
             )
 
 
@@ -467,8 +467,8 @@ class PhaseCoefficients:
     alpha_4: ti.f64
     alpha_5: ti.f64
     # connection coefficients
-    C1_Intermediate: ti.f64
-    C2_Intermediate: ti.f64
+    C1_intermediate: ti.f64
+    C2_intermediate: ti.f64
     C1_merge_ringdown: ti.f64
     C2_merge_ringdown: ti.f64
     phase_merge_ringdown_f_join: ti.f64
@@ -673,10 +673,11 @@ class AmplitudeCoefficients:
 
 @ti.func
 def _compute_amplitude(powers_of_Mf, amplitude_coefficients, pn_prefactors, f_ring, f_damp):
+    amplitude = 0.0
     if powers_of_Mf.one < AMPLITUDE_INSPIRAL_fJoin:
         amplitude = _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors)
     elif powers_of_Mf.one > amplitude_coefficients.f_peak:
-        amplitude = _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors, f_ring, f_damp)
+        amplitude = _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_ring, f_damp)
     else:
         amplitude = _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients)
     return amplitude * amplitude_coefficients.amp0 / powers_of_Mf.seven_sixths
@@ -686,6 +687,7 @@ def _compute_phase(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_da
     '''
     without 1/eta
     '''
+    phase = 0.0
     if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
         phase = _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
     elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
@@ -699,6 +701,7 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp)
     '''
     without 1/eta
     '''
+    tf = 0.0
     if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
         tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
     elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
@@ -822,10 +825,13 @@ class IMRPhenomD(object):
         self.phase_coefficients[None].compute_phase_coefficients(self.source_parameters[None], self.pn_prefactors[None])
         
         powers_of_Mf = UsefulPowers()
-        t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak), self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
+
+        powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak)
+        t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
         time_shift = t0 - 2*PI*self.source_parameters[None].tc
         Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
-        phase_ref_temp = _compute_phase(powers_of_Mf.updating(Mf_ref), self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
+        powers_of_Mf.updating(Mf_ref)
+        phase_ref_temp = _compute_phase(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
         phase_shift = 2.0*self.source_parameters[None].phase_ref + phase_ref_temp
 
         for idx in self.frequencies:
@@ -845,7 +851,7 @@ class IMRPhenomD(object):
                 if ti.static(self.include_tf):
                     tf = _compute_tf(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
                     tf /= self.source_parameters[None].eta
-                    tf += (self.pn_prefactors[None].tc - t0/2/PI)
+                    tf += (self.source_parameters[None].tc - t0/2/PI)
                     self.waveform_container[idx].tf = tf
             else:
                 if ti.static(self.returned_form == 'amplitude_phase'):
@@ -872,11 +878,11 @@ class IMRPhenomD(object):
         
     def np_array_of_waveform_container(self):
         ret = {}
-        if self.returned_form=='polarization':
+        if self.returned_form=='polarizations':
             hcross_array = self.waveform_container.hcross.to_numpy().view(dtype=np.complex128)
             hplus_array = self.waveform_container.hplus.to_numpy().view(dtype=np.complex128)
             ret['hcross'] = hcross_array
-            ret['hplus_array'] = hplus_array
+            ret['hplus'] = hplus_array
         elif self.returned_form=='amplitude_phase':
             amp_array = self.waveform_container.amplitude.to_numpy()
             phase_array = self.waveform_container.phase.to_numpy()

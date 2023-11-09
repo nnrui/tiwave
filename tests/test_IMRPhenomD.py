@@ -4,7 +4,7 @@ import time
 
 import numpy as np
 import taichi as ti
-ti.init(arch=ti.cpu)
+ti.init(arch=ti.gpu, default_fp=ti.f64)
 
 from wf4ti.waveforms.IMRPhenomD import IMRPhenomD
 
@@ -17,9 +17,10 @@ parameters['luminosity_distance'] = 3000.0
 parameters['inclination'] = 0.15
 parameters['reference_phase'] = 0.0
 parameters['coalescence_time'] = 0.0
+rng = np.random.default_rng()
 
 cadance = 10
-duration = 7*24*3600
+duration = 365*24*3600
 f_array = np.arange(0, 1.0/(2*cadance), 1.0/duration)
 minimum_frequency = 1e-4
 maximum_frequency = 1e-1
@@ -32,5 +33,12 @@ frequencies.from_numpy(f_array)
 
 wf = IMRPhenomD(frequencies)
 wf.get_waveform(parameters)
+
+st = time.perf_counter()
+for i in range(10000):
+    parameters['total_mass'] = rng.uniform(1e5, 1e7)
+    wf.get_waveform(parameters)
+ed = time.perf_counter()
+print(ed-st)
 print(wf.np_array_of_waveform_container())
 

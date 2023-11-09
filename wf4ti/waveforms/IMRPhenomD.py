@@ -49,15 +49,13 @@ class UsefulPowers:
         self.seven_sixths = ti.sqrt(self.seven_thirds)
         self.log = ti.log(number)
 
-print(os.path.join(os.path.dirname(__file__), 'data/QNMData_a.txt'))
+
 QNMgrid_a     = np.loadtxt(os.path.join(os.path.dirname(__file__), 'data/QNMData_a.txt'))
 QNMgrid_fring = np.loadtxt(os.path.join(os.path.dirname(__file__), 'data/QNMData_fring.txt'))
 QNMgrid_fdamp = np.loadtxt(os.path.join(os.path.dirname(__file__), 'data/QNMData_fdamp.txt'))
 AMPLITUDE_INSPIRAL_fJoin = 0.014
 PHASE_INSPIRAL_fJoin = 0.018
 FREQUENCY_CUT = 0.2
-
-powers_of_Mf = UsefulPowers()
 
 useful_powers_pi = UsefulPowers()
 useful_powers_pi.updating(PI)
@@ -68,16 +66,11 @@ powers_phase_intermediate_f_join.updating(PHASE_INSPIRAL_fJoin)
 powers_amplitude_intermediate_f_join = UsefulPowers()
 powers_amplitude_intermediate_f_join.updating(AMPLITUDE_INSPIRAL_fJoin)
 
-powers_phase_merge_ringdown_f_join = UsefulPowers()
-powers_amplitude_f_mid = UsefulPowers()
-powers_amplitude_f_peak = UsefulPowers()
-
 
 @ti.func
-def _intermediate_collocation_frequency_matrix(f1: ti.f64, f2: ti.f64, f3:ti.f64) -> ti.types.matrix(5, 5, ti.f64):
+def _solve_delta_i(f1, f2, f3, v1, v2, v3, d1, d2):
     '''
-    Used to solve the system of equations of delta_i for intermediate aplitude.
-    Eq. 21-26 in arxiv: 1508.07253
+    solving linear equation system to get delta_i for intermediate amplitude
     '''
     f1_2 = f1 * f1
     f1_3 = f1_2 * f1
@@ -90,11 +83,31 @@ def _intermediate_collocation_frequency_matrix(f1: ti.f64, f2: ti.f64, f3:ti.f64
     f3_2 = f3 * f3
     f3_3 = f3_2 * f3
     f3_4 = f3_3 * f3
-    return ti.Matrix([[1.0,  f1, f1_2,   f1_3, f1_4  ],
-                      [1.0,  f2, f2_2,   f2_3, f2_4  ],
-                      [1.0,  f3, f3_2,   f3_3, f3_4  ],
-                      [0.0, 1.0, 2*f1, 3*f1_2, 4*f1_3],
-                      [0.0, 1.0, 2*f3, 3*f3_2, 4*f3_3]], dt=ti.f64)
+    Ab =  ti.Matrix([[1.0,  f1, f1_2,   f1_3,   f1_4, v1],
+                     [1.0,  f2, f2_2,   f2_3,   f2_4, v2],
+                     [1.0,  f3, f3_2,   f3_3,   f3_4, v3],
+                     [0.0, 1.0, 2*f1, 3*f1_2, 4*f1_3, d1],
+                     [0.0, 1.0, 2*f3, 3*f3_2, 4*f3_3, d2]], dt=ti.f64)
+
+    return _gauss_elimination_5x5(Ab)
+
+
+@ti.func
+def _gauss_elimination_5x5(Ab):
+    for i in ti.static(range(5)):
+        for j in ti.static(range(i + 1, 5)):
+            scale = Ab[j, i] / Ab[i, i]
+            Ab[j, i] = 0.0
+            for k in ti.static(range(i + 1, 6)):
+                Ab[j, k] -= Ab[i, k] * scale
+    # Back substitution
+    x = ti.Vector.zero(ti.f64, 5)
+    for i in ti.static(range(4, -1, -1)):
+        x[i] = Ab[i, 5]
+        for k in ti.static(range(i + 1, 5)):
+            x[i] -= Ab[i, k] * x[k]
+        x[i] = x[i] / Ab[i, i]
+    return x
 
 
 # Amplitude ansatz
@@ -282,6 +295,7 @@ class SourceParameters:
     chi_s2: ti.f64
     chi_a2: ti.f64
     chi_PN: ti.f64
+    xi: ti.f64
     # derived parameters
     final_spin: ti.f64
     E_rad: ti.f64
@@ -315,6 +329,7 @@ class SourceParameters:
         self.chi_s2 = self.chi_s * self.chi_s
         self.chi_a2 = self.chi_a * self.chi_a
         self.chi_PN = (self.mass_1*self.chi_1 + self.mass_2*self.chi_2)/self.M - 38.0/113.0*self.eta*(self.chi_1+self.chi_2)
+        self.xi = self.chi_PN - 1.0
         # final spin (FinalSpin0815, Eq. (3.6) in arXiv:1508.07250)
         S = (self.mass_1*self.mass_1*self.chi_1 + self.mass_2*self.mass_2*self.chi_2)/(self.M * self.M)
         self.final_spin = S + self.eta * (3.4641016151377544 - 
@@ -389,18 +404,18 @@ class PostNewtonianPrefactors:
                                    (-732.985/2.268 - 140.0/9.0*source_params.eta) * source_params.delta * source_params.chi_a +
                                    (-732.985/2.268 + 2426.0/8.1*source_params.eta + 340.0/9.0*source_params.eta2) * source_params.chi_s
                                   )
-        self.prefactor_varphi_5l= self.varphi_5
+        self.prefactor_varphi_5l= self.prefactor_varphi_5
         self.prefactor_varphi_6 = ((11583.231236531/4.694215680 - 640.0/3.0*PI*PI - 684.8/2.1*EULER_GAMMA + 
                                         (-15737.765635/3.048192 + 225.5/1.2*PI*PI)*source_params.eta + 
                                         76.055/1.728*source_params.eta2 - 
                                         127.825/1.296*source_params.eta3 - 
-                                        tm.log(4.)*684.8/2.1) +
-                                   2270.0/3.0*PI*source_params.delta*source_params.chi_a
+                                        tm.log(4.0)*684.8/2.1) +
+                                   2270.0/3.0*PI*source_params.delta*source_params.chi_a + 
                                    (2270.0/3.0 - 520.0*source_params.eta)*PI*source_params.chi_s
                                   ) * useful_powers_pi.third
         self.prefactor_varphi_6l=-684.8/6.3 * useful_powers_pi.third
         self.prefactor_varphi_7 = ((770.96675/2.54016 + 378.515/1.512*source_params.eta- 740.45/7.56*source_params.eta2)*PI + 
-                                   (-25150.083775/3.048192 + 26804.935/6.048*source_params.eta - 198.5/4.8*source_params.eta2) * source_params.delta * source_params.chi_a
+                                   (-25150.083775/3.048192 + 26804.935/6.048*source_params.eta - 198.5/4.8*source_params.eta2) * source_params.delta * source_params.chi_a + 
                                    (-25150.083775/3.048192 + 105666.55595/7.62048*source_params.eta - 1042.165/3.024*source_params.eta2 + 534.5/3.6*source_params.eta3) * source_params.chi_s
                                   ) * useful_powers_pi.two_thirds
         # Amplitude
@@ -415,7 +430,7 @@ class PostNewtonianPrefactors:
                               10.5271/2.4192*source_params.eta2 +
                               (-8.1/3.2 + 8.0*source_params.eta) * source_params.chi_a2 -
                               8.1/1.6 * source_params.delta * source_params.chi_a * source_params.chi_s +
-                              (-8.1/3.2 + 17.0/8.0*source_params.eta) * source_params.chi_s2,
+                              (-8.1/3.2 + 17.0/8.0*source_params.eta) * source_params.chi_s2
                               ) * useful_powers_pi.four_thirds
         self.prefactor_A_5 = (-8.5/6.4*PI+
                               8.5/1.6*PI*source_params.eta+
@@ -428,7 +443,7 @@ class PostNewtonianPrefactors:
                               34.473079/6.386688 * source_params.eta3 + 
                               (3.1/1.2*PI - 7.0/3.0*PI*source_params.eta) * source_params.chi_s +
                               (161.4569/6.4512 - 187.3643/1.6128*source_params.eta + 216.7/4.2*source_params.eta2) * source_params.chi_a2 +
-                              (161.4569/6.4512 - 61.391/1.344*source_params.eta + 57.451/4.032*source_params.eta2) * source_params.chi_s2
+                              (161.4569/6.4512 - 61.391/1.344*source_params.eta + 57.451/4.032*source_params.eta2) * source_params.chi_s2 +
                               (3.1/1.2*PI + (161.4569/3.2256 - 165.961/2.688*source_params.eta)*source_params.chi_s) * source_params.delta * source_params.chi_a
                               ) * useful_powers_pi.two
 
@@ -558,9 +573,10 @@ class PhaseCoefficients:
         # transition between intermediate (region IIa) and merge_ringdown (region IIb)
         # note that incorporating C2_intermediate and C1_intermediate in intermediate part
         phase_MRD_f_join = 0.5 * source_params.f_ring
-        powers_phase_merge_ringdown_f_join.updating(phase_MRD_f_join)
-        self.C2_merge_ringdown = (_d_phase_intermediate_ansatz(powers_phase_merge_ringdown_f_join, self) + self.C2_intermediate) - _d_phase_merge_ringdown_ansatz(powers_phase_merge_ringdown_f_join, self, source_params.f_ring, source_params.f_damp)
-        self.C1_merge_ringdown = (_phase_intermediate_ansatz(powers_phase_merge_ringdown_f_join, self) + self.C1_intermediate + self.C2_intermediate*phase_MRD_f_join) - _phase_merge_ringdown_ansatz(powers_phase_merge_ringdown_f_join, self, source_params.f_ring, source_params.f_damp) - self.C2_merge_ringdown*phase_MRD_f_join
+        powers_phase_MRD_f_join = UsefulPowers()
+        powers_phase_MRD_f_join.updating(phase_MRD_f_join)
+        self.C2_merge_ringdown = (_d_phase_intermediate_ansatz(powers_phase_MRD_f_join, self) + self.C2_intermediate) - _d_phase_merge_ringdown_ansatz(powers_phase_MRD_f_join, self, source_params.f_ring, source_params.f_damp)
+        self.C1_merge_ringdown = (_phase_intermediate_ansatz(powers_phase_MRD_f_join, self) + self.C1_intermediate + self.C2_intermediate*phase_MRD_f_join) - _phase_merge_ringdown_ansatz(powers_phase_MRD_f_join, self, source_params.f_ring, source_params.f_damp) - self.C2_merge_ringdown*phase_MRD_f_join
         self.phase_merge_ringdown_f_join = phase_MRD_f_join
 
 # Amplitude coefficients
@@ -632,14 +648,13 @@ class AmplitudeCoefficients:
                         )
         # compute delta_s in intermediate (Region IIa) and the derived coefficients
         if self.gamma_2 > 1.0:
-            self.f_peak = ti.abs(source_params.f_ring - source_params.f_damp*self.gamma3/self.gamma_2)
+            self.f_peak = ti.abs(source_params.f_ring - source_params.f_damp*self.gamma_3/self.gamma_2)
         else:
-            self.f_peak = ti.abs(source_params.f_ring + (tm.sqrt(1-self.gamma_2*self.gamma_2) - 1) * source_params.f_damp*self.gamma3/self.gamma_2)
+            self.f_peak = ti.abs(source_params.f_ring + (tm.sqrt(1-self.gamma_2*self.gamma_2) - 1) * source_params.f_damp*self.gamma_3/self.gamma_2)
+        powers_amplitude_f_peak = UsefulPowers()
         powers_amplitude_f_peak.updating(self.f_peak)
 
         f_mid = 0.5*(AMPLITUDE_INSPIRAL_fJoin + self.f_peak)
-        powers_amplitude_f_mid.updating(f_mid)
-        collocation_freq_mat = _intermediate_collocation_frequency_matrix(AMPLITUDE_INSPIRAL_fJoin, f_mid, self.f_peak)
         v1 = _amplitude_inspiral_ansatz(powers_amplitude_intermediate_f_join, self, pn_prefactors)
         v2 = (0.8149838730507785 + 
               2.5747553517454658*source_params.eta + 
@@ -651,7 +666,7 @@ class AmplitudeCoefficients:
         v3 = _amplitude_merge_ringdown_ansatz(powers_amplitude_f_peak, self, source_params.f_ring, source_params.f_damp)
         d1 = _d_amplitude_inspiral_ansatz(powers_amplitude_intermediate_f_join, self, pn_prefactors)
         d2 = _d_amplitude_merge_ringdown_ansatz(powers_amplitude_f_peak, self, source_params.f_ring, source_params.f_damp)
-        self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = ti.solve(collocation_freq_mat, ti.Vector([v1, v2, v3, d1, d2]))
+        self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = _solve_delta_i(AMPLITUDE_INSPIRAL_fJoin, f_mid, self.f_peak, v1, v2, v3, d1, d2)
 
         self.amp0 = 0.25 * tm.sqrt(10.0/3.0*source_params.eta/useful_powers_pi.four_thirds) * source_params.M**2 * source_params.dL_SI * MRSUN_SI * MTSUN_SI
 
@@ -805,7 +820,8 @@ class IMRPhenomD(object):
         self.pn_prefactors[None].compute_PN_prefactors(self.source_parameters[None])
         self.amplitude_coefficients[None].compute_amplitude_coefficients(self.source_parameters[None], self.pn_prefactors[None])
         self.phase_coefficients[None].compute_phase_coefficients(self.source_parameters[None], self.pn_prefactors[None])
-
+        
+        powers_of_Mf = UsefulPowers()
         t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak), self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
         time_shift = t0 - 2*PI*self.source_parameters[None].tc
         Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
@@ -843,14 +859,14 @@ class IMRPhenomD(object):
 
     @ti.func
     def _parameter_check(self):
-        assert(self.source_parameters[None].mass_1 > self.source_parameters[None].mass_2, 
-               f'require m1 > m2, you are passing m1: {self.source_parameters[None].mass_1}, m2:{self.source_parameters[None].mass_2}')
-        assert(self.source_parameters[None].q > 0.0 and self.source_parameters[None].q < 1.0, 
-               f'require 0 < q < 1, you are passing q: {self.source_parameters[None].q}')
-        assert(self.source_parameters[None].chi_1 > -1.0 and self.source_parameters[None].chi_1 < 1.0, 
-               f'require -1 < chi_1 < 1, you are passing chi_1: {self.source_parameters[None].chi_1}')
-        assert(self.source_parameters[None].chi_2 > -1.0 and self.source_parameters[None].chi_2 < 1.0, 
-               f'require -1 < chi_2 < 1, you are passing chi_2: {self.source_parameters[None].chi_2}')
+        assert (self.source_parameters[None].mass_1 > self.source_parameters[None].mass_2), \
+               f'require m1 > m2, you are passing m1: {self.source_parameters[None].mass_1}, m2:{self.source_parameters[None].mass_2}'
+        assert (self.source_parameters[None].q > 0.0 and self.source_parameters[None].q < 1.0), \
+               f'require 0 < q < 1, you are passing q: {self.source_parameters[None].q}'
+        assert (self.source_parameters[None].chi_1 > -1.0 and self.source_parameters[None].chi_1 < 1.0), \
+               f'require -1 < chi_1 < 1, you are passing chi_1: {self.source_parameters[None].chi_1}'
+        assert (self.source_parameters[None].chi_2 > -1.0 and self.source_parameters[None].chi_2 < 1.0), \
+               f'require -1 < chi_2 < 1, you are passing chi_2: {self.source_parameters[None].chi_2}'
 
         # TODO more parameter check 
         

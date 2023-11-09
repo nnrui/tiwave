@@ -6,7 +6,17 @@ import numpy as np
 import taichi as ti
 ti.init(arch=ti.cpu)
 
-from wf4ti.waveforms import IMRPhenomD
+from wf4ti.waveforms.IMRPhenomD import IMRPhenomD
+
+parameters = {}
+parameters['total_mass'] = 7e6
+parameters['mass_ratio'] = 0.8
+parameters['chi_1'] = 0.2
+parameters['chi_2'] = 0.3
+parameters['luminosity_distance'] = 3000.0
+parameters['inclination'] = 0.15
+parameters['reference_phase'] = 0.0
+parameters['coalescence_time'] = 0.0
 
 cadance = 10
 duration = 7*24*3600
@@ -20,6 +30,7 @@ data_length = len(f_array)
 frequencies = ti.field(ti.f64, shape=(data_length,))
 frequencies.from_numpy(f_array)
 
-wf = IMRPhenomD.IMRPhenomD(frequencies)
-wf.get_waveform()
+wf = IMRPhenomD(frequencies)
+wf.get_waveform(parameters)
+print(wf.np_array_of_waveform_container())
 

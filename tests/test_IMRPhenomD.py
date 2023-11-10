@@ -3,6 +3,7 @@ sys.path.append('/home/hydrogen/workspace/Space_GW/wf4ti')
 import time
 
 import numpy as np
+from matplotlib import pyplot as plt
 import taichi as ti
 ti.init(arch=ti.gpu, default_fp=ti.f64)
 
@@ -31,14 +32,16 @@ data_length = len(f_array)
 frequencies = ti.field(ti.f64, shape=(data_length,))
 frequencies.from_numpy(f_array)
 
-wf = IMRPhenomD(frequencies)
+wf = IMRPhenomD(frequencies, returned_form='amplitude_phase')
 wf.get_waveform(parameters)
+wf_array = wf.np_array_of_waveform_container()
 
-st = time.perf_counter()
-for i in range(10000):
-    parameters['total_mass'] = rng.uniform(1e5, 1e7)
-    wf.get_waveform(parameters)
-ed = time.perf_counter()
-print(ed-st)
-print(wf.np_array_of_waveform_container())
-
+fig, ax = plt.subplots()
+ax.loglog(f_array, wf_array['amplitude'])
+fig.savefig('amplitude.png')
+fig, ax = plt.subplots()
+ax.semilogx(f_array, wf_array['phase'])
+fig.savefig('phase.png')
+fig, ax = plt.subplots()
+ax.semilogx(f_array, wf_array['tf'])
+fig.savefig('tf.png')

@@ -691,9 +691,9 @@ def _compute_phase(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_da
     if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
         phase = _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
     elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
-        phase = _phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp)
+        phase = _phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp) + phase_coefficients.C1_merge_ringdown + phase_coefficients.C2_merge_ringdown * powers_of_Mf.one
     else:
-        phase = _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients)
+        phase = _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients) + phase_coefficients.C1_intermediate +  phase_coefficients.C2_intermediate * powers_of_Mf.one
     return phase
 
 @ti.func
@@ -705,9 +705,9 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp)
     if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
         tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
     elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
-        tf = _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp)
+        tf = _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp) + phase_coefficients.C2_merge_ringdown
     else:
-        tf = _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients)
+        tf = _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients) + phase_coefficients.C2_intermediate
     return tf/2/PI
 
 

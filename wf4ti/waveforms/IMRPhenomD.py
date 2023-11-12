@@ -390,17 +390,17 @@ class PostNewtonianPrefactors:
         # Phase
         self.prefactor_varphi_0 = 1.0 / useful_powers_pi.five_thirds
         self.prefactor_varphi_1 = 0.0 / useful_powers_pi.four_thirds
-        self.prefactor_varphi_2 = (3715.0/756.0 + 55.0/9.0*source_params.eta) / useful_powers_pi.one
+        self.prefactor_varphi_2 = (37.15/7.56 + 55.0/9.0*source_params.eta) / useful_powers_pi.one
         self.prefactor_varphi_3 = (-16.0*PI +
                                    (113.0/3.0*source_params.delta*source_params.chi_a) + 
                                    (113.0/3.0 - 76.0/3.0*source_params.eta)*source_params.chi_s 
                                   ) / useful_powers_pi.two_thirds
-        self.prefactor_varphi_4 = (5.0/72.0*(3058.673/7.056 + 5429.0/7.0*source_params.eta + 617.0*source_params.eta2) +
-                                   (-405.0/8.0 + 200.0*source_params.eta) * source_params.chi_a * source_params.chi_a - 
+        self.prefactor_varphi_4 = (152.93365/5.08032 + 271.45/5.04*source_params.eta + 308.5/7.2*source_params.eta2 +
+                                   (-405.0/8.0 + 200.0*source_params.eta) * source_params.chi_a2 - 
                                    405.0/4.0 * source_params.delta * source_params.chi_a * source_params.chi_s + 
-                                   (-405.0/8.0 + 5.0/2.0*source_params.eta) * source_params.chi_s * source_params.chi_s
+                                   (-405.0/8.0 + 5.0/2.0*source_params.eta) * source_params.chi_s2
                                   ) / useful_powers_pi.third
-        self.prefactor_varphi_5 = (5.0/9.0 * (772.9/8.4 - 13.0*source_params.eta) * PI +
+        self.prefactor_varphi_5 = ((386.45/7.56 - 65.0/9.0*source_params.eta) * PI +
                                    (-732.985/2.268 - 140.0/9.0*source_params.eta) * source_params.delta * source_params.chi_a +
                                    (-732.985/2.268 + 2426.0/8.1*source_params.eta + 340.0/9.0*source_params.eta2) * source_params.chi_s
                                   )
@@ -414,7 +414,7 @@ class PostNewtonianPrefactors:
                                    (2270.0/3.0 - 520.0*source_params.eta)*PI*source_params.chi_s
                                   ) * useful_powers_pi.third
         self.prefactor_varphi_6l=-684.8/6.3 * useful_powers_pi.third
-        self.prefactor_varphi_7 = ((770.96675/2.54016 + 378.515/1.512*source_params.eta- 740.45/7.56*source_params.eta2)*PI + 
+        self.prefactor_varphi_7 = ((770.96675/2.54016 + 378.515/1.512*source_params.eta - 740.45/7.56*source_params.eta2)*PI + 
                                    (-25150.083775/3.048192 + 26804.935/6.048*source_params.eta - 198.5/4.8*source_params.eta2) * source_params.delta * source_params.chi_a + 
                                    (-25150.083775/3.048192 + 105666.55595/7.62048*source_params.eta - 1042.165/3.024*source_params.eta2 + 534.5/3.6*source_params.eta3) * source_params.chi_s
                                   ) * useful_powers_pi.two_thirds
@@ -668,7 +668,7 @@ class AmplitudeCoefficients:
         d2 = _d_amplitude_merge_ringdown_ansatz(powers_amplitude_f_peak, self, source_params.f_ring, source_params.f_damp)
         self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = _solve_delta_i(AMPLITUDE_INSPIRAL_fJoin, f_mid, self.f_peak, v1, v2, v3, d1, d2)
 
-        self.amp0 = 0.25 * tm.sqrt(10.0/3.0*source_params.eta/useful_powers_pi.four_thirds) * source_params.M**2 * source_params.dL_SI * MRSUN_SI * MTSUN_SI
+        self.amp0 = 0.25 * tm.sqrt(10.0/3.0*source_params.eta/useful_powers_pi.four_thirds) * source_params.M**2 / source_params.dL_SI * MRSUN_SI * MTSUN_SI
 
 
 @ti.func
@@ -714,7 +714,7 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp)
 @ti.func
 def _get_polarization_from_amplitude_phase(amplitude, phase, iota):
     cross_prefactor = tm.cos(iota)
-    plus_prefactor = 0.5 * (1. + cross_prefactor**2)
+    plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
     plus = amplitude * tm.cexp(vec2_complex([0.0, -1.0]*phase))
     cross = tm.cmul(vec2_complex([0.0, -1.0]), plus) * cross_prefactor
     plus *= plus_prefactor
@@ -797,6 +797,8 @@ class IMRPhenomD(object):
             ret_content.update({'hplus': vec2_complex, 'hcross': vec2_complex})
         elif returned_form == 'amplitude_phase':
             ret_content.update({'amplitude': ti.f64, 'phase': ti.f64})
+        else:
+            raise Exception(f'{returned_form} is unknown. `returned_form` can be one of `polarizations` and `amplitude_phase`')
         if include_tf:
             ret_content.update({'tf': ti.f64})
         
@@ -846,7 +848,7 @@ class IMRPhenomD(object):
                 if ti.static(self.returned_form == 'amplitude_phase'):
                     self.waveform_container[idx].amplitude = amplitude
                     self.waveform_container[idx].phase = phase
-                if ti.static(self.returned_form == 'polarization'):
+                if ti.static(self.returned_form == 'polarizations'):
                     self.waveform_container[idx].hcross, self.waveform_container[idx].hplus = _get_polarization_from_amplitude_phase(amplitude, phase, self.source_parameters[None].iota)
                 if ti.static(self.include_tf):
                     tf = _compute_tf(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
@@ -879,8 +881,8 @@ class IMRPhenomD(object):
     def np_array_of_waveform_container(self):
         ret = {}
         if self.returned_form=='polarizations':
-            hcross_array = self.waveform_container.hcross.to_numpy().view(dtype=np.complex128)
-            hplus_array = self.waveform_container.hplus.to_numpy().view(dtype=np.complex128)
+            hcross_array = self.waveform_container.hcross.to_numpy().view(dtype=np.complex128).reshape((self.frequencies.shape))
+            hplus_array = self.waveform_container.hplus.to_numpy().view(dtype=np.complex128).reshape((self.frequencies.shape))
             ret['hcross'] = hcross_array
             ret['hplus'] = hplus_array
         elif self.returned_form=='amplitude_phase':

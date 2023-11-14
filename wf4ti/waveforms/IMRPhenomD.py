@@ -219,7 +219,7 @@ def _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
                          pn_prefactors.prefactor_varphi_6l / powers_of_Mf.two_thirds * (3.0 + powers_of_Mf.log + useful_powers_pi.log) + 
                          2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
                         ) / 3.0 + 
-            (phase_coefficients.sigma_1  + 
+            (phase_coefficients.sigma_1 + 
              phase_coefficients.sigma_2 * powers_of_Mf.third + 
              phase_coefficients.sigma_3 * powers_of_Mf.two_thirds + 
              phase_coefficients.sigma_4 * powers_of_Mf.one
@@ -683,9 +683,9 @@ def _compute_amplitude(powers_of_Mf, amplitude_coefficients, pn_prefactors, f_ri
     return amplitude * amplitude_coefficients.amp0 / powers_of_Mf.seven_sixths
 
 @ti.func
-def _compute_phase(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp):
+def _compute_phase(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp, eta):
     '''
-    without 1/eta
+    note that all phase ansatz are without 1/eta
     '''
     phase = 0.0
     if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
@@ -693,13 +693,13 @@ def _compute_phase(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_da
     elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
         phase = _phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp) + phase_coefficients.C1_merge_ringdown + phase_coefficients.C2_merge_ringdown * powers_of_Mf.one
     else:
-        phase = _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients) + phase_coefficients.C1_intermediate +  phase_coefficients.C2_intermediate * powers_of_Mf.one
-    return phase
+        phase = _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients) + phase_coefficients.C1_intermediate + phase_coefficients.C2_intermediate * powers_of_Mf.one
+    return phase/eta
 
 @ti.func
 def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp):
     '''
-    without 1/eta
+    note that all phase ansatz are without 1/eta
     '''
     tf = 0.0
     if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
@@ -833,7 +833,7 @@ class IMRPhenomD(object):
         time_shift = t0 - 2*PI*self.source_parameters[None].tc
         Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
         powers_of_Mf.updating(Mf_ref)
-        phase_ref_temp = _compute_phase(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
+        phase_ref_temp = _compute_phase(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp, self.source_parameters[None].eta)
         phase_shift = 2.0*self.source_parameters[None].phase_ref + phase_ref_temp
 
         for idx in self.frequencies:
@@ -841,8 +841,7 @@ class IMRPhenomD(object):
             if Mf < FREQUENCY_CUT:
                 powers_of_Mf.updating(Mf)            
                 amplitude = _compute_amplitude(powers_of_Mf, self.amplitude_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
-                phase = _compute_phase(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
-                phase /= self.source_parameters[None].eta
+                phase = _compute_phase(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp, self.source_parameters[None].eta)
                 phase -= time_shift * (Mf-Mf_ref) + phase_shift
                 # remember multiple amp0 and shift phase and 1/eta
                 if ti.static(self.returned_form == 'amplitude_phase'):

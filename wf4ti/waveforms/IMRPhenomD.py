@@ -209,12 +209,12 @@ def _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
     '''
     without 1/eta
     '''
-    return (3.0/128.0 * (-5.0 * pn_prefactors.prefactor_varphi_0 / powers_of_Mf.eight_thirds + 
-                         -4.0 * pn_prefactors.prefactor_varphi_1 / powers_of_Mf.seven_thirds + 
-                         -3.0 * pn_prefactors.prefactor_varphi_2 / powers_of_Mf.two + 
-                         -2.0 * pn_prefactors.prefactor_varphi_3 / powers_of_Mf.five_thirds + 
-                         -1.0 * pn_prefactors.prefactor_varphi_4 / powers_of_Mf.four_thirds + 
-                         pn_prefactors.prefactor_varphi_5l / powers_of_Mf.one+ 
+    return (3.0/128.0 * (-5.0 * pn_prefactors.prefactor_varphi_0 / powers_of_Mf.eight_thirds - 
+                         4.0 * pn_prefactors.prefactor_varphi_1 / powers_of_Mf.seven_thirds - 
+                         3.0 * pn_prefactors.prefactor_varphi_2 / powers_of_Mf.two - 
+                         2.0 * pn_prefactors.prefactor_varphi_3 / powers_of_Mf.five_thirds - 
+                         1.0 * pn_prefactors.prefactor_varphi_4 / powers_of_Mf.four_thirds + 
+                         3 * pn_prefactors.prefactor_varphi_5l / powers_of_Mf.one+ 
                          pn_prefactors.prefactor_varphi_6 / powers_of_Mf.two_thirds + 
                          pn_prefactors.prefactor_varphi_6l / powers_of_Mf.two_thirds * (3.0 + powers_of_Mf.log + useful_powers_pi.log) + 
                          2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
@@ -829,7 +829,7 @@ class IMRPhenomD(object):
         powers_of_Mf = UsefulPowers()
 
         powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak)
-        t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
+        t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)/self.source_parameters[None].eta
         time_shift = t0 - 2*PI*self.source_parameters[None].tc
         Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
         powers_of_Mf.updating(Mf_ref)

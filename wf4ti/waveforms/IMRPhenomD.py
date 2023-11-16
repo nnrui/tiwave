@@ -697,7 +697,7 @@ def _compute_phase(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_da
     return phase/eta
 
 @ti.func
-def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp):
+def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp, eta):
     '''
     note that all phase ansatz are without 1/eta
     '''
@@ -708,7 +708,7 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp)
         tf = _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp) + phase_coefficients.C2_merge_ringdown
     else:
         tf = _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients) + phase_coefficients.C2_intermediate
-    return tf/2/PI
+    return tf/eta
 
 
 @ti.func
@@ -830,7 +830,7 @@ class IMRPhenomD(object):
 
         powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak)
         t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)/self.source_parameters[None].eta
-        time_shift = t0 - 2*PI*self.source_parameters[None].tc
+        time_shift = t0 - 2*PI*self.source_parameters[None].tc/self.source_parameters[None].M_sec
         Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
         powers_of_Mf.updating(Mf_ref)
         phase_ref_temp = _compute_phase(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp, self.source_parameters[None].eta)
@@ -850,9 +850,9 @@ class IMRPhenomD(object):
                 if ti.static(self.returned_form == 'polarizations'):
                     self.waveform_container[idx].hcross, self.waveform_container[idx].hplus = _get_polarization_from_amplitude_phase(amplitude, phase, self.source_parameters[None].iota)
                 if ti.static(self.include_tf):
-                    tf = _compute_tf(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)
-                    tf /= self.source_parameters[None].eta
-                    tf += (self.source_parameters[None].tc - t0/2/PI)
+                    tf = _compute_tf(powers_of_Mf, self.phase_coefficients[None], self.pn_prefactors[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp, self.source_parameters[None].eta)
+                    tf -= time_shift
+                    tf *= self.source_parameters[None].M_sec / PI / 2
                     self.waveform_container[idx].tf = tf
             else:
                 if ti.static(self.returned_form == 'amplitude_phase'):

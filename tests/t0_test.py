@@ -47,6 +47,8 @@ f_array = f_array[bound]
 data_length = len(f_array)
 
 extraParams = lal.CreateDict()
+# require the modified lalsimulaiton (https://github.com/niuiniuin/lalsuite)
+# checkout to the branch `phenomD_amp_phase`
 amplitude, phase = lalsim.SimIMRPhenomDFrequencySequenceAmpPhase(f_array,
                                                                  parameters['reference_phase'],
                                                                  f_array[0],

@@ -830,6 +830,7 @@ class IMRPhenomD(object):
 
         powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak)
         t0 = _d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp)/self.source_parameters[None].eta
+        # t0 = (_d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp) + self.phase_coefficients[None].C2_merge_ringdown)/self.source_parameters[None].eta
         time_shift = t0 - 2*PI*self.source_parameters[None].tc/self.source_parameters[None].M_sec
         Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
         powers_of_Mf.updating(Mf_ref)

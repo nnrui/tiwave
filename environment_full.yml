@@ -1,0 +1,68 @@
+name: pespace
+channels:
+  - conda-forge
+variables:
+  CONDA_OVERRIDE_CUDA: 11.8
+dependencies:
+  # cuda
+  - nvidia/label/cuda-11.8.0::cuda    # cuda version require compatible with cuda driver (https://docs.nvidia.com/deploy/cuda-compatibility/#installing-title), in my mechine, I need cuda 11.x
+  - gcc <= 11   # in my case, max supported GCC version for cuda 11.8 is 11 (https://stackoverflow.com/a/46380601/12803370)
+  # for building bbhx
+  - cupy 
+  - cuda-version = 11.8 # might need to adjust according your environment
+  - cython
+  - lapack = 3.6.1
+  - gcc_linux-64
+  - gxx_linux-64
+  # for ripple
+  - jax
+  - jaxlib = *=*cuda*
+  # for building  lalsuite 
+  - astropy >=1.1.1
+  - autoconf
+  - automake
+  - bc
+  - cfitsio
+  - doxygen
+  - fftw
+  - freezegun
+  - c-compiler
+  - gsl
+  - h5py
+  - hdf5
+  - healpy
+  - help2man >=1.37
+  - ldas-tools-framecpp <3.0.0a0
+  - libframel <9.0.0a0
+  - ligo-gracedb
+  - ligo-segments
+  - lscsoft-glue >=2.0.0
+  - make
+  - matplotlib-base
+  - metaio
+  - mpmath >=1.0.0
+  - numpy
+  - openmpi
+  - pillow
+  - pkg-config >=0.18.0
+  - pytest
+  # - python
+  - python =3.10 # in order to compatible with taichi
+  - pip
+  # - python-ligo-lw  <-- depends upon python-lal
+  - scipy >=0.9.0
+  - six
+  - swig >=3.0.10
+  - texlive-core
+  - zlib
+  # used for data analysis
+  - bilby
+  - pandas
+  - pymc >= 5
+  # used for taichi
+  - dill
+  - markdown-it-py
+  - mdurl
+  - rich
+  - pip:
+    - taichi

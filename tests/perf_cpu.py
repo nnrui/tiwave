@@ -20,15 +20,18 @@ from lalsimulation import SimInspiralChooseFDWaveformSequence
 import bilby
 
 sys.path.append(f'{path_prefix}codes/gw_space/wf4ti')
+sys.path.append('/home/hydrogen/workspace/Space_GW/wf4ti')
 from wf4ti.waveforms.IMRPhenomD import IMRPhenomD as ti_IMRPhenomD
 from wf4ti.constants import *
 import taichi as ti
 ti.init(arch=ti.cpu, default_fp=ti.f64, cpu_max_num_threads=1)
 
 sys.path.append(f'{path_prefix}gw_software/WF4Py-master')
+sys.path.append('/home/hydrogen/gw_software/WF4Py-master')
 from WF4Py import waveforms as wf_py
 
 sys.path.append(f'{path_prefix}gw_software/ripple-main/src')
+sys.path.append('/home/hydrogen/gw_software/ripple-main/src')
 import jax
 import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
@@ -88,8 +91,8 @@ data_length_list = []
 # The output of wf4ti includes polarizations and tf which could be thought having the most 
 # compution steps.
 # For the code only return two polarization, we multiply a factor of 1.5
-for p in range(10, 30):
-# for p in range(10, 12):
+# for p in range(10, 30):
+for p in range(10, 12):
     duration = 2**p
     cadance = 5
     f_array = np.arange(0, 1.0/(2*cadance), 1.0/duration)

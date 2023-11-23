@@ -27,21 +27,21 @@ import bilby
 
 
 parameters = {}
-parameters['total_mass'] = 50
+parameters['total_mass'] = 5e6
 parameters['mass_ratio'] = 0.8
 parameters['chi_1'] = 0.2
 parameters['chi_2'] = 0.3
-parameters['luminosity_distance'] = 300.0
+parameters['luminosity_distance'] = 3000.0
 parameters['inclination'] = 0.15
 parameters['reference_phase'] = 0.0
 parameters['coalescence_time'] = 0.0
 parameters = bilby.gw.conversion.generate_all_bbh_parameters(parameters)
 
-cadance = 1/2048
-duration = 64
+cadance = 10
+duration = 3600*24*7
 f_array = np.arange(0, 1.0/(2*cadance), 1.0/duration)
-minimum_frequency = 20.0
-maximum_frequency = 1024.0
+minimum_frequency = 1e-5
+maximum_frequency = 1e-1
 bound = ((f_array >= minimum_frequency) * (f_array <= maximum_frequency))
 f_array = f_array[bound]
 data_length = len(f_array)
@@ -80,8 +80,8 @@ ax.axvline(f_peak, color='tab:red', label='peak frequency', linestyle='dashed')
 ax.set_xlabel(r'$f$(Hz)')
 ax.set_ylabel(r'$|\frac{{\rm d}\Phi}{2\pi{\rm d}f}|$')
 ax.legend()
-ax.set_title('t0 include C2MRD')
-fig.savefig('dphase_C2MRD_lal.png')
-# ax.set_title('Original t0 without C2MRD')
-# fig.savefig('dphase_lal.png')
+# ax.set_title('t0 include C2MRD')
+# fig.savefig('dphase_C2MRD_lal_mHz.png')
+ax.set_title('Original t0 without C2MRD')
+fig.savefig('dphase_lal_mHz.png')
 

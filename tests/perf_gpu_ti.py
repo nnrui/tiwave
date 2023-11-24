@@ -25,7 +25,7 @@ time_consuming_ti = []
 data_length_list = []
 powers_of_2 = range(10, 31)
 # powers_of_2 = range(10, 12)
-num_tests = 50
+num_tests = 100
 
 rng = np.random.default_rng()
 parameters = {}
@@ -53,7 +53,7 @@ sys.path.append(f'{path_prefix}codes/gw_space/wf4ti')
 sys.path.append('/home/hydrogen/workspace/Space_GW/wf4ti')
 from wf4ti.waveforms.IMRPhenomD import IMRPhenomD as ti_IMRPhenomD
 import taichi as ti
-ti.init(arch=ti.cuda, default_fp=ti.f64)
+ti.init(arch=ti.cuda, default_fp=ti.f64, device_memory_fraction=0.9)
 
 for p in powers_of_2:
     duration = 2**p

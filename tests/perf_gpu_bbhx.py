@@ -25,7 +25,7 @@ time_consuming_bbhx = []
 data_length_list = []
 powers_of_2 = range(10, 31)
 # powers_of_2 = range(10, 12)
-num_tests = 50
+num_tests = 100
 
 rng = np.random.default_rng()
 parameters = {}

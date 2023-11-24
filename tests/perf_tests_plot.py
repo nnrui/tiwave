@@ -26,7 +26,7 @@ with open('time_consuming_gpu_ti.json', 'r') as f:
     data_ti = json.load(f)
 with open('time_consuming_gpu_ripple.json', 'r') as f:
     data_ripple = json.load(f)
-with open('time_consuming_gpu_ti.json', 'r') as f:
+with open('time_consuming_gpu_bbhx.json', 'r') as f:
     data_bbhx = json.load(f)
 
 fig, ax = plt.subplots()

@@ -51,7 +51,7 @@ f_cut = 0.2
 max_mass = maximum_frequency/f_cut/MTSUN_SI
 # print(max_mass)
 
-num_tests = 10
+num_tests = 100
 rng = np.random.default_rng()
 parameters = {}
 parameters['total_mass'] = rng.uniform(1e3, max_mass, num_tests)
@@ -91,8 +91,8 @@ data_length_list = []
 # The output of wf4ti includes polarizations and tf which could be thought having the most 
 # compution steps.
 # For the code only return two polarization, we multiply a factor of 1.5
-# for p in range(10, 30):
-for p in range(10, 12):
+for p in range(10, 31):
+# for p in range(10, 12):
     duration = 2**p
     cadance = 5
     f_array = np.arange(0, 1.0/(2*cadance), 1.0/duration)
@@ -233,11 +233,8 @@ save_data = {'data_length': data_length_list,
             }
 
 import json
-with open('time_consuming.json', 'w') as f:
+with open('time_consuming_cpu.json', 'w') as f:
     json.dump(save_data, f)
-
-with open('time_consuming.json', 'r') as f:
-    save_data = json.load(f)
 
 
 import matplotlib

@@ -11,3 +11,4 @@
 python perf_gpu_ti.py
 python perf_gpu_ripple.py
 python perf_gpu_bbhx.py
+python perf_tests_plot.py

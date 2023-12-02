@@ -768,9 +768,9 @@ class IMRPhenomD(object):
                 ret_content.remove('tf')
             else:
                 include_tf = False
-            if all([item in ret_content for item in ['hplus', 'hcros']]):
+            if all([item in ret_content for item in ['hplus', 'hcross']]):
                 returned_form = 'polarizations'
-                [ret_content.remove(item) for item in ['hplus', 'hcros']]
+                [ret_content.remove(item) for item in ['hplus', 'hcross']]
             elif all([item in ret_content for item in ['amplitude', 'phase']]):
                 returned_form = 'amplitude_phase'
                 [ret_content.remove(item) for item in ['amplitude', 'phase']]
@@ -809,16 +809,16 @@ class IMRPhenomD(object):
         else:
             self.waveform_container = waveform_field
 
-    def get_waveform(self, parameters):
+    def update_waveform(self, parameters):
         '''
         necessary preparation which need to be finished in python scope for waveform computation 
         (this function may be awkward, since no interpolation function in taichi-lang)
         '''
         self.source_parameters[None].generate_all_source_parameters(parameters)
-        self._get_wavefrom_kernel()
+        self._update_waveform_kernel()
     
     @ti.kernel
-    def _get_wavefrom_kernel(self):
+    def _update_waveform_kernel(self):
         if ti.static(self.parameter_sanity_check):
             self._parameter_check()
     

@@ -106,11 +106,11 @@ for p in range(10, 31):
     frequencies = ti.field(ti.f64, shape=(data_length,))
     frequencies.from_numpy(f_array)
     wf = ti_IMRPhenomD(frequencies, returned_form='polarizations', include_tf=True)
-    wf.get_waveform(parameters.iloc[0])
+    wf.update_waveform(parameters.iloc[0])
     
     st = time.perf_counter()
     for i in range(num_tests):
-        wf.get_waveform(parameters.iloc[i])
+        wf.update_waveform(parameters.iloc[i])
     ed = time.perf_counter()
     time_consuming = (ed - st)/num_tests
     print(f'ti {p}th, time:{time_consuming}')

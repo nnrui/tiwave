@@ -27,21 +27,22 @@ import bilby
 
 
 parameters = {}
-parameters['total_mass'] = 5e6
+# parameters['total_mass'] = 5e6
+parameters['total_mass'] = 50
 parameters['mass_ratio'] = 0.8
 parameters['chi_1'] = 0.2
 parameters['chi_2'] = 0.3
-parameters['luminosity_distance'] = 3000.0
+parameters['luminosity_distance'] = 300.0
 parameters['inclination'] = 0.15
 parameters['reference_phase'] = 0.0
 parameters['coalescence_time'] = 0.0
 parameters = bilby.gw.conversion.generate_all_bbh_parameters(parameters)
 
-cadance = 10
-duration = 3600*24*7
+cadance = 1/2048
+duration = 64
 f_array = np.arange(0, 1.0/(2*cadance), 1.0/duration)
-minimum_frequency = 1e-5
-maximum_frequency = 1e-1
+minimum_frequency = 20
+maximum_frequency = 1024
 bound = ((f_array >= minimum_frequency) * (f_array <= maximum_frequency))
 f_array = f_array[bound]
 data_length = len(f_array)
@@ -75,8 +76,10 @@ f_peak = lalsim.IMRPhenomDGetPeakFreq(parameters['mass_1'],
 # fig.savefig('amp_lal.png')
 
 fig, ax = plt.subplots()
-ax.loglog(f_array[:-1], np.abs(dphase))
+ax.semilogx(f_array[:-1], dphase)
 ax.axvline(f_peak, color='tab:red', label='peak frequency', linestyle='dashed')
+ax.set_xlim(f_peak*0.95, f_peak*1.05)
+ax.set_ylim(-5/2048, 5/2048)
 ax.set_xlabel(r'$f$(Hz)')
 ax.set_ylabel(r'$|\frac{{\rm d}\Phi}{2\pi{\rm d}f}|$')
 ax.legend()

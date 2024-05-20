@@ -1,3 +1,5 @@
+# required packages for runing tiwave only
+
 name: pespace
 channels:
   - conda-forge

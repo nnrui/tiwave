@@ -1,3 +1,5 @@
+# required packages for runing all scripts in examples/
+
 name: pespace
 channels:
   - conda-forge

@@ -1,0 +1,1 @@
+from .IMRPhenomD import IMRPhenomD

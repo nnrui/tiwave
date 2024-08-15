@@ -2,7 +2,7 @@ import taichi as ti
 import taichi.math as tm
 
 
-vec2_complex = ti.types.vector(2, ti.f64)
+ComplexNumber = ti.types.vector(2, ti.f64)
 
 
 
@@ -19,11 +19,11 @@ def initialize_waveform_container_from_frequencies_array(frequencies, returned_f
     Returns:
     ========
         frequency_field: ti.field
-        waveform_container: ti.Struct.field({'hplus': vec2_complex, 'hcross': vec2_complex, 'tf': ti.f64})
+        waveform_container: ti.Struct.field({'hplus': ComplexNumber, 'hcross': ComplexNumber, 'tf': ti.f64})
     '''
     ret_content = {}
     if returned_form == 'polarizations':
-        ret_content.update({'hplus': vec2_complex, 'hcross': vec2_complex})
+        ret_content.update({'hplus': ComplexNumber, 'hcross': ComplexNumber})
     elif returned_form == 'amplitude_phase':
         ret_content.update({'amplitude': ti.f64, 'phase': ti.f64})
     if include_tf:

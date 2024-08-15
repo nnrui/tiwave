@@ -4,13 +4,13 @@ import numpy as np
 import os
 
 from ..constants import *
-from ..utilities import vec2_complex
+from ..utils import ComplexNumber
 
 
 '''
 TODO:
 check _get_polarization_from_amplitude_phase, add shperical harmonic
-1. source parameter check, (m1>m2, q<1)
+1. source parameter check, (m1>m2, q<1, q<18, using warning and error rather assert); 
 4. using one matrix to compute all phenomenology coefficients
 5. add loop config for waveform_kernel
 '''
@@ -715,8 +715,8 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp,
 def _get_polarization_from_amplitude_phase(amplitude, phase, iota):
     cross_prefactor = tm.cos(iota)
     plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
-    plus = amplitude * tm.cexp(vec2_complex([0.0, -1.0]*phase))
-    cross = tm.cmul(vec2_complex([0.0, -1.0]), plus) * cross_prefactor
+    plus = amplitude * tm.cexp(ComplexNumber([0.0, -1.0]*phase))
+    cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_prefactor
     plus *= plus_prefactor
     return cross, plus
     
@@ -794,7 +794,7 @@ class IMRPhenomD(object):
     def _initialize_waveform_container(self, returned_form, include_tf):
         ret_content = {}
         if returned_form == 'polarizations':
-            ret_content.update({'hplus': vec2_complex, 'hcross': vec2_complex})
+            ret_content.update({'hplus': ComplexNumber, 'hcross': ComplexNumber})
         elif returned_form == 'amplitude_phase':
             ret_content.update({'amplitude': ti.f64, 'phase': ti.f64})
         else:

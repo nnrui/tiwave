@@ -8,11 +8,12 @@ import numpy as np
 
 from ..constants import *
 from ..utils import ComplexNumber
+from .base_waveform import BaseWaveform
 
 
 """
 TODO:
-check _get_polarization_from_amplitude_phase, add shperical harmonic
+check _get_polarization_from_amplitude_phase, add spherical harmonic
 1. source parameter check, (m1>m2, q<1, q<18, using warning and error rather assert); 
 4. using one matrix to compute all phenomenology coefficients
 5. add loop config for waveform_kernel
@@ -1271,7 +1272,7 @@ def _get_polarization_from_amplitude_phase(amplitude, phase, iota):
 
 
 @ti.data_oriented
-class IMRPhenomD(object):
+class IMRPhenomD(BaseWaveform):
 
     def __init__(
         self,
@@ -1304,7 +1305,7 @@ class IMRPhenomD(object):
             self.reference_frequency = self.frequencies[0]
         elif reference_frequency <= 0.0:
             raise ValueError(
-                f"you are set reference_frequency={reference_frequency}, which must be postive."
+                f"you are set reference_frequency={reference_frequency}, which must be positive."
             )
         else:
             self.reference_frequency = reference_frequency
@@ -1379,7 +1380,7 @@ class IMRPhenomD(object):
 
         self.waveform_container = ti.Struct.field(
             ret_content,
-            shape=(self.frequencies.length,),
+            shape=self.frequencies.shape,
         )
         return None
 

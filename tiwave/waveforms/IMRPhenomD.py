@@ -1357,15 +1357,10 @@ class IMRPhenomD(BaseWaveform):
             )
 
         # initializing data struct with 0, and instantiating fields for global accessing
+        self.source_parameters = SourceParameters.field(shape=())
         self.phase_coefficients = PhaseCoefficients.field(shape=())
         self.amplitude_coefficients = AmplitudeCoefficients.field(shape=())
         self.pn_prefactors = PostNewtonianPrefactors.field(shape=())
-        # Since assigning field elements in python scope can cause precesion warning 
-        # which may influence the performance (see the issue #8559 https://github.com/taichi-dev/taichi/issues/8559#issue-2399536322).
-        # Before taichi maintainer fix this issue, currently we define `SourceParameters` 
-        # in python scope, and pass it into the `_updata_waveform_kernel` by reference, 
-        # rather than defining it as a global accessible field.
-        self.source_parameters = SourceParameters()
 
     def _initialize_waveform_container(
         self, returned_form: str, include_tf: bool
@@ -1394,20 +1389,20 @@ class IMRPhenomD(BaseWaveform):
         necessary preparation which need to be finished in python scope for waveform computation
         (this function may be awkward, since no interpolation function in taichi-lang)
         """
-        self.source_parameters.generate_all_source_parameters(parameters)
-        self._update_waveform_kernel(self.source_parameters)
+        self.source_parameters[None].generate_all_source_parameters(parameters)
+        self._update_waveform_kernel()
 
     @ti.kernel
-    def _update_waveform_kernel(self, source_parameters: ti.template()):
+    def _update_waveform_kernel(self):
         if ti.static(self.parameter_sanity_check):
-            self._parameter_check(source_parameters)
+            self._parameter_check()
 
-        self.pn_prefactors[None].compute_PN_prefactors(source_parameters)
+        self.pn_prefactors[None].compute_PN_prefactors(self.source_parameters[None])
         self.amplitude_coefficients[None].compute_amplitude_coefficients(
-            source_parameters, self.pn_prefactors[None]
+            self.source_parameters[None], self.pn_prefactors[None]
         )
         self.phase_coefficients[None].compute_phase_coefficients(
-            source_parameters, self.pn_prefactors[None]
+            self.source_parameters[None], self.pn_prefactors[None]
         )
 
         powers_of_Mf = UsefulPowers()
@@ -1417,49 +1412,49 @@ class IMRPhenomD(BaseWaveform):
             _d_phase_merge_ringdown_ansatz(
                 powers_of_Mf,
                 self.phase_coefficients[None],
-                source_parameters.f_ring,
-                source_parameters.f_damp,
+                self.source_parameters[None].f_ring,
+                self.source_parameters[None].f_damp,
             )
-            / source_parameters.eta
+            / self.source_parameters[None].eta
         )
-        # t0 = (_d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], source_parameters.f_ring, source_parameters.f_damp) + self.phase_coefficients[None].C2_merge_ringdown)/source_parameters.eta
+        # t0 = (_d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp) + self.phase_coefficients[None].C2_merge_ringdown)/self.source_parameters[None].eta
         time_shift = (
             t0
             - 2
             * PI
-            * source_parameters.tc
-            / source_parameters.M_sec
+            * self.source_parameters[None].tc
+            / self.source_parameters[None].M_sec
         )
-        Mf_ref = source_parameters.M_sec * self.reference_frequency
+        Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
         powers_of_Mf.update(Mf_ref)
         phase_ref_temp = _compute_phase(
             powers_of_Mf,
             self.phase_coefficients[None],
             self.pn_prefactors[None],
-            source_parameters.f_ring,
-            source_parameters.f_damp,
-            source_parameters.eta,
+            self.source_parameters[None].f_ring,
+            self.source_parameters[None].f_damp,
+            self.source_parameters[None].eta,
         )
-        phase_shift = 2.0 * source_parameters.phase_ref + phase_ref_temp
+        phase_shift = 2.0 * self.source_parameters[None].phase_ref + phase_ref_temp
 
         for idx in self.frequencies:
-            Mf = source_parameters.M_sec * self.frequencies[idx]
+            Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
             if Mf < FREQUENCY_CUT:
                 powers_of_Mf.update(Mf)
                 amplitude = _compute_amplitude(
                     powers_of_Mf,
                     self.amplitude_coefficients[None],
                     self.pn_prefactors[None],
-                    source_parameters.f_ring,
-                    source_parameters.f_damp,
+                    self.source_parameters[None].f_ring,
+                    self.source_parameters[None].f_damp,
                 )
                 phase = _compute_phase(
                     powers_of_Mf,
                     self.phase_coefficients[None],
                     self.pn_prefactors[None],
-                    source_parameters.f_ring,
-                    source_parameters.f_damp,
-                    source_parameters.eta,
+                    self.source_parameters[None].f_ring,
+                    self.source_parameters[None].f_damp,
+                    self.source_parameters[None].eta,
                 )
                 phase -= time_shift * (Mf - Mf_ref) + phase_shift
                 # remember multiple amp0 and shift phase and 1/eta
@@ -1471,19 +1466,19 @@ class IMRPhenomD(BaseWaveform):
                         self.waveform_container[idx].hcross,
                         self.waveform_container[idx].hplus,
                     ) = _get_polarization_from_amplitude_phase(
-                        amplitude, phase, source_parameters.iota
+                        amplitude, phase, self.source_parameters[None].iota
                     )
                 if ti.static(self.include_tf):
                     tf = _compute_tf(
                         powers_of_Mf,
                         self.phase_coefficients[None],
                         self.pn_prefactors[None],
-                        source_parameters.f_ring,
-                        source_parameters.f_damp,
-                        source_parameters.eta,
+                        self.source_parameters[None].f_ring,
+                        self.source_parameters[None].f_damp,
+                        self.source_parameters[None].eta,
                     )
                     tf -= time_shift
-                    tf *= source_parameters.M_sec / PI / 2
+                    tf *= self.source_parameters[None].M_sec / PI / 2
                     self.waveform_container[idx].tf = tf
             else:
                 if ti.static(self.returned_form == "amplitude_phase"):
@@ -1496,22 +1491,22 @@ class IMRPhenomD(BaseWaveform):
                     self.waveform_container[idx].tf = 0.0
 
     @ti.func
-    def _parameter_check(self, source_parameters: SourceParameters):
+    def _parameter_check(self):
         assert (
-            source_parameters.mass_1 > source_parameters.mass_2
-        ), f"require m1 > m2, you are passing m1: {source_parameters.mass_1}, m2:{source_parameters.mass_2}"
+            self.source_parameters[None].mass_1 > self.source_parameters[None].mass_2
+        ), f"require m1 > m2, you are passing m1: {self.source_parameters[None].mass_1}, m2:{self.source_parameters[None].mass_2}"
         assert (
-            source_parameters.q > 0.0
-            and source_parameters.q < 1.0
-        ), f"require 0 < q < 1, you are passing q: {source_parameters.q}"
+            self.source_parameters[None].q > 0.0
+            and self.source_parameters[None].q < 1.0
+        ), f"require 0 < q < 1, you are passing q: {self.source_parameters[None].q}"
         assert (
-            source_parameters.chi_1 > -1.0
-            and source_parameters.chi_1 < 1.0
-        ), f"require -1 < chi_1 < 1, you are passing chi_1: {source_parameters.chi_1}"
+            self.source_parameters[None].chi_1 > -1.0
+            and self.source_parameters[None].chi_1 < 1.0
+        ), f"require -1 < chi_1 < 1, you are passing chi_1: {self.source_parameters[None].chi_1}"
         assert (
-            source_parameters.chi_2 > -1.0
-            and source_parameters.chi_2 < 1.0
-        ), f"require -1 < chi_2 < 1, you are passing chi_2: {source_parameters.chi_2}"
+            self.source_parameters[None].chi_2 > -1.0
+            and self.source_parameters[None].chi_2 < 1.0
+        ), f"require -1 < chi_2 < 1, you are passing chi_2: {self.source_parameters[None].chi_2}"
 
         # TODO more parameter check
 

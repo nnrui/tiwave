@@ -1,0 +1,28 @@
+'''
+Useful constants, copied from lalsuite
+'''
+
+# Nominal solar mass, kg
+# MSUN_SI = GMSUN_SI / G_SI
+MSUN_SI = 1.988409870698050731911960804878414216e30
+
+# Geometrized nominal solar mass, m
+# MRSUN_SI = GMSUN_SI / (C_SI * C_SI)
+MRSUN_SI = 1.476625038050124729627979840144936351e3
+
+# Geometrized nominal solar mass, s
+# MTSUN_SI = GMSUN_SI / (C_SI * C_SI * C_SI)
+MTSUN_SI = 4.925490947641266978197229498498379006e-6
+
+# Parsec, m
+PC_SI = 3.085677581491367e+16
+
+# Math constants
+PI = 3.141592653589793
+EULER_GAMMA = 0.5772156649015329
+
+
+SUCCESS = 1
+FAILURE = 0
+
+DEBUG = False

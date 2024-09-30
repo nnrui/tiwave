@@ -1,4 +1,4 @@
-# wf4ti
+# tiwave
 #### Gravitational waveforms using taichi-lang
 A pure python implementation of gravitational waveform generation using [`taichi-lang`](https://www.taichi-lang.org/) which is designed for high-performance parallel programming in python and allows the codes to run fast while keeping the python's virtues of readability and maintainability.
 

@@ -6,7 +6,7 @@ ComplexNumber = ti.types.vector(2, ti.f64)
 
 
 @ti.func
-def _gauss_elimination(Ab: ti.template()) -> ti.template():
+def gauss_elimination(Ab: ti.template()) -> ti.template():
     """
     Solving a system of linear equations Ax=b using Gauss elimination. Note the loop
     unrolling is used here, do not use this function to solve systems with large dimension.

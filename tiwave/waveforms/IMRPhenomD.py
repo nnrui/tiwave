@@ -378,9 +378,7 @@ class SourceParameters:
         self.eta = self.mass_1 * self.mass_2 / (self.M * self.M)
         self.eta2 = self.eta * self.eta
         self.eta3 = self.eta2 * self.eta
-        self.delta = (
-            self.mass_1 - self.mass_2
-        ) / self.M  # make sure self.mass_1 > self.mass_2
+        self.delta = np.sqrt(1.0 - 4.0 * self.eta)
         self.chi_s = (self.chi_1 + self.chi_2) * 0.5
         self.chi_a = (self.chi_1 - self.chi_2) * 0.5
         self.chi_s2 = self.chi_s * self.chi_s
@@ -1389,7 +1387,7 @@ class IMRPhenomD(BaseWaveform):
         necessary preparation which need to be finished in python scope for waveform computation
         (this function may be awkward, since no interpolation function in taichi-lang)
         """
-        self.source_parameters[None].update_all_source_parameters(parameters)
+        self.source_parameters[None].generate_all_source_parameters(parameters)
         self._update_waveform_kernel()
 
     @ti.kernel

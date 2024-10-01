@@ -1,35 +1,51 @@
-# tiwave
-#### Gravitational waveforms using taichi-lang
-A pure python implementation of gravitational waveform generation using [`taichi-lang`](https://www.taichi-lang.org/) which is designed for high-performance parallel programming in python and allows the codes to run fast while keeping the python's virtues of readability and maintainability.
+# tiwave - Gravitational waveforms using taichi-lang
 
-## Why reinventing the wheel
-Current tools for gravitaional waveform generation (please tell me if you know others)
-
-[`lalsuite`](https://github.com/lscsoft/lalsuite) The root of stories of GW data analyses
-
-[`bbhx`](https://github.com/mikekatz04/BBHx) Using `cuda` to generate waveforms on GPU
-
-[`wf4py`](https://github.com/CosmoStatGW/WF4Py) A python implementation of gravitaional waveforms
-
-[`ripple`](https://github.com/tedwards2412/ripple) A python implementation of gravitaional wavefroms with `jax`
-
-`lalsuite` is a huge library for developed by LVK, which are using in 
-
-## Testing with lalsuite
-(TODO: testing in whole parameter space)
-
-## Performance
-
-
-## Usage
+`tiwave` is a python implementation for some gravitational waveform models using [`taichi-lang`](https://www.taichi-lang.org/) which is designed for high-performance parallel programming and allows the codes to run fast while keeping the python's virtues of readability and maintainability.
 
 ## Supported waveforms
-IMRPhenomD
-IMRPhenomXAS
-IMRPhenomXHM
-IMRPhenomXPHM
+- IMRPhenomD
+- IMRPhenomXAS
+- IMRPhenomXHM
+- IMRPhenomXPHM
+- TaylorF2
+- FASTGB
 
-## Suggestion and comments are welcome
-Although the author try his best to organize the codes as elegantly as possible, due to the author's very limited knowledge in softrware engineering, this codes are necessarily awkward and clumsy in some place. Any suggestions and comments are extremely welcome. Feel free to open issues or email me.
+## Installation
+
+## Basic usage
+
+More examples and detail api can be found in the document().
+
+## Testing with lalsimulation
+(TODO: testing in whole parameter space)
+Note, the performance is depend on the hardware and software environment. You may obtain differenc results when runing the same test script. The result shown above are obtained on hanhai20 system in USTC with H100
+
+## Development
+Code Organization
+The codes are modularized as much as possible, which allow to easily modify and add some effects. A example of adding environment effects (cite[]) in inspiral can be found here.
+(TODO: development installation)
+
+
+## Similar tools
+Other similar tools for gravitaional waveform generation which may meet your different needs (Due to the limitation of author's knowledge, this list may be not complete. Please open a new issue or PR if you know others.):
+
+- [`lalsimulation`](https://github.com/lscsoft/lalsuite), the most authoritative and inclusive waveform library developed by LVK.
+- [`bbhx`](https://github.com/mikekatz04/BBHx), using `cuda` to generate waveforms on GPU.
+- [`wf4py`](https://github.com/CosmoStatGW/WF4Py), a python implementation of gravitaional waveforms.
+- [`ripple`](https://github.com/tedwards2412/ripple), a python implementation of gravitaional wavefroms with `jax`.
+
+
+## Citation
+If you think this package is useful, please considering cite
+```
+
+```
+The development of this package depending on many previous works including:
+
+Please cite the original works for the correnpond modules you have used.
+
+
+## Contact
+Any suggestions and comments are extremely welcome. Feel free to open issues or email me (nrui@mail.ustc.edu.cn).
 
 

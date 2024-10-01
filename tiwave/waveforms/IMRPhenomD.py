@@ -14,9 +14,10 @@ from .base_waveform import BaseWaveform
 """
 TODO:
 check _get_polarization_from_amplitude_phase, add spherical harmonic
-1. source parameter check, (m1>m2, q<1, q<18, using warning and error rather assert); 
-4. using one matrix to compute all phenomenology coefficients
-5. add loop config for waveform_kernel
+- source parameter check, (m1>m2, q<1, q<18, using warning and error rather assert); 
+- using one matrix to compute all phenomenology coefficients
+- add loop config for waveform_kernel
+- pass parameter into ansatz function by reference, and make all func more modualiztion to easyily modify
 """
 
 

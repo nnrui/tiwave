@@ -1,10 +1,12 @@
-# tiwave - Gravitational waveforms using taichi-lang
+# **tiwave** - gravitational waveforms using taichi-lang
+
+
 
 `tiwave` is a python implementation for some gravitational waveform models using [`taichi-lang`](https://www.taichi-lang.org/) which is designed for high-performance parallel programming and allows the codes to run fast while keeping the python's virtues of readability and maintainability.
 
 ## Supported waveforms
 - IMRPhenomD
-- IMRPhenomXAS
+- IMRPhenomXAS (only recommended fitting models are implemented, i.e. inspiral phase: 104, intermediate phase: 105, intermediate amplitude: 104)
 - IMRPhenomXHM
 - IMRPhenomXPHM
 - TaylorF2

@@ -1,8 +1,45 @@
 import taichi as ti
 import taichi.math as tm
 
+from .constants import *
+
 
 ComplexNumber = ti.types.vector(2, ti.f64)
+
+
+@ti.dataclass
+class UsefulPowers:
+    third: ti.f64
+    two_thirds: ti.f64
+    one: ti.f64
+    four_thirds: ti.f64
+    five_thirds: ti.f64
+    two: ti.f64
+    seven_thirds: ti.f64
+    eight_thirds: ti.f64
+    three: ti.f64
+    four: ti.f64
+    fourth: ti.f64
+    three_fourths: ti.f64
+    seven_sixths: ti.f64
+    log: ti.f64
+
+    @ti.pyfunc
+    def update(self, number: ti.f64):
+        self.third = number ** (1 / 3)
+        self.two_thirds = self.third * self.third
+        self.one = number
+        self.four_thirds = number * self.third
+        self.five_thirds = number * self.two_thirds
+        self.two = number * number
+        self.seven_thirds = self.two * self.third
+        self.eight_thirds = self.two * self.two_thirds
+        self.three = self.two * number
+        self.four = self.three * number
+        self.fourth = number ** (1 / 4)
+        self.three_fourths = self.fourth**3
+        self.seven_sixths = ti.sqrt(self.seven_thirds)
+        self.log = ti.log(number)
 
 
 @ti.func

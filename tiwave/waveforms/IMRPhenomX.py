@@ -7,10 +7,15 @@ import taichi.math as tm
 import numpy as np
 
 from ..constants import *
-from ..utils import ComplexNumber, gauss_elimination
+from ..utils import ComplexNumber, gauss_elimination, UsefulPowers
 from .base_waveform import BaseWaveform
 
 f_phase_ins_min = 0.0026
+
+useful_powers_pi = UsefulPowers()
+useful_powers_pi.update(PI)
+# Prepare an instance of UsefulPowers for later use
+useful_powers_x = UsefulPowers()
 
 
 # Amplitude ansatz
@@ -95,7 +100,6 @@ def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_r
     f_minus_fring_pow2 = f_minus_fring * f_minus_fring
     # (f - f_ring)^2 + (gamma_3 * f_damp)^2
     common_term = f_minus_fring_pow2 + amplitude_coefficients.gamma3_fdamp_pow2
-
     return (
         -amplitude_coefficients.gamma_1
         * tm.exp(-f_minus_fring * amplitude_coefficients.gamma2_over_gamma3_fdamp)
@@ -111,26 +115,34 @@ def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_r
 @ti.func
 def _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
     """
-    without 1/eta
+    Eq. 7.1 in arXiv:2001.11412.
+    Only the recommended fitting model `104` are implemented.
     """
-    return 3.0 / 128.0 * (
-        pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds
-        + pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds
-        + pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one
-        + pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds
-        + pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third
-        + pn_prefactors.prefactor_varphi_5
-        + pn_prefactors.prefactor_varphi_5l * (powers_of_Mf.log + useful_powers_pi.log)
-        + pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third
-        + pn_prefactors.prefactor_varphi_6l
-        * powers_of_Mf.third
-        * (powers_of_Mf.log + useful_powers_pi.log)
-        + pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
-    ) + (
-        phase_coefficients.sigma_1 * powers_of_Mf.one
-        + 0.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
-        + 0.6 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds
-        + 0.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
+    return (
+        3.0
+        / 128.0
+        * (
+            pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds
+            + pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds
+            + pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one
+            + pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds
+            + pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third
+            + pn_prefactors.prefactor_varphi_5
+            + pn_prefactors.prefactor_varphi_5l
+            * (powers_of_Mf.log + useful_powers_pi.log)
+            + pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third
+            + pn_prefactors.prefactor_varphi_6l
+            * powers_of_Mf.third
+            * (powers_of_Mf.log + useful_powers_pi.log)
+            + pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
+        )
+        + (
+            phase_coefficients.sigma_1 * powers_of_Mf.one
+            + 0.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
+            + 0.6 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds
+            + 0.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
+        )
+        + phase_coefficients.sigma_0
     )
 
 
@@ -231,8 +243,8 @@ class SourceParameters:
     mass_2: ti.f64
     M_sec: ti.f64  # total mass in second
     eta: ti.f64  # symmetric_mass_ratio
-    eta2: ti.f64  # eta^2
-    eta3: ti.f64
+    eta_pow2: ti.f64  # eta^2
+    eta_pow3: ti.f64
     delta: ti.f64
     chi_s: ti.f64
     chi_a: ti.f64
@@ -264,9 +276,9 @@ class SourceParameters:
         self.dL_SI = self.dL_Mpc * 1e6 * PC_SI
         self.M_sec = self.M * MTSUN_SI
         self.eta = self.mass_1 * self.mass_2 / (self.M * self.M)
-        self.eta2 = self.eta * self.eta
-        self.eta3 = self.eta * self.eta2
-        self.eta4 = self.eta + self.eta3
+        self.eta_pow2 = self.eta * self.eta
+        self.eta_pow3 = self.eta * self.eta_pow2
+        self.eta_pow4 = self.eta + self.eta_pow3
 
         self.delta_chi = self.chi_1 - self.chi_2
         self.delta_chi_pow2 = self.delta_chi * self.delta_chi
@@ -337,26 +349,26 @@ class SourceParameters:
         """Final dimensionless spin, PhysRevD.95.064024"""
         no_spin = (
             3.4641016151377544 * self.eta
-            + 20.0830030082033 * self.eta2
-            - 12.333573402277912 * self.eta3
+            + 20.0830030082033 * self.eta_pow2
+            - 12.333573402277912 * self.eta_pow3
         ) / (1 + 7.2388440419467335 * self.eta)
         eq_spin = (self.m1_pow2 + self.m2_pow2) * self.S_tot + (
             (
                 -0.8561951310209386 * self.eta
-                - 0.09939065676370885 * self.eta2
-                + 1.668810429851045 * self.eta3
+                - 0.09939065676370885 * self.eta_pow2
+                + 1.668810429851045 * self.eta_pow3
             )
             * self.S_tot
             + (
                 0.5881660363307388 * self.eta
-                - 2.149269067519131 * self.eta2
-                + 3.4768263932898678 * self.eta3
+                - 2.149269067519131 * self.eta_pow2
+                + 3.4768263932898678 * self.eta_pow3
             )
             * self.S_tot_pow2
             + (
                 0.142443244743048 * self.eta
-                - 0.9598353840147513 * self.eta2
-                + 1.9595643107593743 * self.eta3
+                - 0.9598353840147513 * self.eta_pow2
+                + 1.9595643107593743 * self.eta_pow3
             )
             * self.S_tot_pow3
         ) / (
@@ -364,7 +376,7 @@ class SourceParameters:
             + (
                 -0.9142232693081653
                 + 2.3191363426522633 * self.eta
-                - 9.710576749140989 * self.eta3
+                - 9.710576749140989 * self.eta_pow3
             )
             * self.S_tot
         )
@@ -373,13 +385,13 @@ class SourceParameters:
             * self.delta_chi
             * self.delta
             * (1 + 9.332575956437443 * self.eta)
-            * self.eta2
-            - 0.059808322561702126 * self.delta_chi_pow2 * self.eta3
+            * self.eta_pow2
+            - 0.059808322561702126 * self.delta_chi_pow2 * self.eta_pow3
             + 2.3170397514509933
             * self.delta_chi
             * self.delta
             * (1 - 3.2624649875884852 * self.eta)
-            * self.eta3
+            * self.eta_pow3
             * self.delta_chi
         )
         return no_spin + eq_spin + uneq_spin
@@ -390,21 +402,21 @@ class SourceParameters:
         no_spin = (
             0.018744340279608845
             + 0.0077903147004616865 * self.eta
-            + 0.003940354686136861 * self.eta2
-            - 0.00006693930988501673 * self.eta3
+            + 0.003940354686136861 * self.eta_pow2
+            - 0.00006693930988501673 * self.eta_pow3
         ) / (1.0 - 0.10423384680638834 * self.eta)
         eq_spin = (
             self.chi_PN_hat
             * (
                 0.00027180386951683135
                 - 0.00002585252361022052 * self.chi_PN_hat
-                + self.eta4
+                + self.eta_pow4
                 * (
                     -0.0006807631931297156
                     + 0.022386313074011715 * self.chi_PN_hat
                     - 0.0230825153005985 * self.chi_PN_hat_pow2
                 )
-                + self.eta2
+                + self.eta_pow2
                 * (
                     0.00036556167661117023
                     - 0.000010021140796150737 * self.chi_PN_hat
@@ -416,7 +428,7 @@ class SourceParameters:
                     - 0.00001049013062611254 * self.chi_PN_hat
                     - 0.00035182990586857726 * self.chi_PN_hat_pow2
                 )
-                + self.eta3
+                + self.eta_pow3
                 * (
                     -0.0005418851224505745
                     + 0.000030679548774047616 * self.chi_PN_hat
@@ -429,32 +441,32 @@ class SourceParameters:
             + (
                 -0.014590539285641243
                 - 0.012429476486138982 * self.eta
-                + 1.4861197211952053 * self.eta4
-                + 0.025066696514373803 * self.eta2
-                + 0.005146809717492324 * self.eta3
+                + 1.4861197211952053 * self.eta_pow4
+                + 0.025066696514373803 * self.eta_pow2
+                + 0.005146809717492324 * self.eta_pow3
             )
             * self.chi_PN_hat
             + (
                 -0.0058684526275074025
                 - 0.02876774751921441 * self.eta
-                - 2.551566872093786 * self.eta4
-                - 0.019641378027236502 * self.eta2
-                - 0.001956646166089053 * self.eta3
+                - 2.551566872093786 * self.eta_pow4
+                - 0.019641378027236502 * self.eta_pow2
+                - 0.001956646166089053 * self.eta_pow3
             )
             * self.chi_PN_hat_pow2
             + (
                 0.003507640638496499
                 + 0.014176504653145768 * self.eta
-                + 1.0 * self.eta4
-                + 0.012622225233586283 * self.eta2
-                - 0.00767768214056772 * self.eta3
+                + 1.0 * self.eta_pow4
+                + 0.012622225233586283 * self.eta_pow2
+                - 0.00767768214056772 * self.eta_pow3
             )
             * self.chi_PN_hat_pow3
         )
         uneq_spin = self.delta_chi_pow2 * (
             0.00034375176678815234 + 0.000016343732281057392 * self.eta
-        ) * self.eta2 + self.delta_chi * self.delta * self.eta * (
-            0.08064665214195679 * self.eta2
+        ) * self.eta_pow2 + self.delta_chi * self.delta * self.eta * (
+            0.08064665214195679 * self.eta_pow2
             + self.eta
             * (-0.028476219509487793 - 0.005746537021035632 * self.chi_PN_hat)
             - 0.0011713735642446144 * self.chi_PN_hat
@@ -489,60 +501,81 @@ class AmplitudeCoefficients:
     rho_1: ti.f64
     rho_2: ti.f64
     rho_3: ti.f64
-    # Intermediate
+    ins_colloc_points: ti.types.vector(3, ti.f64)
+    ins_colloc_values: ti.types.vector(3, ti.f64)
+    # Intermediate (104 model)
     alpha_0: ti.f64
     alpha_1: ti.f64
     alpha_2: ti.f64
     alpha_3: ti.f64
     alpha_4: ti.f64
-    alpha_5: ti.f64
+    int_colloc_points: ti.types.vector(3, ti.f64)
+    int_colloc_values: ti.types.vector(5, ti.f64)
     # Merge-ringdown
-    gamma_1: ti.f64
-    gamma_2: ti.f64
-    gamma_3: ti.f64
-    # derived coefficients
-    amp0: ti.f64
+    gamma_1: ti.f64  # a_R in arXiv:2001.11412
+    gamma_2: ti.f64  # lambda in arXiv:2001.11412
+    gamma_3: ti.f64  # sigma in arXiv:2001.11412
+    f_peak: ti.f64
+    # cached parameters
+    gamma1_gamma3_fdamp: ti.f64  # a_R * f_damp * sigma
+    gamma2_over_gamma3_fdamp: ti.f64  # lambda / (f_damp * sigma)
+    gamma3_fdamp: ti.f64  # f_damp * sigma
+    gamma3_fdamp_pow2: ti.f64  # (f_damp * sigma)^2
+    amp_0: ti.f64
 
     @ti.func
-    def compute_amplitude_coefficients(self, source_params, pn_prefactors, amp_int_ver):
-        # Inspiral coefficients: rho_1, rho_2, rho_3
+    def _compute_collocation_points(self, source_params: ti.template()):
+        """
+        Computing collocation points in insprial and intermediate range.
+        Only can be called after updating merge-ringdown coefficient, since the f_peak 
+        is needed for intermediate collocation points.
+        """
+        # Insprial, Eq.6.5.
+        fmax_ins = source_params.f_MECO + 0.25 * (
+            source_params.f_ISCO - source_params.f_MECO
+        )
+        # Note the equation of Eq. 6.5 uses f_MECO, while fAT (Eq. 5.7) is used in
+        # lalsimumation (l. 781 in LALSimIMRPhenomX_internals.c).
+        self.ins_colloc_points[0] = fmax_ins * 0.5
+        self.ins_colloc_points[1] = fmax_ins * 0.75
+        self.ins_colloc_points[2] = fmax_ins
 
-        # The amplitude calibrating collocation points.
-        # TODO: the equation of Eq. 6.5 in arXiv: 2001.11412 uses fMECO, while fAT (Eq. 5.7)
-        # is used in lalsim (L. 781 in LALSimIMRPhenomX_internals.c). Confirm this!
-        f1_ins = 0.5 * source_params.f_amp_ins_max
-        f2_ins = 0.75 * source_params.f_amp_ins_max
-        f3_ins = source_params.f_amp_ins_max
+        # Intermediate, Tab. II
+        self.int_colloc_points[0] = fmax_ins
+        self.int_colloc_points[1] = (fmax_ins + self.f_peak) * 0.5
+        self.int_colloc_points[2] = self.f_peak
 
+    @ti.func
+    def _inspiral_coefficients(self, source_params: ti.template()):
         # Value for amplitude collocation point at 0.5 f^A_T,
-        v1_ins = (
+        self.ins_colloc_values[0] = (
             (
                 -0.015178276424448592
                 - 0.06098548699809163 * source_params.eta
-                + 0.4845148547154606 * source_params.eta2
+                + 0.4845148547154606 * source_params.eta_pow2
             )
             / (1.0 + 0.09799277215675059 * source_params.eta)
             + (
-                (0.02300153747158323 + 0.10495263104245876 * source_params.eta2)
+                (0.02300153747158323 + 0.10495263104245876 * source_params.eta_pow2)
                 * source_params.chi_PN_hat
                 + (0.04834642258922544 - 0.14189350657140673 * source_params.eta)
                 * source_params.eta
                 * source_params.chi_PN_hat_pow3
-                + (0.01761591799745109 - 0.14404522791467844 * source_params.eta2)
+                + (0.01761591799745109 - 0.14404522791467844 * source_params.eta_pow2)
                 * source_params.chi_PN_hat_pow2
             )
             / (1.0 - 0.7340448493183307 * source_params.chi_PN_hat)
             + source_params.delta_chi
             * source_params.delta
-            * source_params.eta4
+            * source_params.eta_pow4
             * (0.0018724905795891192 + 34.90874132485147 * source_params.eta)
         )
         # Value for amplitude collocation point at 0.75 f^A_T,
-        v2_ins = (
+        self.ins_colloc_values[1] = (
             (
                 -0.058572000924124644
                 - 1.1970535595488723 * source_params.eta
-                + 8.4630293045015 * source_params.eta2
+                + 8.4630293045015 * source_params.eta_pow2
             )
             / (1.0 + 15.430818840453686 * source_params.eta)
             + (
@@ -553,7 +586,7 @@ class AmplitudeCoefficients:
                         -0.20646621646484237
                         - 0.21291764491897636 * source_params.chi_PN_hat
                     )
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * (
                         0.788717372588848
                         + 0.8282888482429105 * source_params.chi_PN_hat
@@ -565,23 +598,23 @@ class AmplitudeCoefficients:
             / (-1.332123330797879 + 1.0 * source_params.chi_PN_hat)
             + source_params.delta_chi
             * source_params.delta
-            * source_params.eta4
+            * source_params.eta_pow4
             * (0.004389995099201855 + 105.84553997647659 * source_params.eta)
         )
         # Value for amplitude collocation point at 1.0 f^A_T,
-        v3_ins = (
+        self.ins_colloc_values[2] = (
             (
                 -0.16212854591357853
                 + 1.617404703616985 * source_params.eta
-                - 3.186012733446088 * source_params.eta2
-                + 5.629598195000046 * source_params.eta3
+                - 3.186012733446088 * source_params.eta_pow2
+                + 5.629598195000046 * source_params.eta_pow3
             )
             / (1.0 + 0.04507019231274476 * source_params.eta)
             + (
                 source_params.chi_PN_hat
                 * (
                     1.0055835408962206
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * (
                         18.353433894421833
                         - 18.80590889704093 * source_params.chi_PN_hat
@@ -592,7 +625,7 @@ class AmplitudeCoefficients:
                         -4.127597118865669
                         + 5.215501942120774 * source_params.chi_PN_hat
                     )
-                    + source_params.eta3
+                    + source_params.eta_pow3
                     * (
                         -41.0378120175805
                         + 19.099315016873643 * source_params.chi_PN_hat
@@ -606,217 +639,125 @@ class AmplitudeCoefficients:
             )
             + source_params.delta_chi
             * source_params.delta
-            * source_params.eta4
+            * source_params.eta_pow4
             * (0.05575955418803233 + 208.92352600701068 * source_params.eta)
         )
 
         Ab_ins = ti.Matrix(
             [
-                [f1_ins ** (7 / 3), f1_ins ** (8 / 3), f1_ins**3, v1_ins],
-                [f2_ins ** (7 / 3), f2_ins ** (8 / 3), f2_ins**3, v2_ins],
-                [f3_ins ** (7 / 3), f3_ins ** (8 / 3), f3_ins**3, v3_ins],
+                [
+                    self.ins_colloc_points[0] ** (7 / 3),
+                    self.ins_colloc_points[0] ** (8 / 3),
+                    self.ins_colloc_points[0] ** 3,
+                    self.ins_colloc_values[0],
+                ],
+                [
+                    self.ins_colloc_points[1] ** (7 / 3),
+                    self.ins_colloc_points[1] ** (8 / 3),
+                    self.ins_colloc_points[1] ** 3,
+                    self.ins_colloc_values[1],
+                ],
+                [
+                    self.ins_colloc_points[2] ** (7 / 3),
+                    self.ins_colloc_points[2] ** (8 / 3),
+                    self.ins_colloc_points[2] ** 3,
+                    self.ins_colloc_values[2],
+                ],
             ],
             dt=ti.f64,
         )
         self.rho_1, self.rho_2, self.rho_3 = gauss_elimination(Ab_ins)
 
-        # Inermediate coefficients:
-        # version 104: alpha_0, alpha_1, alpha_2, alpha_3, alpha_4 (default)
-        # version 105: alpha_0, alpha_1, alpha_2, alpha_3, alpha_4, alpha_5
-        if ti.static(amp_int_ver == 104):
-            f1_int = source_params.f_amp_ins_max
-            f3_int = source_params.f_peak
-            f2_int = (f1_int + f3_int) / 2.0
-
-            v1_int = 1 / _amplitude_inspiral_ansatz()
-            v2_int = (
-                (
-                    1.4873184918202145
-                    + 1974.6112656679577 * source_params.eta
-                    + 27563.641024162127 * source_params.eta2
-                    - 19837.908020966777 * source_params.eta3
-                )
-                / (
-                    1.0
-                    + 143.29004876335128 * source_params.eta
-                    + 458.4097306093354 * source_params.eta2
-                )
-                + (
-                    source_params.S_tot_hat
-                    * (
-                        27.952730865904343
-                        + source_params.eta
-                        * (
-                            -365.55631765202895
-                            - 260.3494489873286 * source_params.S_tot_hat
-                        )
-                        + 3.2646808851249016 * source_params.S_tot_hat
-                        + 3011.446602208493
-                        * source_params.eta2
-                        * source_params.S_tot_hat
-                        - 19.38970173389662 * source_params.S_tot_hat_pow2
-                        + source_params.eta3
-                        * (
-                            1612.2681322644232
-                            - 6962.675551371755 * source_params.S_tot_hat
-                            + 1486.4658089990298 * source_params.S_tot_hat_pow2
-                        )
-                    )
-                )
-                / (
-                    12.647425554323242
-                    - 10.540154508599963 * source_params.S_tot_hat
-                    + 1.0 * source_params.S_tot_hat_pow2
-                )
-                + self.delta_chi
-                * self.delta
-                * (-0.016404056649860943 - 296.473359655246 * source_params.eta)
-                * source_params.eta2
-            )
-
-            v3_int = 1 / _amplitude_merge_ringdown_ansatz()
-            d1_int = _d_amplitude_inspiral_ansatz()
-            d3_int = _d_amplitude_merge_ringdown_ansatz()
-
-            Ab_int = ti.Matrix([[], [], [], [], []])
-
+    @ti.func
+    def _intermediate_coefficients(
+        self, source_params: ti.template(), pn_prefactors: ti.template()
+    ):
+        """
+        Only the recommended fit model `104` is implemented, and only can be called after
+        updated the inspiral and merge-ringdown coefficients.
+        """
+        # TODO: prefactor of frequency whether including amp0
+        self.int_colloc_values[0] = 1.0 / _amplitude_inspiral_ansatz(
+            useful_powers_x.update(self.int_colloc_points[0]), self, pn_prefactors
+        )
+        self.int_colloc_values[1] = (
             (
-                self.alpha_0,
-                self.alpha_1,
-                self.alpha_2,
-                self.alpha_3,
-                self.alpha_4,
-            ) = gauss_elimination(Ab_int)
-
-        elif ti.static(amp_int_ver == 105):
-            f1_int = source_params.f_amp_ins_max
-            f4_int = source_params.f_peak
-            f2_int = f1_int + (f4_int - f1_int) / 3.0
-            f3_int = f1_int + (f4_int - f1_int) * 2.0 / 3.0
-
-            v1_int = 1 / _amplitude_inspiral_ansatz()
-            v2_int = (
-                (
-                    2.2436523786378983
-                    + 2162.4749081764216 * source_params.eta
-                    + 24460.158604784723 * source_params.eta2
-                    - 12112.140570900956 * source_params.eta3
-                )
-                / (
-                    1.0
-                    + 120.78623282522702 * source_params.eta
-                    + 416.4179522274108 * source_params.eta2
-                )
-                + (
-                    source_params.S_tot_hat
-                    * (
-                        6.727511603827924
-                        + source_params.eta2
-                        * (
-                            414.1400701039126
-                            - 234.3754066885935 * source_params.S_tot_hat
-                        )
-                        - 5.399284768639545 * source_params.S_tot_hat
-                        + source_params.eta
-                        * (
-                            -186.87972530996245
-                            + 128.7402290554767 * source_params.S_tot_hat
-                        )
-                    )
-                )
-                / (
-                    3.24359204029217
-                    - 3.975650468231452 * source_params.S_tot_hat
-                    + 1.0 * source_params.S_tot_hat_pow2
-                )
-                + source_params.delta_chi
-                * self.delta
-                * (-59.52510939953099 + 13.12679437100751 * source_params.eta)
-                * source_params.eta2
+                1.4873184918202145
+                + 1974.6112656679577 * source_params.eta
+                + 27563.641024162127 * source_params.eta_pow2
+                - 19837.908020966777 * source_params.eta_pow3
             )
-
-            v3_int = (
-                (
-                    1.195392410912163
-                    + 1677.2558976605421 * source_params.eta
-                    + 24838.37133975971 * source_params.eta2
-                    - 17277.938868280915 * source_params.eta3
-                )
-                / (
-                    1.0
-                    + 144.78606839716073 * source_params.eta
-                    + 428.8155916011666 * source_params.eta2
-                )
-                + (
-                    source_params.S_tot_hat
-                    * (
-                        -2.1413952025647793
-                        + 0.5719137940424858 * source_params.S_tot_hat
-                        + source_params.eta
-                        * (
-                            46.61350006858767
-                            + 0.40917927503842105 * source_params.S_tot_hat
-                            - 11.526500209146906 * source_params.S_tot_hat_pow2
-                        )
-                        + 1.1833965566688387 * source_params.S_tot_hat_pow2
-                        + source_params.eta2
-                        * (
-                            -84.82318288272965
-                            - 34.90591158988979 * source_params.S_tot_hat
-                            + 19.494962340530186 * source_params.S_tot_hat_pow2
-                        )
-                    )
-                )
-                / (-1.4786392693666195 + 1.0 * source_params.S_tot_hat)
-                + source_params.delta_chi
-                * source_params.delta
-                * (-333.7662575986524 + 532.2475589084717 * source_params.eta)
-                * source_params.eta3
+            / (
+                1.0
+                + 143.29004876335128 * source_params.eta
+                + 458.4097306093354 * source_params.eta_pow2
             )
+            + source_params.S_tot_hat
+            * (
+                27.952730865904343
+                + source_params.eta
+                * (-365.55631765202895 - 260.3494489873286 * source_params.S_tot_hat)
+                + 3.2646808851249016 * source_params.S_tot_hat
+                + 3011.446602208493 * source_params.eta_pow2 * source_params.S_tot_hat
+                - 19.38970173389662 * source_params.S_tot_hat_pow2
+                + source_params.eta_pow3
+                * (
+                    1612.2681322644232
+                    - 6962.675551371755 * source_params.S_tot_hat
+                    + 1486.4658089990298 * source_params.S_tot_hat_pow2
+                )
+            )
+            / (
+                12.647425554323242
+                - 10.540154508599963 * source_params.S_tot_hat
+                + 1.0 * source_params.S_tot_hat_pow2
+            )
+            + self.delta_chi
+            * self.delta
+            * (-0.016404056649860943 - 296.473359655246 * source_params.eta)
+            * source_params.eta_pow2
+        )
+        self.int_colloc_values[2] = 1.0 / _amplitude_merge_ringdown_ansatz(
+            useful_powers_x.update(
+                self.self.int_colloc_points[2], self, source_params.f_ring
+            )
+        )
 
-            v4_int = 1 / _amplitude_merge_ringdown_ansatz()
-            d1_int = _d_amplitude_inspiral_ansatz()
-            d4_int = _d_amplitude_merge_ringdown_ansatz()
+        Ab_int = ti.Matrix([[], [], [], [], []])
 
-            Ab_int = ti.Matrix([[], [], [], [], [], []])
+        (
+            self.alpha_0,
+            self.alpha_1,
+            self.alpha_2,
+            self.alpha_3,
+            self.alpha_4,
+        ) = gauss_elimination(Ab_int)
 
-            (
-                self.alpha_0,
-                self.alpha_1,
-                self.alpha_2,
-                self.alpha_3,
-                self.alpha_4,
-                self.alpha_5,
-            ) = gauss_elimination(Ab_int)
-
-        # Merge-ringdown coefficients: lambda (gamma_2), sigma (gamma_3), a_R (gamma_1)
+    @ti.func
+    def _merge_ringdown_coefficients(self, source_params):
+        """
+        Computing merge-ringdown coefficients. Using different notation in arXiv:2001.11412,
+        a_R (gamma_1), lambda (gamma_2), sigma (gamma_3)
+        """
         self.gamma_2 = (
             (
                 0.8312293675316895
                 + 7.480371544268765 * source_params.eta
-                - 18.256121237800397 * source_params.eta2
+                - 18.256121237800397 * source_params.eta_pow2
             )
             / (
                 1.0
                 + 10.915453595496611 * source_params.eta
-                - 30.578409433912874 * source_params.eta2
+                - 30.578409433912874 * source_params.eta_pow2
             )
-            + (
-                source_params.S_tot_hat
-                * (
-                    0.5869408584532747
-                    + source_params.eta
-                    * (
-                        -0.1467158405070222
-                        - 2.8489481072076472 * source_params.S_tot_hat
-                    )
-                    + 0.031852563636196894 * source_params.S_tot_hat
-                    + source_params.eta2
-                    * (
-                        0.25295441250444334
-                        + 4.6849496672664594 * source_params.S_tot_hat
-                    )
-                )
+            + source_params.S_tot_hat
+            * (
+                0.5869408584532747
+                + source_params.eta
+                * (-0.1467158405070222 - 2.8489481072076472 * source_params.S_tot_hat)
+                + 0.031852563636196894 * source_params.S_tot_hat
+                + source_params.eta_pow2
+                * (0.25295441250444334 + 4.6849496672664594 * source_params.S_tot_hat)
             )
             / (
                 3.8775263105069953
@@ -831,16 +772,110 @@ class AmplitudeCoefficients:
         self.gamma_3 = (
             1.3666000000000007
             - 4.091333144596439 * source_params.eta
-            + 2.109081209912545 * source_params.eta2
-            - 4.222259944408823 * source_params.eta3
+            + 2.109081209912545 * source_params.eta_pow2
+            - 4.222259944408823 * source_params.eta_pow3
         ) / (1.0 - 2.7440263888207594 * source_params.eta) + (
             0.07179105336478316
-            + source_params.eta2
+            + source_params.eta_pow2
             * (2.331724812782498 - 0.6330998412809531 * source_params.S_tot_hat)
             + source_params.eta
             * (-0.8752427297525086 + 0.4168560229353532 * source_params.S_tot_hat)
             - 0.05633734476062242 * source_params.S_tot_hat
         ) * source_params.S_tot_hat
+        # cache frequently used parameters
+        # lambda / (f_damp * sigma)
+        self.gamma2_over_gamma3_fdamp = self.gamma_2 / (
+            self.gamma_3 * source_params.f_damp
+        )
+        # f_damp * sigma
+        self.gamma3_fdamp = self.gamma_3 * source_params.f_damp
+        # (f_damp * sigma)^2
+        self.gamma3_fdamp_pow2 = self.gamma3_fdamp * self.gamma3_fdamp
+
+        if self.gamma_2 > 1.0:
+            self.f_peak = ti.abs(
+                source_params.f_ring
+                - source_params.f_damp * self.gamma_3 / self.gamma_2
+            )
+        else:
+            self.f_peak = ti.abs(
+                source_params.f_ring
+                + (tm.sqrt(1 - self.gamma_2 * self.gamma_2) - 1)
+                * source_params.f_damp
+                * self.gamma_3
+                / self.gamma_2
+            )
+        value_peak = (
+            (
+                0.03689164742964719
+                + 25.417967754401182 * source_params.eta
+                + 162.52904393600332 * source_params.eta_pow2
+            )
+            / (
+                1.0
+                + 61.19874463331437 * source_params.eta
+                - 29.628854485544874 * source_params.eta_pow2
+            )
+            + source_params.S_tot_hat
+            * (
+                -0.14352506969368556
+                + 0.026356911108320547 * source_params.S_tot_hat
+                + 0.19967405175523437 * source_params.S_tot_hat_pow2
+                - 0.05292913111731128 * source_params.S_tot_hat_pow3
+                + source_params.eta_pow3
+                * (
+                    -48.31945248941757
+                    - 3.751501972663298 * source_params.S_tot_hat
+                    + 81.9290740950083 * source_params.S_tot_hat_pow2
+                    + 30.491948143930266 * source_params.S_tot_hat_pow3
+                    - 132.77982622925845 * source_params.S_tot_hat_pow4
+                )
+                + source_params.eta
+                * (
+                    -4.805034453745424
+                    + 1.11147906765112 * source_params.S_tot_hat
+                    + 6.176053843938542 * source_params.S_tot_hat_pow2
+                    - 0.2874540719094058 * source_params.S_tot_hat_pow3
+                    - 8.990840289951514 * source_params.S_tot_hat_pow4
+                )
+                - 0.18147275151697131 * source_params.S_tot_hat_pow4
+                + source_params.eta_pow2
+                * (
+                    27.675454081988036
+                    - 2.398327419614959 * source_params.S_tot_hat
+                    - 47.99096500250743 * source_params.S_tot_hat_pow2
+                    - 5.104257870393138 * source_params.S_tot_hat_pow3
+                    + 72.08174136362386 * source_params.S_tot_hat_pow4
+                )
+            )
+            / (-1.4160870461211452 + 1.0 * source_params.S_tot_hat)
+            - 0.04426571511345366
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
+        fpeak_minus_fring = self.f_peak - source_params.f_ring
+        self.gamma_1 = (
+            value_peak
+            / self.gamma3_fdamp
+            * (fpeak_minus_fring**2 + self.gamma3_fdamp_pow2)
+            * tm.exp(fpeak_minus_fring * self.gamma2_over_gamma3_fdamp)
+        )
+        # cache frequently used parameters
+        # a_R * f_damp * sigma
+        self.gamma1_gamma3_fdamp = self.gamma_1 * self.gamma_3 * source_params.f_damp
+
+    @ti.func
+    def compute_amplitude_coefficients(self, source_params, pn_prefactors):
+        # The common prefactor, A_0
+        self.amp0 = (
+            0.25
+            * tm.sqrt(10.0 / 3.0 * source_params.eta / useful_powers_pi.four_thirds)
+            * source_params.M**2
+            / source_params.dL_SI
+            * MRSUN_SI
+            * MTSUN_SI
+        )
 
 
 @ti.dataclass
@@ -906,14 +941,14 @@ class PhaseCoefficients:
                     * (
                         0.7207992174994245
                         - 1.237332073800276 * source_params.eta
-                        + 6.086871214811216 * source_params.eta2
+                        + 6.086871214811216 * source_params.eta_pow2
                     )
                 )
                 / (
                     0.006851189888541745
                     + 0.06099184229137391 * source_params.eta
-                    - 0.15500218299268662 * source_params.eta2
-                    + 1.0 * source_params.eta2 * source_params.eta
+                    - 0.15500218299268662 * source_params.eta_pow2
+                    + 1.0 * source_params.eta_pow2 * source_params.eta
                 )
             )
             + (
@@ -921,8 +956,10 @@ class PhaseCoefficients:
                     (
                         0.06519048552628343
                         - 25.25397971063995 * source_params.eta
-                        - 308.62513664956975 * source_params.eta2 * source_params.eta2
-                        + 58.59408241189781 * source_params.eta2
+                        - 308.62513664956975
+                        * source_params.eta_pow2
+                        * source_params.eta_pow2
+                        + 58.59408241189781 * source_params.eta_pow2
                         + 160.14971486043524 * source_params.ta2 * source_params.eta
                     )
                     * source_params.S_tot_hat
@@ -930,14 +967,16 @@ class PhaseCoefficients:
                     * (
                         -5.215945111216946
                         + 153.95945758807616 * source_params.eta
-                        - 693.0504179144295 * source_params.eta2
-                        + 835.1725103648205 * source_params.eta2 * source_params.eta
+                        - 693.0504179144295 * source_params.eta_pow2
+                        + 835.1725103648205 * source_params.eta_pow2 * source_params.eta
                     )
                     * source_params.S_tot_hat_pow2
                     + (
                         0.20035146870472367
                         - 0.28745205203100666 * source_params.eta
-                        - 47.56042058800358 * source_params.eta2 * source_params.eta2
+                        - 47.56042058800358
+                        * source_params.eta_pow2
+                        * source_params.eta_pow2
                     )
                     * source_params.S_tot_hat_pow2
                     * source_params.S_tot_hat
@@ -945,15 +984,17 @@ class PhaseCoefficients:
                     * (
                         5.7756520242745735
                         - 43.97332874253772 * source_params.eta
-                        + 338.7263666984089 * source_params.eta2 * source_params.eta
+                        + 338.7263666984089 * source_params.eta_pow2 * source_params.eta
                     )
                     * source_params.S_tot_hat_pow2
                     * source_params.S_tot_hat_pow2
                     + (
                         -0.2697933899920511
                         + 4.917070939324979 * source_params.eta
-                        - 22.384949087140086 * source_params.eta2 * source_params.eta2
-                        - 11.61488280763592 * source_params.eta2
+                        - 22.384949087140086
+                        * source_params.eta_pow2
+                        * source_params.eta_pow2
+                        - 11.61488280763592 * source_params.eta_pow2
                     )
                     * source_params.S_tot_hat_pow2
                     * source_params.S_tot_hat_pow2
@@ -965,7 +1006,7 @@ class PhaseCoefficients:
                 -23.504907495268824
                 * source_params.delta_chi
                 * source_params.delta
-                * self.eta2
+                * self.eta_pow2
             )
         )
         # Difference between collocation points 2 and 4 (v2 - v4)
@@ -976,31 +1017,31 @@ class PhaseCoefficients:
                     * (
                         -9.460253118496386
                         + 9.429314399633007 * source_params.eta
-                        + 64.69109972468395 * source_params.eta2
+                        + 64.69109972468395 * source_params.eta_pow2
                     )
                 )
                 / (
                     -0.0670554310666559
                     - 0.09987544893382533 * source_params.eta
-                    + 1.0 * source_params.eta2
+                    + 1.0 * source_params.eta_pow2
                 )
             )
             + (
                 (
                     17.36495157980372 * source_params.eta * source_params.S_tot_hat
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * source_params.eta
                     * source_params.S_tot_hat
                     * (930.3458437154668 + 808.457330742532 * source_params.S_tot_hat)
-                    + source_params.eta2
-                    * source_params.eta2
+                    + source_params.eta_pow2
+                    * source_params.eta_pow2
                     * source_params.S_tot_hat
                     * (
                         -774.3633787391745
                         - 2177.554979351284 * source_params.S_tot_hat
                         - 1031.846477275069 * source_params.S_tot_hat_pow2
                     )
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * source_params.S_tot_hat
                     * (
                         -191.00932194869588
@@ -1017,7 +1058,7 @@ class PhaseCoefficients:
                 source_params.delta_chi
                 * source_params.delta
                 * (-36.66374091965371 + 91.60477826830407 * source_params.eta)
-                * source_params.eta2
+                * source_params.eta_pow2
             )
         )
         # Difference between collocation points 3 and 4 (v3 - v4)
@@ -1041,7 +1082,7 @@ class PhaseCoefficients:
                         * source_params.S_tot_hat_pow2
                         * source_params.S_tot_hat_pow2
                     )
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * (
                         73.8367329022058 * source_params.S_tot_hat
                         - 95.57802408341716
@@ -1052,7 +1093,7 @@ class PhaseCoefficients:
                         * source_params.S_tot_hat_pow2
                     )
                     + 0.046849371468156265 * source_params.S_tot_hat_pow2
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * source_params.eta
                     * source_params.S_tot_hat
                     * (
@@ -1070,8 +1111,8 @@ class PhaseCoefficients:
                 641.8965762829259
                 * source_params.delta_chi
                 * source_params.delta
-                * source_params.eta2
-                * source_params.eta2
+                * source_params.eta_pow2
+                * source_params.eta_pow2
                 * source_params.eta
             )
         )
@@ -1081,12 +1122,14 @@ class PhaseCoefficients:
                 (
                     -85.86062966719405
                     - 4616.740713893726 * source_params.eta
-                    - 4925.756920247186 * source_params.eta2
-                    + 7732.064464348168 * source_params.eta2 * source_params.eta
-                    + 12828.269960300782 * source_params.eta2 * source_params.eta2
+                    - 4925.756920247186 * source_params.eta_pow2
+                    + 7732.064464348168 * source_params.eta_pow2 * source_params.eta
+                    + 12828.269960300782
+                    * source_params.eta_pow2
+                    * source_params.eta_pow2
                     - 39783.51698102803
-                    * source_params.eta2
-                    * source_params.eta2
+                    * source_params.eta_pow2
+                    * source_params.eta_pow2
                     * source_params.eta
                 )
                 / (1.0 + 50.206318806624004 * source_params.eta)
@@ -1097,7 +1140,7 @@ class PhaseCoefficients:
                     * (
                         33.335857451144356
                         - 36.49019206094966 * source_params.S_tot_hat
-                        + source_params.eta2
+                        + source_params.eta_pow2
                         * source_params.eta
                         * (
                             1497.3545918387515
@@ -1108,7 +1151,7 @@ class PhaseCoefficients:
                         + 2.302712009652155
                         * source_params.S_tot_hat_pow2
                         * source_params.S_tot_hat
-                        + source_params.eta2
+                        + source_params.eta_pow2
                         * (
                             93.64156367505917
                             - 18.184492163348665 * source_params.S_tot_hat
@@ -1135,8 +1178,8 @@ class PhaseCoefficients:
                             * source_params.S_tot_hat_pow2
                             * source_params.S_tot_hat_pow2
                         )
-                        + source_params.eta2
-                        * source_params.eta2
+                        + source_params.eta_pow2
+                        * source_params.eta_pow2
                         * (
                             1075.8686153198323
                             - 3443.0233614187396 * source_params.S_tot_hat
@@ -1167,14 +1210,14 @@ class PhaseCoefficients:
                     * (
                         7.05731400277692
                         + 22.455288821807095 * source_params.eta
-                        + 119.43820622871043 * source_params.eta2
+                        + 119.43820622871043 * source_params.eta_pow2
                     )
                 )
                 / (0.26026709603623255 + 1.0 * source_params.eta)
             )
             + (
                 (
-                    source_params.eta2
+                    source_params.eta_pow2
                     * (134.88158268621922 - 56.05992404859163 * source_params.S_tot_hat)
                     * source_params.S_tot_hat
                     + source_params.eta
@@ -1183,7 +1226,7 @@ class PhaseCoefficients:
                         -7.9407123129681425
                         + 9.486783128047414 * source_params.S_tot_hat
                     )
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * source_params.eta
                     * source_params.S_tot_hat
                     * (
@@ -1197,7 +1240,7 @@ class PhaseCoefficients:
                 43.82713604567481
                 * source_params.delta_chi
                 * source_params.delta
-                * source_params.eta2
+                * source_params.eta_pow2
                 * source_params.eta
             )
         )
@@ -1263,7 +1306,7 @@ class PhaseCoefficients:
             (
                 -17294.000000000007
                 - 19943.076428555978 * source_params.eta
-                + 483033.0998073767 * source_params.eta2
+                + 483033.0998073767 * source_params.eta_pow2
             )
             / (1.0 + 4.460294035404433 * source_params.eta)
             + (
@@ -1280,14 +1323,14 @@ class PhaseCoefficients:
                         - 303141.1945565486 * source_params.S_tot_hat_pow3
                     )
                     + 19703.894135534803 * source_params.S_tot_hat_pow3
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * (
                         -148368.4954044637
                         - 758386.5685734496 * source_params.S_tot_hat
                         - 137991.37032619823 * source_params.S_tot_hat_pow2
                         + 1.0765877367729193e6 * source_params.S_tot_hat_pow3
                     )
-                    + 32614.091002011017 * S4
+                    + 32614.091002011017 * source_params.S_tot_hat_pow4
                 )
             )
             / (2.0412979553629143 + 1.0 * source_params.S_tot_hat)
@@ -1301,8 +1344,8 @@ class PhaseCoefficients:
             (
                 -7579.300000000004
                 - 120297.86185566607 * source_params.eta
-                + 1.1694356931282217e6 * source_params.eta2
-                - 557253.0066989232 * source_params.eta3
+                + 1.1694356931282217e6 * source_params.eta_pow2
+                - 557253.0066989232 * source_params.eta_pow3
             )
             / (1.0 + 18.53018618227582 * source_params.eta)
             + (
@@ -1310,7 +1353,7 @@ class PhaseCoefficients:
                 * (
                     -27089.36915061857
                     - 66228.9369155027 * source_params.S_tot_hat
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * (
                         150022.21343386435
                         - 50166.382087278434 * source_params.S_tot_hat
@@ -1323,7 +1366,7 @@ class PhaseCoefficients:
                         + 157036.45676788126 * source_params.S_tot_hat
                         + 126736.43159783827 * source_params.S_tot_hat_pow2
                     )
-                    + source_params.eta3
+                    + source_params.eta_pow3
                     * (
                         -593633.5370110178
                         - 325423.99477314285 * source_params.S_tot_hat
@@ -1347,9 +1390,9 @@ class PhaseCoefficients:
             (
                 15415.000000000007
                 + 873401.6255736464 * source_params.eta
-                + 376665.64637025696 * source_params.eta2
-                - 3.9719980569125614e6 * source_params.eta3
-                + 8.913612508054944e6 * source_params.eta4
+                + 376665.64637025696 * source_params.eta_pow2
+                - 3.9719980569125614e6 * source_params.eta_pow3
+                + 8.913612508054944e6 * source_params.eta_pow4
             )
             / (1.0 + 46.83697749859996 * source_params.eta)
             + (
@@ -1357,7 +1400,7 @@ class PhaseCoefficients:
                 * (
                     397951.95299014193
                     - 207180.42746987 * source_params.S_tot_hat
-                    + source_params.eta3
+                    + source_params.eta_pow3
                     * (
                         4.662143741417853e6
                         - 584728.050612325 * source_params.S_tot_hat
@@ -1370,7 +1413,7 @@ class PhaseCoefficients:
                         - 174952.69161683554 * source_params.S_tot_hat_pow2
                     )
                     - 130668.37221912303 * source_params.S_tot_hat_pow2
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * (
                         -1.9826323844247842e6
                         + 208349.45742548333 * source_params.S_tot_hat
@@ -1399,14 +1442,14 @@ class PhaseCoefficients:
             (
                 2439.000000000001
                 - 31133.52170083207 * source_params.eta
-                + 28867.73328134167 * source_params.eta2
+                + 28867.73328134167 * source_params.eta_pow2
             )
             / (1.0 + 0.41143032589262585 * source_params.eta)
             + (
                 source_params.S_tot_hat
                 * (
                     16116.057657391262
-                    + source_params.eta3
+                    + source_params.eta_pow3
                     * (
                         -375818.0132734753
                         - 386247.80765802023 * source_params.S_tot_hat
@@ -1414,7 +1457,7 @@ class PhaseCoefficients:
                     + source_params.eta
                     * (-82355.86732027541 - 25843.06175439942 * source_params.S_tot_hat)
                     + 9861.635308837876 * source_params.S_tot_hat
-                    + source_params.eta2
+                    + source_params.eta_pow2
                     * (
                         229284.04542668918
                         + 117410.37432997991 * source_params.S_tot_hat
@@ -1485,160 +1528,197 @@ class PhaseCoefficients:
         # v2_int_bar - v4_MRD.
         d_v2intbar_v4MRD = (
             (
-                eta
+                source_params.eta
                 * (
                     0.9951733419499662
-                    + 101.21991715215253 * eta
-                    + 632.4731389009143 * eta2
+                    + 101.21991715215253 * source_params.eta
+                    + 632.4731389009143 * eta_pow2
                 )
             )
             / (
                 0.00016803066316882238
-                + 0.11412314719189287 * eta
-                + 1.8413983770369362 * eta2
-                + 1.0 * eta3
+                + 0.11412314719189287 * source_params.eta
+                + 1.8413983770369362 * eta_pow2
+                + 1.0 * eta_pow3
             )
             + (
-                S
+                source_params.S_tot_hat
                 * (
                     18.694178521101332
-                    + 16.89845522539974 * S
-                    + 4941.31613710257 * eta2 * S
-                    + eta * (-697.6773920613674 - 147.53381808989846 * S2)
-                    + 0.3612417066833153 * S2
-                    + eta3
+                    + 16.89845522539974 * source_params.S_tot_hat
+                    + 4941.31613710257 * eta_pow2 * source_params.S_tot_hat
+                    + source_params.eta
+                    * (
+                        -697.6773920613674
+                        - 147.53381808989846 * source_params.S_tot_hat_pow2
+                    )
+                    + 0.3612417066833153 * source_params.S_tot_hat_pow2
+                    + eta_pow3
                     * (
                         3531.552143264721
-                        - 14302.70838220423 * S
-                        + 178.85850322465944 * S2
+                        - 14302.70838220423 * source_params.S_tot_hat
+                        + 178.85850322465944 * source_params.S_tot_hat_pow2
                     )
                 )
             )
-            / (2.965640445745779 - 2.7706595614504725 * S + 1.0 * S2)
-            + dchi * delta * eta2 * (356.74395864902294 + 1693.326644293169 * eta2 * S)
+            / (
+                2.965640445745779
+                - 2.7706595614504725 * source_params.S_tot_hat
+                + 1.0 * source_params.S_tot_hat_pow2
+            )
+            + dchi
+            * delta
+            * eta_pow2
+            * (
+                356.74395864902294
+                + 1693.326644293169 * eta_pow2 * source_params.S_tot_hat
+            )
         )
         # v3_int - v4_MRD.
         d_v3int_v4MRD = (
             (
-                eta
+                source_params.eta
                 * (
                     -5.126358906504587
-                    - 227.46830225846668 * eta
-                    + 688.3609087244353 * eta2
-                    - 751.4184178636324 * eta3
+                    - 227.46830225846668 * source_params.eta
+                    + 688.3609087244353 * eta_pow2
+                    - 751.4184178636324 * eta_pow3
                 )
             )
-            / (-0.004551938711031158 - 0.7811680872741462 * eta + 1.0 * eta2)
+            / (
+                -0.004551938711031158
+                - 0.7811680872741462 * source_params.eta
+                + 1.0 * eta_pow2
+            )
             + (
-                S
+                source_params.S_tot_hat
                 * (
                     0.1549280856660919
-                    - 0.9539250460041732 * S
-                    - 539.4071941841604 * eta2 * S
-                    + eta * (73.79645135116367 - 8.13494176717772 * S2)
-                    - 2.84311102369862 * S2
-                    + eta3
+                    - 0.9539250460041732 * source_params.S_tot_hat
+                    - 539.4071941841604 * eta_pow2 * source_params.S_tot_hat
+                    + source_params.eta
+                    * (
+                        73.79645135116367
+                        - 8.13494176717772 * source_params.S_tot_hat_pow2
+                    )
+                    - 2.84311102369862 * source_params.S_tot_hat_pow2
+                    + eta_pow3
                     * (
                         -936.3740515136005
-                        + 1862.9097047992134 * S
-                        + 224.77581754671272 * S2
+                        + 1862.9097047992134 * source_params.S_tot_hat
+                        + 224.77581754671272 * source_params.S_tot_hat_pow2
                     )
                 )
             )
-            / (-1.5308507364054487 + 1.0 * S)
+            / (-1.5308507364054487 + 1.0 * source_params.S_tot_hat)
             + 2993.3598520496153 * dchi * delta * eta6
         )
         # v4_int - v3_int.
         d43_int = (
             (
                 0.4248820426833804
-                - 906.746595921514 * eta
-                - 282820.39946006844 * eta2
-                - 967049.2793750163 * eta3
-                + 670077.5414916876 * eta4
+                - 906.746595921514 * source_params.eta
+                - 282820.39946006844 * eta_pow2
+                - 967049.2793750163 * eta_pow3
+                + 670077.5414916876 * eta_pow4
             )
-            / (1.0 + 1670.9440812294847 * eta + 19783.077247023448 * eta2)
+            / (
+                1.0
+                + 1670.9440812294847 * source_params.eta
+                + 19783.077247023448 * eta_pow2
+            )
             + (
-                S
+                source_params.S_tot_hat
                 * (
                     0.22814271667259703
-                    + 1.1366593671801855 * S
-                    + eta3
+                    + 1.1366593671801855 * source_params.S_tot_hat
+                    + eta_pow3
                     * (
                         3499.432393555856
-                        - 877.8811492839261 * S
-                        - 4974.189172654984 * S2
+                        - 877.8811492839261 * source_params.S_tot_hat
+                        - 4974.189172654984 * source_params.S_tot_hat_pow2
                     )
-                    + eta * (12.840649528989287 - 61.17248283184154 * S2)
-                    + 0.4818323187946999 * S2
-                    + eta2
+                    + source_params.eta
+                    * (
+                        12.840649528989287
+                        - 61.17248283184154 * source_params.S_tot_hat_pow2
+                    )
+                    + 0.4818323187946999 * source_params.S_tot_hat_pow2
+                    + eta_pow2
                     * (
                         -711.8532052499075
-                        + 269.9234918621958 * S
-                        + 941.6974723887743 * S2
+                        + 269.9234918621958 * source_params.S_tot_hat
+                        + 941.6974723887743 * source_params.S_tot_hat_pow2
                     )
-                    + eta4
+                    + eta_pow4
                     * (
                         -4939.642457025497
-                        - 227.7672020783411 * S
-                        + 8745.201037897836 * S2
+                        - 227.7672020783411 * source_params.S_tot_hat
+                        + 8745.201037897836 * source_params.S_tot_hat_pow2
                     )
                 )
             )
-            / (-1.2442293719740283 + 1.0 * S)
-            + dchi * delta * (-514.8494071830514 + 1493.3851099678195 * eta) * eta3
+            / (-1.2442293719740283 + 1.0 * source_params.S_tot_hat)
+            + dchi
+            * delta
+            * (-514.8494071830514 + 1493.3851099678195 * source_params.eta)
+            * eta_pow3
         )
         # v2_int_bar
         v2_int_bar = (
             (
                 -82.54500000000004
-                - 5.58197349185435e6 * eta
-                - 3.5225742421184325e8 * eta2
-                + 1.4667258334378073e9 * eta3
+                - 5.58197349185435e6 * source_params.eta
+                - 3.5225742421184325e8 * eta_pow2
+                + 1.4667258334378073e9 * eta_pow3
             )
             / (
                 1.0
-                + 66757.12830903867 * eta
-                + 5.385164380400193e6 * eta2
-                + 2.5176585751772933e6 * eta3
+                + 66757.12830903867 * source_params.eta
+                + 5.385164380400193e6 * eta_pow2
+                + 2.5176585751772933e6 * eta_pow3
             )
             + (
-                S
+                source_params.S_tot_hat
                 * (
                     19.416719811164853
-                    - 36.066611959079935 * S
-                    - 0.8612656616290079 * S2
-                    + eta2
+                    - 36.066611959079935 * source_params.S_tot_hat
+                    - 0.8612656616290079 * source_params.S_tot_hat_pow2
+                    + eta_pow2
                     * (
                         170.97203068800542
-                        - 107.41099349364234 * S
-                        - 647.8103976942541 * S3
+                        - 107.41099349364234 * source_params.S_tot_hat
+                        - 647.8103976942541 * source_params.S_tot_hat_pow3
                     )
-                    + 5.95010003393006 * S3
-                    + eta3
+                    + 5.95010003393006 * source_params.S_tot_hat_pow3
+                    + eta_pow3
                     * (
                         -1365.1499998427248
-                        + 1152.425940764218 * S
-                        + 415.7134909564443 * S2
-                        + 1897.5444343138167 * S3
-                        - 866.283566780576 * S4
+                        + 1152.425940764218 * source_params.S_tot_hat
+                        + 415.7134909564443 * source_params.S_tot_hat_pow2
+                        + 1897.5444343138167 * source_params.S_tot_hat_pow3
+                        - 866.283566780576 * source_params.S_tot_hat_pow4
                     )
-                    + 4.984750041013893 * S4
-                    + eta
+                    + 4.984750041013893 * source_params.S_tot_hat_pow4
+                    + source_params.eta
                     * (
                         207.69898051583655
-                        - 132.88417400679026 * S
-                        - 17.671713040498304 * S2
-                        + 29.071788188638315 * S3
-                        + 37.462217031512786 * S4
+                        - 132.88417400679026 * source_params.S_tot_hat
+                        - 17.671713040498304 * source_params.S_tot_hat_pow2
+                        + 29.071788188638315 * source_params.S_tot_hat_pow3
+                        + 37.462217031512786 * source_params.S_tot_hat_pow4
                     )
                 )
             )
-            / (-1.1492259468169692 + 1.0 * S)
+            / (-1.1492259468169692 + 1.0 * source_params.S_tot_hat)
             + dchi
             * delta
-            * eta3
-            * (7343.130973149263 - 20486.813161100774 * eta + 515.9898508588834 * S)
+            * eta_pow3
+            * (
+                7343.130973149263
+                - 20486.813161100774 * source_params.eta
+                + 515.9898508588834 * source_params.S_tot_hat
+            )
         )
 
         v1_int = _d_phase_inspiral_ansatz()

@@ -1142,10 +1142,14 @@ class AmplitudeCoefficients:
         d2 = _d_amplitude_merge_ringdown_ansatz(
             powers_amplitude_f_peak, self, source_params.f_ring, source_params.f_damp
         )
-        self.delta_0, self.delta_1, self.delta_2, self.delta_3, self.delta_4 = (
-            _solve_delta_i(
-                AMPLITUDE_INSPIRAL_fJoin, f_mid, self.f_peak, v1, v2, v3, d1, d2
-            )
+        (
+            self.delta_0,
+            self.delta_1,
+            self.delta_2,
+            self.delta_3,
+            self.delta_4,
+        ) = _solve_delta_i(
+            AMPLITUDE_INSPIRAL_fJoin, f_mid, self.f_peak, v1, v2, v3, d1, d2
         )
 
         self.amp0 = (
@@ -1238,7 +1242,6 @@ def _get_polarization_from_amplitude_phase(amplitude, phase, iota):
 
 @ti.data_oriented
 class IMRPhenomD(BaseWaveform):
-
     def __init__(
         self,
         frequencies: ti.ScalarField,

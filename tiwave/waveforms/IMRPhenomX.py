@@ -10,17 +10,19 @@ from ..constants import *
 from ..utils import ComplexNumber, gauss_elimination, UsefulPowers
 from .base_waveform import BaseWaveform
 
-f_phase_ins_min = 0.0026
 
+# Frequently used constants
+sqrt2 = tm.sqrt(2)
 useful_powers_pi = UsefulPowers()
 useful_powers_pi.update(PI)
 # Prepare an instance of UsefulPowers for later use
-useful_powers_x = UsefulPowers()
+useful_powers_f1_int = UsefulPowers()
+useful_powers_f3_int = UsefulPowers()
 
 
 # Amplitude ansatz
 @ti.func
-def _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+def _amplitude_inspiral_ansatz(powers_of_Mf:ti.template(), amplitude_coefficients:ti.template(), pn_prefactors:ti.template()):
     """
     Eq. 6.3 in arXiv:2001.11412.
     Without amp0.
@@ -39,7 +41,7 @@ def _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefacto
 
 
 @ti.func
-def _d_amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+def _d_amplitude_inspiral_ansatz(powers_of_Mf:ti.template(), amplitude_coefficients:ti.template(), pn_prefactors:ti.template()):
     """
     Without amp0.
     """
@@ -56,7 +58,7 @@ def _d_amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefac
 
 
 @ti.func
-def _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients):
+def _amplitude_intermediate_ansatz(powers_of_Mf:ti.template(), amplitude_coefficients:ti.template()):
     """
     Eq. 6.7 in arXiv:2001.11412.
     Only the recommended fitting model `104` with 4th order polynomial ansatz are implemented.
@@ -72,7 +74,7 @@ def _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients):
 
 
 @ti.func
-def _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_ring):
+def _amplitude_merge_ringdown_ansatz(powers_of_Mf:ti.template(), amplitude_coefficients:ti.template(), source_params:ti,template()):
     """
     Eq. 6.19 in arXiv:2001.11412.
     Different notation with Eq. 6.19: gamma_1: a_R, gamma_2: lambda, gamma_3: sigma
@@ -81,7 +83,7 @@ def _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_rin
     gamma3_fdamp: f_damp * sigma
     gamma3_fdamp_pow2: (f_damp * sigma)^2
     """
-    f_minus_fring = powers_of_Mf.one - f_ring
+    f_minus_fring = powers_of_Mf.one - source_params.f_ring
     return (
         amplitude_coefficients.gamma1_gamma3_fdamp
         / (f_minus_fring * f_minus_fring + amplitude_coefficients.gamma3_fdamp_pow2)
@@ -90,12 +92,12 @@ def _amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_rin
 
 
 @ti.func
-def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_ring):
+def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf:ti.template(), amplitude_coefficients:ti.template(), source_params:ti.template()):
     """
     Derivative with respect to f of the amplitude merge-ringdown ansatz.
     """
     # f - f_ring
-    f_minus_fring = powers_of_Mf.one - f_ring
+    f_minus_fring = powers_of_Mf.one - source_params.f_ring
     # (f - f_ring)^2
     f_minus_fring_pow2 = f_minus_fring * f_minus_fring
     # (f - f_ring)^2 + (gamma_3 * f_damp)^2
@@ -113,43 +115,38 @@ def _d_amplitude_merge_ringdown_ansatz(powers_of_Mf, amplitude_coefficients, f_r
 
 # Phase ansatz
 @ti.func
-def _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
+def _phase_inspiral_ansatz(powers_of_Mf:ti.template(), phase_coefficients:ti.template(), pn_prefactors:ti.template()):
     """
     Eq. 7.1 in arXiv:2001.11412.
     Only the recommended fitting model `104` are implemented.
+    Without :math:`1/\eta`
     """
-    return (
-        3.0
-        / 128.0
-        * (
-            pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds
-            + pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds
-            + pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one
-            + pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds
-            + pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third
-            + pn_prefactors.prefactor_varphi_5
-            + pn_prefactors.prefactor_varphi_5l
-            * (powers_of_Mf.log + useful_powers_pi.log)
-            + pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third
-            + pn_prefactors.prefactor_varphi_6l
-            * powers_of_Mf.third
-            * (powers_of_Mf.log + useful_powers_pi.log)
-            + pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
-        )
-        + (
-            phase_coefficients.sigma_1 * powers_of_Mf.one
-            + 0.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
-            + 0.6 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds
-            + 0.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
-        )
-        + phase_coefficients.sigma_0
+    return 3.0 / 128.0 * (
+        pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds
+        + pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds
+        + pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one
+        + pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds
+        + pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third
+        + pn_prefactors.prefactor_varphi_5
+        + pn_prefactors.prefactor_varphi_5l * (powers_of_Mf.log + useful_powers_pi.log)
+        + pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third
+        + pn_prefactors.prefactor_varphi_6l
+        * powers_of_Mf.third
+        * (powers_of_Mf.log + useful_powers_pi.log)
+        + pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
+    ) + (
+        phase_coefficients.sigma_0
+        + phase_coefficients.sigma_1 * powers_of_Mf.one
+        + 0.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
+        + 0.6 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds
+        + 0.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
     )
 
 
 @ti.func
-def _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
+def _d_phase_inspiral_ansatz(powers_of_Mf:ti.template(), phase_coefficients:ti.template(), pn_prefactors:ti.template()):
     """
-    without 1/eta
+    Without :math:`1/\eta`
     """
     return 3.0 / 128.0 * (
         -5.0 * pn_prefactors.prefactor_varphi_0 / powers_of_Mf.eight_thirds
@@ -172,7 +169,7 @@ def _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
 
 
 @ti.func
-def _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients):
+def _phase_intermediate_ansatz(powers_of_Mf:ti.template(), phase_coefficients:ti.template()):
     """
     without 1/eta
     """
@@ -184,7 +181,7 @@ def _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients):
 
 
 @ti.func
-def _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients):
+def _d_phase_intermediate_ansatz(powers_of_Mf:ti.template(), phase_coefficients:ti.template()):
     """
     without 1/eta
     """
@@ -196,55 +193,64 @@ def _d_phase_intermediate_ansatz(powers_of_Mf, phase_coefficients):
 
 
 @ti.func
-def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp):
+def _d_phase_merge_ringdown_ansatz(
+    powers_of_Mf: ti.template(),
+    phase_coefficients: ti.template(),
+    source_params: ti.template(),
+):
     """
     without 1/eta
     Eq. 7.12 of arXiv:2001.11412.
     """
 
     return (
-        phase_coefficients.c0
-        + phase_coefficients.c1 / powers_of_Mf.one_third
-        + phase_coefficients.c2 / powers_of_Mf.two
-        + phase_coefficients.c4 / powers_of_Mf.four
-        + phase_coefficients.cL / (f_damp * f_damp + (powers_of_Mf.one - f_ring) ** 2)
+        phase_coefficients.c_0
+        + phase_coefficients.c_1 / powers_of_Mf.one_third
+        + phase_coefficients.c_2 / powers_of_Mf.two
+        + phase_coefficients.c_4 / powers_of_Mf.four
+        + phase_coefficients.c_L
+        / (source_params.f_damp_pow2 + (powers_of_Mf.one - source_params.f_ring) ** 2)
     )
 
 
 @ti.func
-def _phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_damp):
+def _phase_merge_ringdown_ansatz(
+    powers_of_Mf: ti.template(),
+    phase_coefficients: ti.template(),
+    source_params: ti.template(),
+):
     """
     without 1/eta
     """
     return (
-        phase_coefficients.alpha_1
-        + phase_coefficients.alpha_2 / powers_of_Mf.two
-        + phase_coefficients.alpha_3 / powers_of_Mf.fourth
-        + phase_coefficients.alpha_4
-        * f_damp
-        / (f_damp**2 + (powers_of_Mf.one - phase_coefficients.alpha_5 * f_ring) ** 2)
+        phase_coefficients.c_0 * powers_of_Mf.one
+        + 1.5 * phase_coefficients.c_1 * powers_of_Mf.two_third
+        - phase_coefficients.c_2 / powers_of_Mf.one
+        - phase_coefficients.c_4 / 3.0 / powers_of_Mf.three
+        + phase_coefficients.c_L
+        / source_params.f_damp
+        * tm.atan2((powers_of_Mf.one - source_params.f_ring), source_params.f_damp)
     )
 
 
 @ti.dataclass
 class SourceParameters:
+    # TODO: doc detail defination and unit!
     # passed in parameters
-    M: ti.f64  # total mass
+    M: ti.f64  # total mass (solar mass)
     q: ti.f64
     chi_1: ti.f64
     chi_2: ti.f64
-    dL_Mpc: ti.f64
+    dL_Mpc: ti.f64  # luminosity distance (Mpc)
     iota: ti.f64
     phase_ref: ti.f64
     tc: ti.f64
-    # base parameters
+    # derived parameters
     dL_SI: ti.f64
-    mass_1: ti.f64
-    mass_2: ti.f64
+    m_1: ti.f64
+    m_2: ti.f64
     M_sec: ti.f64  # total mass in second
     eta: ti.f64  # symmetric_mass_ratio
-    eta_pow2: ti.f64  # eta^2
-    eta_pow3: ti.f64
     delta: ti.f64
     chi_s: ti.f64
     chi_a: ti.f64
@@ -252,12 +258,16 @@ class SourceParameters:
     chi_a2: ti.f64
     chi_PN: ti.f64
     xi: ti.f64
-    # derived parameters
-    f_amp_ins_max: ti.f64
     # cache frequently used parameters
+    eta_pow2: ti.f64  # eta^2
+    eta_pow3: ti.f64
+    eta_pow4: ti.f64
 
     @ti.func
-    def update_all_source_parameters(self, parameters):
+    def update_all_source_parameters(self, parameters: ti.template()):
+        """
+        Totally 9 parameters are needed: M, q, chi1, chi2, iota, tc, phi0, dL.
+        """
         # total 11 parameters: m1, m1, chi1, chi2, iota, psi, tc, phi0, dL, lon, lat
         # 3 only used in response function: psi, lon, lat
         # mass is in the unit of solar mass
@@ -270,12 +280,12 @@ class SourceParameters:
         self.iota = parameters["inclination"]
         self.phase_ref = parameters["reference_phase"]
         self.tc = parameters["coalescence_time"]
-        # base parameters
-        self.mass_1 = self.M / (1 + self.q)
-        self.mass_2 = self.M - self.mass_1
+        # derived parameters
+        self.m_1 = self.M / (1 + self.q)
+        self.m_2 = self.M - self.m_1
         self.dL_SI = self.dL_Mpc * 1e6 * PC_SI
         self.M_sec = self.M * MTSUN_SI
-        self.eta = self.mass_1 * self.mass_2 / (self.M * self.M)
+        self.eta = self.m_1 * self.m_2 / (self.M * self.M)
         self.eta_pow2 = self.eta * self.eta
         self.eta_pow3 = self.eta * self.eta_pow2
         self.eta_pow4 = self.eta + self.eta_pow3
@@ -285,10 +295,10 @@ class SourceParameters:
 
         self.delta = tm.sqrt(1.0 - 4.0 * self.eta)
         self.chi_PN = (
-            self.mass_1 * self.chi_1 + self.mass_2 * self.chi_2
+            self.m_1 * self.chi_1 + self.m_2 * self.chi_2
         ) / self.M - 38.0 / 113.0 * self.eta * (self.chi_1 + self.chi_2)
         self.chi_PN_hat = (
-            (self.mass_1 * self.chi_1 + self.mass_2 * self.chi_2) / self.M
+            (self.m_1 * self.chi_1 + self.m_2 * self.chi_2) / self.M
             - 38.0 / 113.0 * self.eta * (self.chi_1 + self.chi_2)
         ) / (1.0 - (76.0 / 113.0 * self.eta))
         self.chi_PN_hat_pow2 = self.chi_PN_hat * self.chi_PN_hat
@@ -305,12 +315,12 @@ class SourceParameters:
         self.f_MECO = self._f_MECO()
         self.f_ISCO = self._f_ISCO()
 
-        self.f_amp_ins_max = self.f_MECO + 0.25 * (self.f_ISCO - self.f_MECO)
-
         self.S_tot_hat = (
-            self.mass_1 * self.mass_1 * self.chi_1
-            + self.mass_2 * self.mass_2 * self.chi_2
+            self.m_1 * self.m_1 * self.chi_1 + self.m_2 * self.m_2 * self.chi_2
         ) / (self.M * self.M)
+        self.S_tot_hat_pow2 = self.S_tot_hat * self.S_tot_hat
+        self.S_tot_hat_pow3 = self.S_tot_hat * self.S_tot_hat_pow2
+        self.S_tot_hat_pow4 = self.S_tot_hat * self.S_tot_hat_pow3
 
         self.f_ring = (
             0.05947169566573468
@@ -524,10 +534,10 @@ class AmplitudeCoefficients:
     amp_0: ti.f64
 
     @ti.func
-    def _compute_collocation_points(self, source_params: ti.template()):
+    def _ins_int_colloc_points(self, source_params: ti.template()):
         """
         Computing collocation points in insprial and intermediate range.
-        Only can be called after updating merge-ringdown coefficient, since the f_peak 
+        Only can be called after updating merge-ringdown coefficient, since the f_peak
         is needed for intermediate collocation points.
         """
         # Insprial, Eq.6.5.
@@ -674,13 +684,30 @@ class AmplitudeCoefficients:
     ):
         """
         Only the recommended fit model `104` is implemented, and only can be called after
-        updated the inspiral and merge-ringdown coefficients.
+        updated the inspiral and merge-ringdown coefficients. 
+
+        Different with the implementaion in lalsimulation, here we fully simply :math:`A_0` as:
+        .. math::
+            \begin{aligned}
+            \frac{A_0(f_1)}{A_{\mathrm{int}}^{\mathrm{inv}}(f_1)} &= A_0(f_1)A_{\mathrm{ins}}(f_1),\\
+            A_{\mathrm{int}}^{\mathrm{inv}}(f_1) &= 1/A_{\mathrm{ins}}(f_1),
+            \end{aligned}      
+        and 
+        .. math::
+            \begin{aligned}
+            \left[\frac{A_0(f_1)}{A_{\mathrm{int}}^{\mathrm{inv}}(f_1)}\right]' &= \left[A_0(f_1)A_{\mathrm{ins}}(f_1)\right]', \\
+            \left[A_{\mathrm{int}}^{\mathrm{inv}}(f_1)\right]' &= \frac{A'_{\mathrm{ins}}(f_1)}{A_{\mathrm{ins}}^{2}(f_1)}
+            \end{aligned}        
+        The case of point at :math:`f_3` is similar. Thus there will be a different of 
+        factor :math:`f^{7/6}` in amplitude_intermediate_ansatz function.
         """
-        # TODO: prefactor of frequency whether including amp0
+        useful_powers_f1_int.update(self.int_colloc_points[0])
+        useful_powers_f3_int.update(self.int_colloc_points[2])
+
         self.int_colloc_values[0] = 1.0 / _amplitude_inspiral_ansatz(
-            useful_powers_x.update(self.int_colloc_points[0]), self, pn_prefactors
+            useful_powers_f1_int, self, pn_prefactors
         )
-        self.int_colloc_values[1] = (
+        self.int_colloc_values[1] = self.int_colloc_points[1] ** (-7 / 6) / (
             (
                 1.4873184918202145
                 + 1974.6112656679577 * source_params.eta
@@ -718,13 +745,63 @@ class AmplitudeCoefficients:
             * source_params.eta_pow2
         )
         self.int_colloc_values[2] = 1.0 / _amplitude_merge_ringdown_ansatz(
-            useful_powers_x.update(
-                self.self.int_colloc_points[2], self, source_params.f_ring
+            useful_powers_f3_int, self, source_params.f_ring
+        )
+        self.int_colloc_values[3] = (
+            _d_amplitude_inspiral_ansatz(useful_powers_f1_int, self, pn_prefactors)
+            / self.int_colloc_values[0] ** 2
+        )
+        self.int_colloc_values[4] = (
+            _d_amplitude_merge_ringdown_ansatz(
+                useful_powers_f3_int, self, source_params.f_ring
             )
+            / self.int_colloc_values[2] ** 2
         )
 
-        Ab_int = ti.Matrix([[], [], [], [], []])
-
+        Ab_int = ti.Matrix(
+            [
+                [
+                    1.0,
+                    self.ins_colloc_points[0],
+                    self.ins_colloc_points[0] ** 2,
+                    self.ins_colloc_points[0] ** 3,
+                    self.ins_colloc_points[0] ** 4,
+                    self.ins_colloc_values[0],
+                ],
+                [
+                    1.0,
+                    self.ins_colloc_points[1],
+                    self.ins_colloc_points[1] ** 2,
+                    self.ins_colloc_points[1] ** 3,
+                    self.ins_colloc_points[1] ** 4,
+                    self.ins_colloc_values[1],
+                ],
+                [
+                    1.0,
+                    self.ins_colloc_points[2],
+                    self.ins_colloc_points[2] ** 2,
+                    self.ins_colloc_points[2] ** 3,
+                    self.ins_colloc_points[2] ** 4,
+                    self.ins_colloc_values[2],
+                ],
+                [
+                    0.0,
+                    1.0,
+                    2.0 * self.ins_colloc_points[0],
+                    3.0 * self.ins_colloc_points[0] ** 2,
+                    4.0 * self.ins_colloc_points[0] ** 3,
+                    self.ins_colloc_values[3],
+                ],
+                [
+                    0.0,
+                    1.0,
+                    2.0 * self.ins_colloc_points[2],
+                    3.0 * self.ins_colloc_points[2] ** 2,
+                    4.0 * self.ins_colloc_points[2] ** 3,
+                    self.ins_colloc_values[4],
+                ],
+            ]
+        )
         (
             self.alpha_0,
             self.alpha_1,
@@ -867,7 +944,12 @@ class AmplitudeCoefficients:
 
     @ti.func
     def compute_amplitude_coefficients(self, source_params, pn_prefactors):
-        # The common prefactor, A_0
+        self._merge_ringdown_coefficients(source_params)
+        self._ins_int_colloc_points(source_params)
+        self._inspiral_coefficients(source_params)
+        self._intermediate_coefficients(source_params, pn_prefactors)
+
+        # The common prefactor, A0 (without f^{-7/6})
         self.amp0 = (
             0.25
             * tm.sqrt(10.0 / 3.0 * source_params.eta / useful_powers_pi.four_thirds)
@@ -880,13 +962,12 @@ class AmplitudeCoefficients:
 
 @ti.dataclass
 class PhaseCoefficients:
-    # Inspiral
+    # Inspiral (104 fitting model)
     sigma_0: ti.f64
     sigma_1: ti.f64
     sigma_2: ti.f64
     sigma_3: ti.f64
     sigma_4: ti.f64
-    sigma_5: ti.f64
     # Intermediate
     beta_0: ti.f64
     beta_1: ti.f64
@@ -894,11 +975,327 @@ class PhaseCoefficients:
     beta_3: ti.f64
     beta_4: ti.f64
     # Merge_ringdown
-    c0: ti.f64
-    c1: ti.f64  # f^-1/3
-    c2: ti.f64  # f^-2
-    c3: ti.f64  # f_-4
-    cRD: ti.f64  # Lorentzian term
+    c_0: ti.f64
+    c_1: ti.f64  # f^-1/3
+    c_2: ti.f64  # f^-2
+    c_4: ti.f64  # f_-4
+    c_L: ti.f64  # Lorentzian term
+    MRD_colloc_points: ti.types.vector(4, ti.f64)
+    MRD_colloc_values: ti.types.vector(4, ti.f64)
+
+    @ti.func
+    def _all_colloc_points(self, source_params: ti.template()):
+        # Merge-ringdown
+        fmin_MRD = 0.3 * source_params.f_ring + 0.6 * source_params.f_ISCO
+        fmax_MRD = source_params.f_ring + 1.25 * source_params.f_damp
+        frange_MRD = fmax_MRD - fmin_MRD
+        self.MRD_colloc_points[0] = fmin_MRD
+        self.MRD_colloc_points[1] = fmin_MRD + 0.5 * (1 - 1 / sqrt2) * frange_MRD
+        self.MRD_colloc_points[2] = fmin_MRD + 0.5 * frange_MRD
+        self.MRD_colloc_points[3] = source_params.f_ring
+        self.MRD_colloc_points[4] = fmax_MRD
+
+        # Inspiral
+        # Intermediate
+
+    @ti.func
+    def _merge_ringdown_coefficients(self, source_params: ti.template()):
+        # Difference between collocation points 1 and 2 (v1 - v2)
+        d12_MRD = (
+            source_params.eta
+            * (
+                0.7207992174994245
+                - 1.237332073800276 * source_params.eta
+                + 6.086871214811216 * source_params.eta_pow2
+            )
+            / (
+                0.006851189888541745
+                + 0.06099184229137391 * source_params.eta
+                - 0.15500218299268662 * source_params.eta_pow2
+                + 1.0 * source_params.eta_pow3
+            )
+            + (
+                (
+                    0.06519048552628343
+                    - 25.25397971063995 * source_params.eta
+                    - 308.62513664956975 * source_params.eta_pow4
+                    + 58.59408241189781 * source_params.eta_pow2
+                    + 160.14971486043524 * source_params.eta_pow3
+                )
+                * source_params.S_tot_hat
+                + source_params.eta
+                * (
+                    -5.215945111216946
+                    + 153.95945758807616 * source_params.eta
+                    - 693.0504179144295 * source_params.eta_pow2
+                    + 835.1725103648205 * source_params.eta_pow3
+                )
+                * source_params.S_tot_hat_pow2
+                + (
+                    0.20035146870472367
+                    - 0.28745205203100666 * source_params.eta
+                    - 47.56042058800358 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat_pow3
+                + source_params.eta
+                * (
+                    5.7756520242745735
+                    - 43.97332874253772 * source_params.eta
+                    + 338.7263666984089 * source_params.eta_pow3
+                )
+                * source_params.S_tot_hat_pow4
+                + (
+                    -0.2697933899920511
+                    + 4.917070939324979 * source_params.eta
+                    - 22.384949087140086 * source_params.eta_pow4
+                    - 11.61488280763592 * source_params.eta_pow2
+                )
+                * source_params.S_tot_hat_pow5
+            )
+            / (1.0 - 0.6628745847248266 * source_params.S_tot_hat)
+            - 23.504907495268824
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
+        # Difference between collocation points 2 and 4 (v2 - v4)
+        d24_MRD = (
+            (
+                source_params.eta
+                * (
+                    -9.460253118496386
+                    + 9.429314399633007 * source_params.eta
+                    + 64.69109972468395 * source_params.eta_pow2
+                )
+            )
+            / (
+                -0.0670554310666559
+                - 0.09987544893382533 * source_params.eta
+                + 1.0 * source_params.eta_pow2
+            )
+            + (
+                17.36495157980372 * source_params.eta * source_params.S_tot_hat
+                + source_params.eta_pow3
+                * source_params.S_tot_hat
+                * (930.3458437154668 + 808.457330742532 * source_params.S_tot_hat)
+                + source_params.eta_pow4
+                * source_params.S_tot_hat
+                * (
+                    -774.3633787391745
+                    - 2177.554979351284 * source_params.S_tot_hat
+                    - 1031.846477275069 * source_params.S_tot_hat_pow2
+                )
+                + source_params.eta_pow2
+                * source_params.S_tot_hat
+                * (
+                    -191.00932194869588
+                    - 62.997389062600035 * source_params.S_tot_hat
+                    + 64.42947340363101 * source_params.S_tot_hat_pow2
+                )
+                + 0.04497628581617564 * source_params.S_tot_hat_pow3
+            )
+            / (1.0 - 0.7267610313751913 * source_params.S_tot_hat)
+            + source_params.delta_chi
+            * source_params.delta
+            * (-36.66374091965371 + 91.60477826830407 * source_params.eta)
+            * source_params.eta_pow2
+        )
+        # Difference between collocation points 3 and 4 (v3 - v4)
+        d34_MRD = (
+            (
+                source_params.eta
+                * (-8.506898502692536 + 13.936621412517798 * source_params.eta)
+            )
+            / (-0.40919671232073945 + 1.0 * source_params.eta)
+            + (
+                source_params.eta
+                * (
+                    1.7280582989361533 * source_params.S_tot_hat
+                    + 18.41570325463385 * source_params.S_tot_hat_pow3
+                    - 13.743271480938104 * source_params.S_tot_hat_pow4
+                )
+                + source_params.eta_pow2
+                * (
+                    73.8367329022058 * source_params.S_tot_hat
+                    - 95.57802408341716 * source_params.S_tot_hat_pow3
+                    + 215.78111099820157 * source_params.S_tot_hat_pow4
+                )
+                + 0.046849371468156265 * source_params.S_tot_hat_pow2
+                + source_params.eta_pow3
+                * source_params.S_tot_hat
+                * (
+                    -27.976989112929353
+                    + 6.404060932334562 * source_params.S_tot_hat
+                    - 633.1966645925428 * source_params.S_tot_hat_pow3
+                    + 109.04824706217418 * source_params.S_tot_hat_pow2
+                )
+            )
+            / (1.0 - 0.6862449113932192 * source_params.S_tot_hat)
+            + 641.8965762829259
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow5
+        )
+        # Merge-ringdown phase at collocation point f4 (f_ring)
+        v4_MRD = (
+            (
+                -85.86062966719405
+                - 4616.740713893726 * source_params.eta
+                - 4925.756920247186 * source_params.eta_pow2
+                + 7732.064464348168 * source_params.eta_pow3
+                + 12828.269960300782 * source_params.eta_pow4
+                - 39783.51698102803 * source_params.eta_pow5
+            )
+            / (1.0 + 50.206318806624004 * source_params.eta)
+            + (
+                source_params.S_tot_hat
+                * (
+                    33.335857451144356
+                    - 36.49019206094966 * source_params.S_tot_hat
+                    + source_params.eta_pow3
+                    * (
+                        1497.3545918387515
+                        - 101.72731770500685 * source_params.S_tot_hat
+                    )
+                    * source_params.S_tot_hat
+                    - 3.835967351280833 * source_params.S_tot_hat_pow2
+                    + 2.302712009652155 * source_params.S_tot_hat_pow3
+                    + source_params.eta_pow2
+                    * (
+                        93.64156367505917
+                        - 18.184492163348665 * source_params.S_tot_hat
+                        + 423.48863373726243 * source_params.S_tot_hat_pow2
+                        - 104.36120236420928 * source_params.S_tot_hat_pow3
+                        - 719.8775484010988 * source_params.S_tot_hat_pow4
+                    )
+                    + 1.6533417657003922 * source_params.S_tot_hat_pow4
+                    + source_params.eta
+                    * (
+                        -69.19412903018717
+                        + 26.580344399838758 * source_params.S_tot_hat
+                        - 15.399770764623746 * source_params.S_tot_hat_pow2
+                        + 31.231253209893488 * source_params.S_tot_hat_pow3
+                        + 97.69027029734173 * source_params.S_tot_hat_pow4
+                    )
+                    + source_params.eta_pow4
+                    * (
+                        1075.8686153198323
+                        - 3443.0233614187396 * source_params.S_tot_hat
+                        - 4253.974688619423 * source_params.S_tot_hat_pow2
+                        - 608.2901586790335 * source_params.S_tot_hat_pow3
+                        + 5064.173605639933 * source_params.S_tot_hat_pow4
+                    )
+                )
+            )
+            / (-1.3705601055555852 + 1.0 * source_params.S_tot_hat)
+            + source_params.delta_chi
+            * source_params.delta
+            * source_params.eta
+            * (22.363215261437862 + 156.08206945239374 * source_params.eta)
+        )
+        # Difference between collocation points 5 and 4 (v5 - v4)
+        d54_MRD = (
+            (
+                source_params.eta
+                * (
+                    7.05731400277692
+                    + 22.455288821807095 * source_params.eta
+                    + 119.43820622871043 * source_params.eta_pow2
+                )
+            )
+            / (0.26026709603623255 + 1.0 * source_params.eta)
+            + (
+                source_params.eta_pow2
+                * (134.88158268621922 - 56.05992404859163 * source_params.S_tot_hat)
+                * source_params.S_tot_hat
+                + source_params.eta
+                * source_params.S_tot_hat
+                * (-7.9407123129681425 + 9.486783128047414 * source_params.S_tot_hat)
+                + source_params.eta_pow3
+                * source_params.S_tot_hat
+                * (-316.26970506215554 + 90.31815139272628 * source_params.S_tot_hat)
+            )
+            / (1.0 - 0.7162058321905909 * source_params.S_tot_hat)
+            + 43.82713604567481
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow3
+        )
+        self.MRD_colloc_values[4] = d54_MRD + v4_MRD
+        self.MRD_colloc_values[3] = v4_MRD
+        self.MRD_colloc_values[2] = d34_MRD + v4_MRD
+        self.MRD_colloc_values[1] = d24_MRD + v4_MRD
+        self.MRD_colloc_values[0] = d12_MRD + self.MRD_colloc_values[1]
+
+        Ab_MRD = ti.Matrix(
+            [
+                [
+                    1,
+                    self.MRD_colloc_points[0] ** (-1 / 3),
+                    self.MRD_colloc_points[0] ** (-2),
+                    self.MRD_colloc_points[0] ** (-4),
+                    1.0
+                    / (
+                        source_params.f_damp_pow2
+                        + (self.MRD_colloc_points[0] - source_params.f_ring) ** 2
+                    ),
+                    self.MRD_colloc_values[0],
+                ],
+                [
+                    1,
+                    self.MRD_colloc_points[1] ** (-1 / 3),
+                    self.MRD_colloc_points[1] ** (-2),
+                    self.MRD_colloc_points[1] ** (-4),
+                    1.0
+                    / (
+                        source_params.f_damp_pow2
+                        + (self.MRD_colloc_points[1] - source_params.f_ring) ** 2
+                    ),
+                    self.MRD_colloc_values[1],
+                ],
+                [
+                    1,
+                    self.MRD_colloc_points[2] ** (-1 / 3),
+                    self.MRD_colloc_points[2] ** (-2),
+                    self.MRD_colloc_points[2] ** (-4),
+                    1.0
+                    / (
+                        source_params.f_damp_pow2
+                        + (self.MRD_colloc_points[2] - source_params.f_ring) ** 2
+                    ),
+                    self.MRD_colloc_values[2],
+                ],
+                [
+                    1,
+                    self.MRD_colloc_points[3] ** (-1 / 3),
+                    self.MRD_colloc_points[3] ** (-2),
+                    self.MRD_colloc_points[3] ** (-4),
+                    1.0
+                    / (
+                        source_params.f_damp_pow2
+                        + (self.MRD_colloc_points[3] - source_params.f_ring) ** 2
+                    ),
+                    self.MRD_colloc_values[3],
+                ],
+                [
+                    1,
+                    self.MRD_colloc_points[4] ** (-1 / 3),
+                    self.MRD_colloc_points[4] ** (-2),
+                    self.MRD_colloc_points[4] ** (-4),
+                    1.0
+                    / (
+                        source_params.f_damp_pow2
+                        + (self.MRD_colloc_points[4] - source_params.f_ring) ** 2
+                    ),
+                    self.MRD_colloc_values[4],
+                ],
+            ]
+        )
+        self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab_MRD)
+
+    @ti.func
+    def _inspiral_coefficients(self, source_params: ti.template()):
+        """104 model"""
 
     @ti.func
     def compute_phase_coefficients(
@@ -1293,7 +1690,7 @@ class PhaseCoefficients:
                 ],
             ]
         )
-        self.c0, self.c1, self.c2, self.c4, self.cRD = gauss_elimination(Ab_mr)
+        self.c_0, self.c_1, self.c_2, self.c_4, self.cRD = gauss_elimination(Ab_mr)
 
         # Inspiral (Only the recommended fitting model with 4 pseudo-PN coefficients is implemented)
         f_phase_ins_max = 1.02 * source_params.f_MECO
@@ -1566,8 +1963,8 @@ class PhaseCoefficients:
                 - 2.7706595614504725 * source_params.S_tot_hat
                 + 1.0 * source_params.S_tot_hat_pow2
             )
-            + dchi
-            * delta
+            + source_params.delta_chi
+            * source_params.delta
             * eta_pow2
             * (
                 356.74395864902294
@@ -1611,7 +2008,10 @@ class PhaseCoefficients:
                 )
             )
             / (-1.5308507364054487 + 1.0 * source_params.S_tot_hat)
-            + 2993.3598520496153 * dchi * delta * eta6
+            + 2993.3598520496153
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow6
         )
         # v4_int - v3_int.
         d43_int = (
@@ -1659,8 +2059,8 @@ class PhaseCoefficients:
                 )
             )
             / (-1.2442293719740283 + 1.0 * source_params.S_tot_hat)
-            + dchi
-            * delta
+            + source_params.delta_chi
+            * source_params.delta
             * (-514.8494071830514 + 1493.3851099678195 * source_params.eta)
             * eta_pow3
         )
@@ -1711,8 +2111,8 @@ class PhaseCoefficients:
                 )
             )
             / (-1.1492259468169692 + 1.0 * source_params.S_tot_hat)
-            + dchi
-            * delta
+            + source_params.delta_chi
+            * source_params.delta
             * eta_pow3
             * (
                 7343.130973149263
@@ -1925,7 +2325,7 @@ class IMRPhenomXAS(BaseWaveform):
             )
             / self.source_parameters[None].eta
         )
-        # t0 = (_d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp) + self.phase_coefficients[None].C2_merge_ringdown)/self.source_parameters[None].eta
+        # t0 = (_d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp) + self.phase_coefficients[None].c_2_merge_ringdown)/self.source_parameters[None].eta
         time_shift = (
             t0
             - 2
@@ -2001,8 +2401,8 @@ class IMRPhenomXAS(BaseWaveform):
     @ti.func
     def _parameter_check(self):
         assert (
-            self.source_parameters[None].mass_1 > self.source_parameters[None].mass_2
-        ), f"require m1 > m2, you are passing m1: {self.source_parameters[None].mass_1}, m2:{self.source_parameters[None].mass_2}"
+            self.source_parameters[None].m_1 > self.source_parameters[None].m_2
+        ), f"require m1 > m2, you are passing m1: {self.source_parameters[None].m_1}, m2:{self.source_parameters[None].m_2}"
         assert (
             self.source_parameters[None].q > 0.0
             and self.source_parameters[None].q < 1.0

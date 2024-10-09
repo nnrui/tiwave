@@ -15,9 +15,11 @@ from .base_waveform import BaseWaveform
 sqrt2 = tm.sqrt(2)
 useful_powers_pi = UsefulPowers()
 useful_powers_pi.update(PI)
-# Prepare an instance of UsefulPowers for later use
-useful_powers_f1_int = UsefulPowers()
-useful_powers_f3_int = UsefulPowers()
+# Prepare instances of UsefulPowers for later use
+useful_powers_fmin_int_amp = UsefulPowers()
+useful_powers_fmax_int_amp = UsefulPowers()
+useful_powers_fmin_int_phase = UsefulPowers()
+useful_powers_fmax_int_phase = UsefulPowers()
 
 
 # Amplitude ansatz
@@ -196,29 +198,48 @@ def _d_phase_inspiral_ansatz(
 
 @ti.func
 def _phase_intermediate_ansatz(
-    powers_of_Mf: ti.template(), phase_coefficients: ti.template()
+    powers_of_Mf: ti.template(),
+    phase_coefficients: ti.template(),
+    source_params: ti.template(),
 ):
     """
     without 1/eta
     """
     return (
-        phase_coefficients.beta_1 * powers_of_Mf.one
-        + phase_coefficients.beta_2 * powers_of_Mf.log
-        - phase_coefficients.beta_3 / 3.0 / powers_of_Mf.three
+        phase_coefficients.beta_0 * powers_of_Mf.one
+        + phase_coefficients.beta_1 * powers_of_Mf.log
+        - phase_coefficients.beta_2 / powers_of_Mf.one
+        - phase_coefficients.beta_3 / 2.0 / powers_of_Mf.two
+        - phase_coefficients.beta_4 / 3.0 / powers_of_Mf.three
+        - 2.0
+        * phase_coefficients.c_L
+        / source_params.f_damp
+        * tm.atan2(
+            (powers_of_Mf.one - source_params.f_ring), 2.0 * source_params.f_damp
+        )
     )
 
 
 @ti.func
 def _d_phase_intermediate_ansatz(
-    powers_of_Mf: ti.template(), phase_coefficients: ti.template()
+    powers_of_Mf: ti.template(),
+    phase_coefficients: ti.template(),
+    source_params: ti.template(),
 ):
     """
     without 1/eta
     """
     return (
-        phase_coefficients.beta_1
-        + phase_coefficients.beta_2 / powers_of_Mf.one
-        + phase_coefficients.beta_3 / powers_of_Mf.four
+        phase_coefficients.beta_0
+        + phase_coefficients.beta_1 / powers_of_Mf.one
+        + phase_coefficients.beta_2 / powers_of_Mf.two
+        + phase_coefficients.beta_3 / powers_of_Mf.three
+        + phase_coefficients.beta_4 / powers_of_Mf.four
+        - phase_coefficients.c_L
+        / (
+            source_params.f_damp_pow2
+            + 0.25 * (powers_of_Mf.one - source_params.f_ring) ** 2
+        )
     )
 
 
@@ -731,11 +752,11 @@ class AmplitudeCoefficients:
         The case of point at :math:`f_3` is similar. Thus there will be a different of 
         factor :math:`f^{7/6}` in amplitude_intermediate_ansatz function.
         """
-        useful_powers_f1_int.update(self.int_colloc_points[0])
-        useful_powers_f3_int.update(self.int_colloc_points[2])
+        useful_powers_fmin_int_amp.update(self.int_colloc_points[0])
+        useful_powers_fmax_int_amp.update(self.int_colloc_points[2])
 
         self.int_colloc_values[0] = 1.0 / _amplitude_inspiral_ansatz(
-            useful_powers_f1_int, self, pn_prefactors
+            useful_powers_fmin_int_amp, self, pn_prefactors
         )
         self.int_colloc_values[1] = self.int_colloc_points[1] ** (-7 / 6) / (
             (
@@ -775,15 +796,17 @@ class AmplitudeCoefficients:
             * source_params.eta_pow2
         )
         self.int_colloc_values[2] = 1.0 / _amplitude_merge_ringdown_ansatz(
-            useful_powers_f3_int, self, source_params.f_ring
+            useful_powers_fmax_int_amp, self, source_params
         )
         self.int_colloc_values[3] = (
-            _d_amplitude_inspiral_ansatz(useful_powers_f1_int, self, pn_prefactors)
+            _d_amplitude_inspiral_ansatz(
+                useful_powers_fmin_int_amp, self, pn_prefactors
+            )
             / self.int_colloc_values[0] ** 2
         )
         self.int_colloc_values[4] = (
             _d_amplitude_merge_ringdown_ansatz(
-                useful_powers_f3_int, self, source_params.f_ring
+                useful_powers_fmax_int_amp, self, source_params
             )
             / self.int_colloc_values[2] ** 2
         )
@@ -1000,12 +1023,14 @@ class PhaseCoefficients:
     sigma_4: ti.f64
     ins_colloc_points: ti.types.vector(4, ti.f64)
     ins_colloc_values: ti.types.vector(4, ti.f64)
-    # Intermediate
+    # Intermediate (105 fitting model)
     beta_0: ti.f64
     beta_1: ti.f64
     beta_2: ti.f64
     beta_3: ti.f64
     beta_4: ti.f64
+    int_colloc_points: ti.types.vector(5, ti.f64)
+    int_colloc_values: ti.types.vector(5, ti.f64)
     # Merge_ringdown
     c_0: ti.f64
     c_1: ti.f64  # f^-1/3
@@ -1034,7 +1059,16 @@ class PhaseCoefficients:
         self.ins_colloc_points[1] = fmin_ins + 0.25 * frange_ins
         self.ins_colloc_points[2] = fmin_ins + 0.75 * frange_ins
         self.ins_colloc_points[3] = fmax_ins
-        # Intermediate
+        # Intermediate (fitting model 105)
+        delta_R = 0.03 * (fmin_MRD - source_params.f_MECO)
+        fmin_int = source_params.f_MECO - delta_R
+        fmax_int = fmin_MRD + 0.5 * delta_R
+        frange_int = fmax_int - fmin_int
+        self.int_colloc_points[0] = fmin_int
+        self.int_colloc_points[1] = fmin_int + 0.5 * (1.0 - 1 / sqrt2) * frange_int
+        self.int_colloc_points[2] = fmin_int + 0.5 * frange_int
+        self.int_colloc_points[3] = fmin_int + 0.5 * (1.0 + 1 / sqrt2) * frange_int
+        self.int_colloc_points[4] = fmax_int
 
     @ti.func
     def _merge_ringdown_coefficients(self, source_params: ti.template()):
@@ -1537,75 +1571,45 @@ class PhaseCoefficients:
         )
 
     @ti.func
-    def compute_phase_coefficients(
-        self, source_params, pn_prefactors, phase_ins_ver: ti.int
+    def _intermediate_coefficients(
+        self, source_params: ti.template(), pn_prefactors: ti.template()
     ):
-        # Inspiral coefficients:
-        # ver 104: Canonical TaylorF2, with 4 pseudo-PN coefficients.
-        # ver 105: Canonical TaylorF2, with 5 pseudo-PN coefficients.
-        # ver 114: Extended TaylorF2, with 4 pseudo-PN coefficients.
-        # ver 115: Extended TaylorF2, with 5 pseudo-PN coefficients.
-        if ti.static(phase_ins_ver == 104):
-            pass
-        elif ti.static(phase_ins_ver == 105):
-            pass
-        elif ti.static(phase_ins_ver == 114):
-            pass
-        elif ti.static(phase_ins_ver == 115):
-            pass
-        # Intermediate coefficients: beta_0, beta_1, beta_2, beta_3, beta_4
-        # ver 104: 4 coefficients with beta_3 = 0.
-        # ver 105: 5 coefficients.
-        if ti.static(phase_ins_ver == 104):
-            pass
-        elif ti.static(phase_ins_ver == 105):
-            pass
-
-        # intermediate (105, 5 collocation coefficients)
-        # !!! check again
-        f_phase_T = 0.6 * (0.5 * source_params.f_ring + source_params.f_ISCO)
-        delta_R = 0.03 * (f_phase_T - source_params.f_MECO)
-        f_phase_int_min = source_params.f_MECO - delta_R
-        f_phase_int_max = f_phase_T + 0.5 * delta_R
-        f_range_int = f_phase_int_max - f_phase_int_min
-        f2_int = f_phase_int_min + (0.5 - 1 / (2 * sqrt2)) * f_range_int
-        f3_int = f_phase_int_min + 0.5 * f_range_int
-        f4_int = f_phase_int_min + (0.5 + 1 / (2 * sqrt2)) * f_range_int
-
-        # v2_int_bar - v4_MRD.
-        d_v2intbar_v4MRD = (
+        """
+        Require inspiral and merge-ringdown coefficients, can only be called after updating
+        inspiral and merge-ringdown coefficients.
+        """
+        # v2_int - v4_MRD
+        d_v2int_v4MRD = (
             (
                 source_params.eta
                 * (
                     0.9951733419499662
                     + 101.21991715215253 * source_params.eta
-                    + 632.4731389009143 * eta_pow2
+                    + 632.4731389009143 * source_params.eta_pow2
                 )
             )
             / (
                 0.00016803066316882238
                 + 0.11412314719189287 * source_params.eta
-                + 1.8413983770369362 * eta_pow2
-                + 1.0 * eta_pow3
+                + 1.8413983770369362 * source_params.eta_pow2
+                + 1.0 * source_params.eta_pow3
             )
-            + (
-                source_params.S_tot_hat
+            + source_params.S_tot_hat
+            * (
+                18.694178521101332
+                + 16.89845522539974 * source_params.S_tot_hat
+                + 4941.31613710257 * source_params.eta_pow2 * source_params.S_tot_hat
+                + source_params.eta
                 * (
-                    18.694178521101332
-                    + 16.89845522539974 * source_params.S_tot_hat
-                    + 4941.31613710257 * eta_pow2 * source_params.S_tot_hat
-                    + source_params.eta
-                    * (
-                        -697.6773920613674
-                        - 147.53381808989846 * source_params.S_tot_hat_pow2
-                    )
-                    + 0.3612417066833153 * source_params.S_tot_hat_pow2
-                    + eta_pow3
-                    * (
-                        3531.552143264721
-                        - 14302.70838220423 * source_params.S_tot_hat
-                        + 178.85850322465944 * source_params.S_tot_hat_pow2
-                    )
+                    -697.6773920613674
+                    - 147.53381808989846 * source_params.S_tot_hat_pow2
+                )
+                + 0.3612417066833153 * source_params.S_tot_hat_pow2
+                + source_params.eta_pow3
+                * (
+                    3531.552143264721
+                    - 14302.70838220423 * source_params.S_tot_hat
+                    + 178.85850322465944 * source_params.S_tot_hat_pow2
                 )
             )
             / (
@@ -1615,46 +1619,39 @@ class PhaseCoefficients:
             )
             + source_params.delta_chi
             * source_params.delta
-            * eta_pow2
+            * source_params.eta_pow2
             * (
                 356.74395864902294
-                + 1693.326644293169 * eta_pow2 * source_params.S_tot_hat
+                + 1693.326644293169 * source_params.eta_pow2 * source_params.S_tot_hat
             )
         )
         # v3_int - v4_MRD.
         d_v3int_v4MRD = (
-            (
-                source_params.eta
-                * (
-                    -5.126358906504587
-                    - 227.46830225846668 * source_params.eta
-                    + 688.3609087244353 * eta_pow2
-                    - 751.4184178636324 * eta_pow3
-                )
+            source_params.eta
+            * (
+                -5.126358906504587
+                - 227.46830225846668 * source_params.eta
+                + 688.3609087244353 * source_params.eta_pow2
+                - 751.4184178636324 * source_params.eta_pow3
             )
             / (
                 -0.004551938711031158
                 - 0.7811680872741462 * source_params.eta
-                + 1.0 * eta_pow2
+                + 1.0 * source_params.eta_pow2
             )
-            + (
-                source_params.S_tot_hat
+            + source_params.S_tot_hat
+            * (
+                0.1549280856660919
+                - 0.9539250460041732 * source_params.S_tot_hat
+                - 539.4071941841604 * source_params.eta_pow2 * source_params.S_tot_hat
+                + source_params.eta
+                * (73.79645135116367 - 8.13494176717772 * source_params.S_tot_hat_pow2)
+                - 2.84311102369862 * source_params.S_tot_hat_pow2
+                + source_params.eta_pow3
                 * (
-                    0.1549280856660919
-                    - 0.9539250460041732 * source_params.S_tot_hat
-                    - 539.4071941841604 * eta_pow2 * source_params.S_tot_hat
-                    + source_params.eta
-                    * (
-                        73.79645135116367
-                        - 8.13494176717772 * source_params.S_tot_hat_pow2
-                    )
-                    - 2.84311102369862 * source_params.S_tot_hat_pow2
-                    + eta_pow3
-                    * (
-                        -936.3740515136005
-                        + 1862.9097047992134 * source_params.S_tot_hat
-                        + 224.77581754671272 * source_params.S_tot_hat_pow2
-                    )
+                    -936.3740515136005
+                    + 1862.9097047992134 * source_params.S_tot_hat
+                    + 224.77581754671272 * source_params.S_tot_hat_pow2
                 )
             )
             / (-1.5308507364054487 + 1.0 * source_params.S_tot_hat)
@@ -1668,102 +1665,98 @@ class PhaseCoefficients:
             (
                 0.4248820426833804
                 - 906.746595921514 * source_params.eta
-                - 282820.39946006844 * eta_pow2
-                - 967049.2793750163 * eta_pow3
-                + 670077.5414916876 * eta_pow4
+                - 282820.39946006844 * source_params.eta_pow2
+                - 967049.2793750163 * source_params.eta_pow3
+                + 670077.5414916876 * source_params.eta_pow4
             )
             / (
                 1.0
                 + 1670.9440812294847 * source_params.eta
-                + 19783.077247023448 * eta_pow2
+                + 19783.077247023448 * source_params.eta_pow2
             )
-            + (
-                source_params.S_tot_hat
+            + source_params.S_tot_hat
+            * (
+                0.22814271667259703
+                + 1.1366593671801855 * source_params.S_tot_hat
+                + source_params.eta_pow3
                 * (
-                    0.22814271667259703
-                    + 1.1366593671801855 * source_params.S_tot_hat
-                    + eta_pow3
-                    * (
-                        3499.432393555856
-                        - 877.8811492839261 * source_params.S_tot_hat
-                        - 4974.189172654984 * source_params.S_tot_hat_pow2
-                    )
-                    + source_params.eta
-                    * (
-                        12.840649528989287
-                        - 61.17248283184154 * source_params.S_tot_hat_pow2
-                    )
-                    + 0.4818323187946999 * source_params.S_tot_hat_pow2
-                    + eta_pow2
-                    * (
-                        -711.8532052499075
-                        + 269.9234918621958 * source_params.S_tot_hat
-                        + 941.6974723887743 * source_params.S_tot_hat_pow2
-                    )
-                    + eta_pow4
-                    * (
-                        -4939.642457025497
-                        - 227.7672020783411 * source_params.S_tot_hat
-                        + 8745.201037897836 * source_params.S_tot_hat_pow2
-                    )
+                    3499.432393555856
+                    - 877.8811492839261 * source_params.S_tot_hat
+                    - 4974.189172654984 * source_params.S_tot_hat_pow2
+                )
+                + source_params.eta
+                * (
+                    12.840649528989287
+                    - 61.17248283184154 * source_params.S_tot_hat_pow2
+                )
+                + 0.4818323187946999 * source_params.S_tot_hat_pow2
+                + source_params.eta_pow2
+                * (
+                    -711.8532052499075
+                    + 269.9234918621958 * source_params.S_tot_hat
+                    + 941.6974723887743 * source_params.S_tot_hat_pow2
+                )
+                + source_params.eta_pow4
+                * (
+                    -4939.642457025497
+                    - 227.7672020783411 * source_params.S_tot_hat
+                    + 8745.201037897836 * source_params.S_tot_hat_pow2
                 )
             )
             / (-1.2442293719740283 + 1.0 * source_params.S_tot_hat)
             + source_params.delta_chi
             * source_params.delta
             * (-514.8494071830514 + 1493.3851099678195 * source_params.eta)
-            * eta_pow3
+            * source_params.eta_pow3
         )
         # v2_int_bar
         v2_int_bar = (
             (
                 -82.54500000000004
                 - 5.58197349185435e6 * source_params.eta
-                - 3.5225742421184325e8 * eta_pow2
-                + 1.4667258334378073e9 * eta_pow3
+                - 3.5225742421184325e8 * source_params.eta_pow2
+                + 1.4667258334378073e9 * source_params.eta_pow3
             )
             / (
                 1.0
                 + 66757.12830903867 * source_params.eta
-                + 5.385164380400193e6 * eta_pow2
-                + 2.5176585751772933e6 * eta_pow3
+                + 5.385164380400193e6 * source_params.eta_pow2
+                + 2.5176585751772933e6 * source_params.eta_pow3
             )
-            + (
-                source_params.S_tot_hat
+            + source_params.S_tot_hat
+            * (
+                19.416719811164853
+                - 36.066611959079935 * source_params.S_tot_hat
+                - 0.8612656616290079 * source_params.S_tot_hat_pow2
+                + source_params.eta_pow2
                 * (
-                    19.416719811164853
-                    - 36.066611959079935 * source_params.S_tot_hat
-                    - 0.8612656616290079 * source_params.S_tot_hat_pow2
-                    + eta_pow2
-                    * (
-                        170.97203068800542
-                        - 107.41099349364234 * source_params.S_tot_hat
-                        - 647.8103976942541 * source_params.S_tot_hat_pow3
-                    )
-                    + 5.95010003393006 * source_params.S_tot_hat_pow3
-                    + eta_pow3
-                    * (
-                        -1365.1499998427248
-                        + 1152.425940764218 * source_params.S_tot_hat
-                        + 415.7134909564443 * source_params.S_tot_hat_pow2
-                        + 1897.5444343138167 * source_params.S_tot_hat_pow3
-                        - 866.283566780576 * source_params.S_tot_hat_pow4
-                    )
-                    + 4.984750041013893 * source_params.S_tot_hat_pow4
-                    + source_params.eta
-                    * (
-                        207.69898051583655
-                        - 132.88417400679026 * source_params.S_tot_hat
-                        - 17.671713040498304 * source_params.S_tot_hat_pow2
-                        + 29.071788188638315 * source_params.S_tot_hat_pow3
-                        + 37.462217031512786 * source_params.S_tot_hat_pow4
-                    )
+                    170.97203068800542
+                    - 107.41099349364234 * source_params.S_tot_hat
+                    - 647.8103976942541 * source_params.S_tot_hat_pow3
+                )
+                + 5.95010003393006 * source_params.S_tot_hat_pow3
+                + source_params.eta_pow3
+                * (
+                    -1365.1499998427248
+                    + 1152.425940764218 * source_params.S_tot_hat
+                    + 415.7134909564443 * source_params.S_tot_hat_pow2
+                    + 1897.5444343138167 * source_params.S_tot_hat_pow3
+                    - 866.283566780576 * source_params.S_tot_hat_pow4
+                )
+                + 4.984750041013893 * source_params.S_tot_hat_pow4
+                + source_params.eta
+                * (
+                    207.69898051583655
+                    - 132.88417400679026 * source_params.S_tot_hat
+                    - 17.671713040498304 * source_params.S_tot_hat_pow2
+                    + 29.071788188638315 * source_params.S_tot_hat_pow3
+                    + 37.462217031512786 * source_params.S_tot_hat_pow4
                 )
             )
             / (-1.1492259468169692 + 1.0 * source_params.S_tot_hat)
             + source_params.delta_chi
             * source_params.delta
-            * eta_pow3
+            * source_params.eta_pow3
             * (
                 7343.130973149263
                 - 20486.813161100774 * source_params.eta
@@ -1771,63 +1764,121 @@ class PhaseCoefficients:
             )
         )
 
-        v1_int = _d_phase_inspiral_ansatz()
-        v2_int = 0.75 * (d_v2intbar_v4MRD + v4_MRD) + 0.25 * v2_int_bar
-        v3_int = d_v3int_v4MRD + v4_MRD
-        v4_int = d43_int + v3_int
-        v5_int = _d_phase_merge_ringdown_ansatz()
+        useful_powers_fmin_int_phase.update(self.int_colloc_points[0])
+        useful_powers_fmax_int_phase.update(self.int_colloc_points[4])
+        self.int_colloc_values[0] = _d_phase_inspiral_ansatz(
+            useful_powers_fmin_int_phase, self, pn_prefactors
+        )
+        self.int_colloc_values[1] = (
+            0.75 * (d_v2int_v4MRD + self.MRD_colloc_values[3]) + 0.25 * v2_int_bar
+        )
+        self.int_colloc_values[2] = d_v3int_v4MRD + self.MRD_colloc_values[3]
+        self.int_colloc_values[3] = d43_int + self.int_colloc_values[2]
+        self.int_colloc_values[4] = _d_phase_merge_ringdown_ansatz(
+            useful_powers_fmax_int_phase, self, source_params
+        )
 
         Ab_int = ti.Matrix(
             [
                 [
                     1.0,
-                    source_params.f_ring / f_phase_int_min,
-                    (source_params.f_ring / f_phase_int_min) ** 2,
-                    (source_params.f_ring / f_phase_int_min) ** 3,
-                    (source_params.f_ring / f_phase_int_min) ** 4,
-                    v1_int,
+                    self.ins_colloc_points[0] ** (-1),
+                    self.ins_colloc_points[0] ** (-2),
+                    self.ins_colloc_points[0] ** (-3),
+                    self.ins_colloc_points[0] ** (-4),
+                    self.ins_colloc_values[0]
+                    + (
+                        self.c_L
+                        / (
+                            source_params.f_damp_pow2
+                            + 0.25
+                            * (self.ins_colloc_points[0] - source_params.f_ring) ** 2
+                        )
+                    ),
                 ],
                 [
                     1.0,
-                    source_params.f_ring / f2_int,
-                    (source_params.f_ring / f2_int) ** 2,
-                    (source_params.f_ring / f2_int) ** 3,
-                    (source_params.f_ring / f2_int) ** 4,
-                    v2_int,
+                    self.ins_colloc_points[1] ** (-1),
+                    self.ins_colloc_points[1] ** (-2),
+                    self.ins_colloc_points[1] ** (-3),
+                    self.ins_colloc_points[1] ** (-4),
+                    self.ins_colloc_values[1]
+                    + (
+                        self.c_L
+                        / (
+                            source_params.f_damp_pow2
+                            + 0.25
+                            * (self.ins_colloc_points[1] - source_params.f_ring) ** 2
+                        )
+                    ),
                 ],
                 [
                     1.0,
-                    source_params.f_ring / f3_int,
-                    (source_params.f_ring / f3_int) ** 2,
-                    (source_params.f_ring / f3_int) ** 3,
-                    (source_params.f_ring / f3_int) ** 4,
-                    v3_int,
+                    self.ins_colloc_points[2] ** (-1),
+                    self.ins_colloc_points[2] ** (-2),
+                    self.ins_colloc_points[2] ** (-3),
+                    self.ins_colloc_points[2] ** (-4),
+                    self.ins_colloc_values[2]
+                    + (
+                        self.c_L
+                        / (
+                            source_params.f_damp_pow2
+                            + 0.25
+                            * (self.ins_colloc_points[2] - source_params.f_ring) ** 2
+                        )
+                    ),
                 ],
                 [
                     1.0,
-                    source_params.f_ring / f4_int,
-                    (source_params.f_ring / f4_int) ** 2,
-                    (source_params.f_ring / f4_int) ** 3,
-                    (source_params.f_ring / f4_int) ** 4,
-                    v4_int,
+                    self.ins_colloc_points[3] ** (-1),
+                    self.ins_colloc_points[3] ** (-2),
+                    self.ins_colloc_points[3] ** (-3),
+                    self.ins_colloc_points[3] ** (-4),
+                    self.ins_colloc_values[3]
+                    + (
+                        self.c_L
+                        / (
+                            source_params.f_damp_pow2
+                            + 0.25
+                            * (self.ins_colloc_points[3] - source_params.f_ring) ** 2
+                        )
+                    ),
                 ],
                 [
                     1.0,
-                    source_params.f_ring / f_phase_int_max,
-                    (source_params.f_ring / f_phase_int_max) ** 2,
-                    (source_params.f_ring / f_phase_int_max) ** 3,
-                    (source_params.f_ring / f_phase_int_max) ** 4,
-                    v5_int,
+                    self.ins_colloc_points[4] ** (-1),
+                    self.ins_colloc_points[4] ** (-2),
+                    self.ins_colloc_points[4] ** (-3),
+                    self.ins_colloc_points[4] ** (-4),
+                    self.ins_colloc_values[4]
+                    + (
+                        self.c_L
+                        / (
+                            source_params.f_damp_pow2
+                            + 0.25
+                            * (self.ins_colloc_points[4] - source_params.f_ring) ** 2
+                        )
+                    ),
                 ],
             ]
         )
 
-        beta_0, beta_1, beta_2, beta_3, beta_4 = gauss_elimination(Ab_int)
-        self.beta_0 = beta_0
-        self.beta_1 = beta_1 * source_params.f_ring
-        self.beta_2 = beta_2 * source_params.f_ring**2
-        self.beta_3 = beta_3 * source_params.f_ring**3
-        self.beta_4 = beta_4 * source_params.f_ring**4
+        (
+            self.beta_0,
+            self.beta_1,
+            self.beta_2,
+            self.beta_3,
+            self.beta_4,
+        ) = gauss_elimination(Ab_int)
+
+    @ti.func
+    def compute_phase_coefficients(
+        self, source_params: ti.template(), pn_prefactors: ti.template()
+    ):
+        self._all_colloc_points(source_params)
+        self._merge_ringdown_coefficients(source_params)
+        self._inspiral_coefficients(source_params)
+        self._intermediate_coefficients(source_params, pn_prefactors)
 
 
 @ti.data_oriented

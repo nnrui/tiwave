@@ -19,6 +19,7 @@ check _get_polarization_from_amplitude_phase, add spherical harmonic
 5. add loop config for waveform_kernel
 - useful_powers_fpeak
 - gauss_elimination
+- pn coefficients, factor out f^(-8/3)
 """
 
 
@@ -31,7 +32,7 @@ QNMgrid_fdamp = np.loadtxt(
 )
 AMPLITUDE_INSPIRAL_fJoin = 0.014
 PHASE_INSPIRAL_fJoin = 0.018
-FREQUENCY_CUT = 0.2
+PHENOMD_HIGH_FREQUENCY_CUT = 0.2
 
 useful_powers_pi = UsefulPowers()
 useful_powers_pi.update(PI)
@@ -1357,7 +1358,7 @@ class IMRPhenomD(BaseWaveform):
         necessary preparation which need to be finished in python scope for waveform computation
         (this function may be awkward, since no interpolation function in taichi-lang)
         """
-        self.source_parameters[None].generate_all_source_parameters(parameters)
+        self.source_parameters[None].update_all_source_parameters(parameters)
         self._update_waveform_kernel()
 
     @ti.kernel
@@ -1376,6 +1377,7 @@ class IMRPhenomD(BaseWaveform):
         powers_of_Mf = UsefulPowers()
 
         powers_of_Mf.update(self.amplitude_coefficients[None].f_peak)
+        # In order to keep consistency with lalsim, the C2_merge_ringdown is droped.
         t0 = (
             _d_phase_merge_ringdown_ansatz(
                 powers_of_Mf,
@@ -1385,7 +1387,15 @@ class IMRPhenomD(BaseWaveform):
             )
             / self.source_parameters[None].eta
         )
-        # t0 = (_d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp) + self.phase_coefficients[None].C2_merge_ringdown)/self.source_parameters[None].eta
+        # t0 = (
+        #     _d_phase_merge_ringdown_ansatz(
+        #         powers_of_Mf,
+        #         self.phase_coefficients[None],
+        #         self.source_parameters[None].f_ring,
+        #         self.source_parameters[None].f_damp,
+        #     )
+        #     + self.phase_coefficients[None].C2_merge_ringdown
+        # ) / self.source_parameters[None].eta
         time_shift = (
             t0
             - 2
@@ -1407,7 +1417,7 @@ class IMRPhenomD(BaseWaveform):
 
         for idx in self.frequencies:
             Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
-            if Mf < FREQUENCY_CUT:
+            if Mf < PHENOMD_HIGH_FREQUENCY_CUT:
                 powers_of_Mf.update(Mf)
                 amplitude = _compute_amplitude(
                     powers_of_Mf,

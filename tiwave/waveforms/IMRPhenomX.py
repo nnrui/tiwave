@@ -387,27 +387,27 @@ class SourceParameters:
         self.S_tot_hat_pow4 = self.S_tot_hat * self.S_tot_hat_pow3
 
         # fitting parameters
-        self.final_mass = self._compute_final_mass()
-        self.final_spin = self._compute_final_spin()
+        self._set_final_mass()
+        self._set_final_spin()
         self.final_spin_pow2 = self.final_spin * self.final_spin
         self.final_spin_pow3 = self.final_spin * self.final_spin_pow2
         self.final_spin_pow4 = self.final_spin * self.final_spin_pow3
         self.final_spin_pow5 = self.final_spin * self.final_spin_pow4
         self.final_spin_pow6 = self.final_spin * self.final_spin_pow5
         self.final_spin_pow7 = self.final_spin * self.final_spin_pow6
-        self.f_ring = self._compute_f_ring()
-        self.f_damp = self._compute_f_damp()
+        self._set_f_ring()
+        self._set_f_damp()
         self.f_damp_pow2 = self.f_damp * self.f_damp
-        self.f_MECO = self._compute_f_MECO()
-        self.f_ISCO = self._compute_f_ISCO()
+        self._set_f_MECO()
+        self._set_f_ISCO()
 
     @ti.func
-    def _compute_final_mass(self):
+    def _set_final_mass(self):
         """
         Assuming that M = m1 + m2 = 1, final_mass = 1 - energy_radiated.
         arXiv:1611.00332
         """
-        return 1.0 - (
+        self.final_mass = 1.0 - (
             (
                 0.057190958417936644 * self.eta
                 + 0.5609904135313374 * self.eta_pow2
@@ -457,8 +457,8 @@ class SourceParameters:
         )
 
     @ti.func
-    def _compute_final_spin(self):
-        return (
+    def _set_final_spin(self):
+        self.final_spin = (
             (
                 3.4641016151377544 * self.eta
                 + 20.0830030082033 * self.eta_pow2
@@ -514,8 +514,8 @@ class SourceParameters:
         )
 
     @ti.func
-    def _compute_f_ring(self):
-        return (
+    def _set_f_ring(self):
+        self.f_ring = (
             (
                 0.05947169566573468
                 - 0.14989771215394762 * self.final_spin
@@ -537,8 +537,8 @@ class SourceParameters:
         )
 
     @ti.func
-    def _compute_f_damp(self):
-        return (
+    def _set_f_damp(self):
+        self.f_damp = (
             (
                 0.014158792290965177
                 - 0.036989395871554566 * self.final_spin
@@ -559,8 +559,8 @@ class SourceParameters:
         )
 
     @ti.func
-    def _compute_f_MECO(self):
-        return (
+    def _set_f_MECO(self):
+        self.f_MECO = (
             (
                 0.018744340279608845
                 + 0.0077903147004616865 * self.eta
@@ -642,7 +642,7 @@ class SourceParameters:
         )
 
     @ti.func
-    def _compute_f_ISCO(self):
+    def _set_f_ISCO(self):
         """Frequency of the innermost stable circular orbit (ISCO)."""
         Z1 = 1.0 + (1.0 - self.final_spin_pow2) ** (1 / 3) * (
             (1 + self.final_spin) ** (1 / 3) + (1 - self.final_spin) ** (1 / 3)
@@ -651,7 +651,7 @@ class SourceParameters:
             Z1 = 3.0
         Z2 = tm.sqrt(3.0 * self.final_spin_pow2 + Z1 * Z1)
 
-        return (
+        self.f_ISCO = (
             1.0
             / (
                 (

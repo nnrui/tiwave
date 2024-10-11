@@ -296,7 +296,8 @@ class SourceParameters:
     tc: ti.f64
     # derived parameters
     M: ti.f64  # total mass
-    q: ti.f64  # mass ratio, q = m_2/m_1, in the range of [0, 1]
+    m1_dimless: ti.f64
+    m2_dimless: ti.f64
     dL_SI: ti.f64  # luminosity distance in meter
     M_sec: ti.f64  # total mass in second
     eta: ti.f64  # symmetric_mass_ratio
@@ -353,15 +354,16 @@ class SourceParameters:
         self.tc = params_in.coalescence_time
         # derived parameters
         self.M = self.m_1 + self.m_2
-        self.q = self.m_2 / self.m_1  # ensure the passed-in parameters have m_1 > m_2
+        self.m1_dimless = self.m_1 / self.M
+        self.m2_dimless = self.m_2 / self.M
         self.dL_SI = self.dL_Mpc * 1e6 * PC_SI
         self.M_sec = self.M * MTSUN_SI
         self.eta = self.m_1 * self.m_2 / (self.M * self.M)
         self.eta_pow2 = self.eta * self.eta
         self.eta_pow3 = self.eta * self.eta_pow2
-        self.eta_pow4 = self.eta + self.eta_pow3
-        self.eta_pow5 = self.eta + self.eta_pow4
-        self.eta_pow6 = self.eta + self.eta_pow5
+        self.eta_pow4 = self.eta * self.eta_pow3
+        self.eta_pow5 = self.eta * self.eta_pow4
+        self.eta_pow6 = self.eta * self.eta_pow5
 
         self.delta = tm.sqrt(1.0 - 4.0 * self.eta)
         self.delta_chi = self.chi_1 - self.chi_2
@@ -373,15 +375,16 @@ class SourceParameters:
         self.chi_a_pow2 = self.chi_a * self.chi_a
 
         self.chi_PN_hat = (
-            (self.m_1 * self.chi_1 + self.m_2 * self.chi_2) / self.M
+            (self.m1_dimless * self.chi_1 + self.m2_dimless * self.chi_2)
             - 38.0 / 113.0 * self.eta * (self.chi_1 + self.chi_2)
         ) / (1.0 - (76.0 / 113.0 * self.eta))
         self.chi_PN_hat_pow2 = self.chi_PN_hat * self.chi_PN_hat
         self.chi_PN_hat_pow3 = self.chi_PN_hat * self.chi_PN_hat_pow2
 
         self.S_tot_hat = (
-            self.m_1 * self.m_1 * self.chi_1 + self.m_2 * self.m_2 * self.chi_2
-        ) / (self.m_1 * self.m_1 + self.m_2 * self.m_2)
+            self.m1_dimless * self.m1_dimless * self.chi_1
+            + self.m2_dimless * self.m2_dimless * self.chi_2
+        ) / (self.m1_dimless * self.m1_dimless + self.m2_dimless * self.m2_dimless)
         self.S_tot_hat_pow2 = self.S_tot_hat * self.S_tot_hat
         self.S_tot_hat_pow3 = self.S_tot_hat * self.S_tot_hat_pow2
         self.S_tot_hat_pow4 = self.S_tot_hat * self.S_tot_hat_pow3
@@ -415,7 +418,7 @@ class SourceParameters:
                 + 3.145145224278187 * self.eta_pow4
             )
             * (
-                1
+                1.0
                 + (
                     -0.13084389181783257
                     - 1.1387311580238488 * self.eta
@@ -429,10 +432,10 @@ class SourceParameters:
                     + 4.952698546796005 * self.eta
                     - 10.023747993978121 * self.eta_pow2
                 )
-                * self.S_tot_hat_pow2
+                * self.S_tot_hat_pow3
             )
             / (
-                1
+                1.0
                 + (
                     -0.9919475346968611
                     + 0.367620218664352 * self.eta
@@ -466,7 +469,8 @@ class SourceParameters:
             )
             / (1 + 7.2388440419467335 * self.eta)
             + (
-                (self.m_1 * self.m_1 + self.m_2 * self.m_2) * self.S_tot_hat
+                (self.m1_dimless * self.m1_dimless + self.m2_dimless * self.m2_dimless)
+                * self.S_tot_hat
                 + (
                     (
                         -0.8561951310209386 * self.eta
@@ -2137,7 +2141,7 @@ def _compute_tf(
 
 @ti.func
 def _get_polarization_from_amplitude_phase(
-    mode: ti.types.vector(2, ti.int), amplitude: ti.f64, phase: ti.f64, iota: ti.f64
+    amplitude: ti.f64, phase: ti.f64, iota: ti.f64
 ):
     cross_prefactor = tm.cos(iota)
     plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
@@ -2159,6 +2163,7 @@ class IMRPhenomXAS(BaseWaveform):
         parameter_sanity_check: bool = False,
     ) -> None:
         """
+        TODO: parameter range, like q<1000, chi<0.99 etc..
         Parameters
         ==========
         frequencies: ti.field of f64, note that frequencies may not uniform spaced

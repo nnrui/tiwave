@@ -285,9 +285,9 @@ def _d_phase_merge_ringdown_ansatz(
 @ti.dataclass
 class SourceParameters:
     # TODO: doc detail defination and unit!
-    # passed in parameters
-    M: ti.f64  # total mass (solar mass)
-    q: ti.f64
+    # passed-in parameters
+    m_1: ti.f64  # mass of primary (solar mass)
+    m_2: ti.f64  # mass of secondary m_1 > m_2
     chi_1: ti.f64
     chi_2: ti.f64
     dL_Mpc: ti.f64  # luminosity distance (Mpc)
@@ -295,25 +295,47 @@ class SourceParameters:
     phase_ref: ti.f64
     tc: ti.f64
     # derived parameters
-    dL_SI: ti.f64
-    m_1: ti.f64
-    m_2: ti.f64
+    M: ti.f64  # total mass
+    q: ti.f64  # mass ratio, q = m_2/m_1, in the range of [0, 1]
+    dL_SI: ti.f64  # luminosity distance in meter
     M_sec: ti.f64  # total mass in second
     eta: ti.f64  # symmetric_mass_ratio
-    delta: ti.f64
-    chi_s: ti.f64
-    chi_a: ti.f64
-    chi_s2: ti.f64
-    chi_a2: ti.f64
-    chi_PN: ti.f64
-    xi: ti.f64
-    # cache frequently used parameters
     eta_pow2: ti.f64  # eta^2
     eta_pow3: ti.f64
     eta_pow4: ti.f64
+    eta_pow5: ti.f64
+    eta_pow6: ti.f64
+    delta: ti.f64  # (m_1-m_2)/M
+    delta_chi: ti.f64  # chi_1 - chi_2
+    delta_chi_pow2: ti.f64
+    chi_s: ti.f64  # (chi_1 + chi_2)/2
+    chi_s_pow2: ti.f64
+    chi_a: ti.f64  # (chi_1 - chi_2)/2
+    chi_a_pow2: ti.f64
+    chi_PN_hat: ti.f64  # Eq. 4.17 in arXiv:2001.11412
+    chi_PN_hat_pow2: ti.f64
+    chi_PN_hat_pow3: ti.f64
+    S_tot_hat: ti.f64  # Eq. 4.18
+    S_tot_hat_pow2: ti.f64
+    S_tot_hat_pow3: ti.f64
+    S_tot_hat_pow4: ti.f64
+    # fitting parameters
+    final_mass: ti.f64
+    final_spin: ti.f64
+    final_spin_pow2: ti.f64
+    final_spin_pow3: ti.f64
+    final_spin_pow4: ti.f64
+    final_spin_pow5: ti.f64
+    final_spin_pow6: ti.f64
+    final_spin_pow7: ti.f64
+    f_ring: ti.f64
+    f_damp: ti.f64
+    f_damp_pow2: ti.f64
+    f_MECO: ti.f64
+    f_ISCO: ti.f64
 
     @ti.func
-    def update_all_source_parameters(self, parameters: ti.template()):
+    def update_all_source_parameters(self, params_in: ti.template()):
         """
         Totally 9 parameters are needed: M, q, chi1, chi2, iota, tc, phi0, dL.
         """
@@ -321,31 +343,35 @@ class SourceParameters:
         # 3 only used in response function: psi, lon, lat
         # mass is in the unit of solar mass
         # dL is in the unit of Mpc
-        self.M = parameters["total_mass"]
-        self.q = parameters["mass_ratio"]
-        self.chi_1 = parameters["chi_1"]
-        self.chi_2 = parameters["chi_2"]
-        self.dL_Mpc = parameters["luminosity_distance"]
-        self.iota = parameters["inclination"]
-        self.phase_ref = parameters["reference_phase"]
-        self.tc = parameters["coalescence_time"]
+        self.m_1 = params_in.mass_1
+        self.m_2 = params_in.mass_2
+        self.chi_1 = params_in.chi_1
+        self.chi_2 = params_in.chi_2
+        self.dL_Mpc = params_in.luminosity_distance
+        self.iota = params_in.inclination
+        self.phase_ref = params_in.reference_phase
+        self.tc = params_in.coalescence_time
         # derived parameters
-        self.m_1 = self.M / (1 + self.q)
-        self.m_2 = self.M - self.m_1
+        self.M = self.m_1 + self.m_2
+        self.q = self.m_2 / self.m_1  # ensure the passed-in parameters have m_1 > m_2
         self.dL_SI = self.dL_Mpc * 1e6 * PC_SI
         self.M_sec = self.M * MTSUN_SI
         self.eta = self.m_1 * self.m_2 / (self.M * self.M)
         self.eta_pow2 = self.eta * self.eta
         self.eta_pow3 = self.eta * self.eta_pow2
         self.eta_pow4 = self.eta + self.eta_pow3
+        self.eta_pow5 = self.eta + self.eta_pow4
+        self.eta_pow6 = self.eta + self.eta_pow5
 
+        self.delta = tm.sqrt(1.0 - 4.0 * self.eta)
         self.delta_chi = self.chi_1 - self.chi_2
         self.delta_chi_pow2 = self.delta_chi * self.delta_chi
 
-        self.delta = tm.sqrt(1.0 - 4.0 * self.eta)
-        self.chi_PN = (
-            self.m_1 * self.chi_1 + self.m_2 * self.chi_2
-        ) / self.M - 38.0 / 113.0 * self.eta * (self.chi_1 + self.chi_2)
+        self.chi_s = (self.chi_1 + self.chi_2) * 0.5
+        self.chi_s_pow2 = self.chi_s * self.chi_s
+        self.chi_a = (self.chi_1 - self.chi_2) * 0.5
+        self.chi_a_pow2 = self.chi_a * self.chi_a
+
         self.chi_PN_hat = (
             (self.m_1 * self.chi_1 + self.m_2 * self.chi_2) / self.M
             - 38.0 / 113.0 * self.eta * (self.chi_1 + self.chi_2)
@@ -353,119 +379,196 @@ class SourceParameters:
         self.chi_PN_hat_pow2 = self.chi_PN_hat * self.chi_PN_hat
         self.chi_PN_hat_pow3 = self.chi_PN_hat * self.chi_PN_hat_pow2
 
-        self.chi_f = self._final_spin()
-        self.chi_f_pow2 = self.chi_f * self.chi_f
-        self.chi_f_pow3 = self.chi_f * self.chi_f_pow2
-        self.chi_f_pow4 = self.chi_f * self.chi_f_pow3
-        self.chi_f_pow5 = self.chi_f * self.chi_f_pow4
-        self.chi_f_pow6 = self.chi_f * self.chi_f_pow5
-        self.chi_f_pow7 = self.chi_f * self.chi_f_pow6
-
-        self.f_MECO = self._f_MECO()
-        self.f_ISCO = self._f_ISCO()
-
         self.S_tot_hat = (
             self.m_1 * self.m_1 * self.chi_1 + self.m_2 * self.m_2 * self.chi_2
-        ) / (self.M * self.M)
+        ) / (self.m_1 * self.m_1 + self.m_2 * self.m_2)
         self.S_tot_hat_pow2 = self.S_tot_hat * self.S_tot_hat
         self.S_tot_hat_pow3 = self.S_tot_hat * self.S_tot_hat_pow2
         self.S_tot_hat_pow4 = self.S_tot_hat * self.S_tot_hat_pow3
 
-        self.f_ring = (
-            0.05947169566573468
-            - 0.14989771215394762 * self.chi_f
-            + 0.09535606290986028 * self.chi_f_pow2
-            + 0.02260924869042963 * self.chi_f_pow3
-            - 0.02501704155363241 * self.chi_f_pow4
-            - 0.005852438240997211 * self.chi_f_pow5
-            + 0.0027489038393367993 * self.chi_f_pow6
-            + 0.0005821983163192694 * self.chi_f_pow7
-        ) / (
-            1
-            - 2.8570126619966296 * self.chi_f
-            + 2.373335413978394 * self.chi_f_pow2
-            - 0.6036964688511505 * self.chi_f_pow4
-            + 0.0873798215084077 * self.chi_f_pow6
-        )
-        self.f_damp = (
-            0.014158792290965177
-            - 0.036989395871554566 * self.chi_f
-            + 0.026822526296575368 * self.chi_f_pow2
-            + 0.0008490933750566702 * self.chi_f_pow3
-            - 0.004843996907020524 * self.chi_f_pow4
-            - 0.00014745235759327472 * self.chi_f_pow5
-            + 0.0001504546201236794 * self.chi_f_pow6
-        ) / (
-            1
-            - 2.5900842798681376 * self.chi_f
-            + 1.8952576220623967 * self.chi_f_pow2
-            - 0.31416610693042507 * self.chi_f_pow4
-            + 0.009002719412204133 * self.chi_f_pow6
-        )
+        # fitting parameters
+        self.final_mass = self._compute_final_mass()
+        self.final_spin = self._compute_final_spin()
+        self.final_spin_pow2 = self.final_spin * self.final_spin
+        self.final_spin_pow3 = self.final_spin * self.final_spin_pow2
+        self.final_spin_pow4 = self.final_spin * self.final_spin_pow3
+        self.final_spin_pow5 = self.final_spin * self.final_spin_pow4
+        self.final_spin_pow6 = self.final_spin * self.final_spin_pow5
+        self.final_spin_pow7 = self.final_spin * self.final_spin_pow6
+        self.f_ring = self._compute_f_ring()
+        self.f_damp = self._compute_f_damp()
+        self.f_damp_pow2 = self.f_damp * self.f_damp
+        self.f_MECO = self._compute_f_MECO()
+        self.f_ISCO = self._compute_f_ISCO()
 
     @ti.func
-    def _final_spin(self):
-        """Final dimensionless spin, PhysRevD.95.064024"""
-        no_spin = (
-            3.4641016151377544 * self.eta
-            + 20.0830030082033 * self.eta_pow2
-            - 12.333573402277912 * self.eta_pow3
-        ) / (1 + 7.2388440419467335 * self.eta)
-        eq_spin = (self.m1_pow2 + self.m2_pow2) * self.S_tot + (
+    def _compute_final_mass(self):
+        """
+        Assuming that M = m1 + m2 = 1, final_mass = 1 - energy_radiated.
+        arXiv:1611.00332
+        """
+        return 1.0 - (
             (
-                -0.8561951310209386 * self.eta
-                - 0.09939065676370885 * self.eta_pow2
-                + 1.668810429851045 * self.eta_pow3
+                0.057190958417936644 * self.eta
+                + 0.5609904135313374 * self.eta_pow2
+                - 0.84667563764404 * self.eta_pow3
+                + 3.145145224278187 * self.eta_pow4
             )
-            * self.S_tot
+            * (
+                1
+                + (
+                    -0.13084389181783257
+                    - 1.1387311580238488 * self.eta
+                    + 5.49074464410971 * self.eta_pow2
+                )
+                * self.S_tot_hat
+                + (-0.17762802148331427 + 2.176667900182948 * self.eta_pow2)
+                * self.S_tot_hat_pow2
+                + (
+                    -0.6320191645391563
+                    + 4.952698546796005 * self.eta
+                    - 10.023747993978121 * self.eta_pow2
+                )
+                * self.S_tot_hat_pow2
+            )
+            / (
+                1
+                + (
+                    -0.9919475346968611
+                    + 0.367620218664352 * self.eta
+                    + 4.274567337924067 * self.eta_pow2
+                )
+                * self.S_tot_hat
+            )
             + (
-                0.5881660363307388 * self.eta
-                - 2.149269067519131 * self.eta_pow2
-                + 3.4768263932898678 * self.eta_pow3
+                -0.09803730445895877
+                * self.delta_chi
+                * self.delta
+                * (1 - 3.2283713377939134 * self.eta)
+                * self.eta_pow2
+                + 0.01118530335431078 * self.delta_chi_pow2 * self.eta_pow3
+                - 0.01978238971523653
+                * self.delta_chi
+                * self.delta
+                * (1 - 4.91667749015812 * self.eta)
+                * self.eta
+                * self.S_tot_hat
             )
-            * self.S_tot_pow2
-            + (
-                0.142443244743048 * self.eta
-                - 0.9598353840147513 * self.eta_pow2
-                + 1.9595643107593743 * self.eta_pow3
-            )
-            * self.S_tot_pow3
-        ) / (
-            1
-            + (
-                -0.9142232693081653
-                + 2.3191363426522633 * self.eta
-                - 9.710576749140989 * self.eta_pow3
-            )
-            * self.S_tot
         )
-        uneq_spin = (
-            0.3223660562764661
-            * self.delta_chi
-            * self.delta
-            * (1 + 9.332575956437443 * self.eta)
-            * self.eta_pow2
-            - 0.059808322561702126 * self.delta_chi_pow2 * self.eta_pow3
-            + 2.3170397514509933
-            * self.delta_chi
-            * self.delta
-            * (1 - 3.2624649875884852 * self.eta)
-            * self.eta_pow3
-            * self.delta_chi
-        )
-        return no_spin + eq_spin + uneq_spin
 
     @ti.func
-    def _f_MECO(self):
-        # Frequency of the minimum energy circular orbit (MECO).
-        no_spin = (
-            0.018744340279608845
-            + 0.0077903147004616865 * self.eta
-            + 0.003940354686136861 * self.eta_pow2
-            - 0.00006693930988501673 * self.eta_pow3
-        ) / (1.0 - 0.10423384680638834 * self.eta)
-        eq_spin = (
-            self.chi_PN_hat
+    def _compute_final_spin(self):
+        return (
+            (
+                3.4641016151377544 * self.eta
+                + 20.0830030082033 * self.eta_pow2
+                - 12.333573402277912 * self.eta_pow3
+            )
+            / (1 + 7.2388440419467335 * self.eta)
+            + (
+                (self.m_1 * self.m_1 + self.m_2 * self.m_2) * self.S_tot_hat
+                + (
+                    (
+                        -0.8561951310209386 * self.eta
+                        - 0.09939065676370885 * self.eta_pow2
+                        + 1.668810429851045 * self.eta_pow3
+                    )
+                    * self.S_tot_hat
+                    + (
+                        0.5881660363307388 * self.eta
+                        - 2.149269067519131 * self.eta_pow2
+                        + 3.4768263932898678 * self.eta_pow3
+                    )
+                    * self.S_tot_hat_pow2
+                    + (
+                        0.142443244743048 * self.eta
+                        - 0.9598353840147513 * self.eta_pow2
+                        + 1.9595643107593743 * self.eta_pow3
+                    )
+                    * self.S_tot_hat_pow3
+                )
+                / (
+                    1
+                    + (
+                        -0.9142232693081653
+                        + 2.3191363426522633 * self.eta
+                        - 9.710576749140989 * self.eta_pow3
+                    )
+                    * self.S_tot_hat
+                )
+            )
+            + (
+                0.3223660562764661
+                * self.delta_chi
+                * self.delta
+                * (1 + 9.332575956437443 * self.eta)
+                * self.eta_pow2
+                - 0.059808322561702126 * self.delta_chi_pow2 * self.eta_pow3
+                + 2.3170397514509933
+                * self.delta_chi
+                * self.delta
+                * (1 - 3.2624649875884852 * self.eta)
+                * self.eta_pow3
+                * self.S_tot_hat
+            )
+        )
+
+    @ti.func
+    def _compute_f_ring(self):
+        return (
+            (
+                0.05947169566573468
+                - 0.14989771215394762 * self.final_spin
+                + 0.09535606290986028 * self.final_spin_pow2
+                + 0.02260924869042963 * self.final_spin_pow3
+                - 0.02501704155363241 * self.final_spin_pow4
+                - 0.005852438240997211 * self.final_spin_pow5
+                + 0.0027489038393367993 * self.final_spin_pow6
+                + 0.0005821983163192694 * self.final_spin_pow7
+            )
+            / (
+                1.0
+                - 2.8570126619966296 * self.final_spin
+                + 2.373335413978394 * self.final_spin_pow2
+                - 0.6036964688511505 * self.final_spin_pow4
+                + 0.0873798215084077 * self.final_spin_pow6
+            )
+            / self.final_mass
+        )
+
+    @ti.func
+    def _compute_f_damp(self):
+        return (
+            (
+                0.014158792290965177
+                - 0.036989395871554566 * self.final_spin
+                + 0.026822526296575368 * self.final_spin_pow2
+                + 0.0008490933750566702 * self.final_spin_pow3
+                - 0.004843996907020524 * self.final_spin_pow4
+                - 0.00014745235759327472 * self.final_spin_pow5
+                + 0.0001504546201236794 * self.final_spin_pow6
+            )
+            / (
+                1.0
+                - 2.5900842798681376 * self.final_spin
+                + 1.8952576220623967 * self.final_spin_pow2
+                - 0.31416610693042507 * self.final_spin_pow4
+                + 0.009002719412204133 * self.final_spin_pow6
+            )
+            / self.final_mass
+        )
+
+    @ti.func
+    def _compute_f_MECO(self):
+        return (
+            (
+                0.018744340279608845
+                + 0.0077903147004616865 * self.eta
+                + 0.003940354686136861 * self.eta_pow2
+                - 0.00006693930988501673 * self.eta_pow3
+            )
+            / (1.0 - 0.10423384680638834 * self.eta)
+            + self.chi_PN_hat
             * (
                 0.00027180386951683135
                 - 0.00002585252361022052 * self.chi_PN_hat
@@ -495,59 +598,69 @@ class SourceParameters:
                 )
                 - 0.00007547517256664526 * self.chi_PN_hat_pow2
             )
-        ) / (
-            0.026666543809890402
-            + (
-                -0.014590539285641243
-                - 0.012429476486138982 * self.eta
-                + 1.4861197211952053 * self.eta_pow4
-                + 0.025066696514373803 * self.eta_pow2
-                + 0.005146809717492324 * self.eta_pow3
+            / (
+                0.026666543809890402
+                + (
+                    -0.014590539285641243
+                    - 0.012429476486138982 * self.eta
+                    + 1.4861197211952053 * self.eta_pow4
+                    + 0.025066696514373803 * self.eta_pow2
+                    + 0.005146809717492324 * self.eta_pow3
+                )
+                * self.chi_PN_hat
+                + (
+                    -0.0058684526275074025
+                    - 0.02876774751921441 * self.eta
+                    - 2.551566872093786 * self.eta_pow4
+                    - 0.019641378027236502 * self.eta_pow2
+                    - 0.001956646166089053 * self.eta_pow3
+                )
+                * self.chi_PN_hat_pow2
+                + (
+                    0.003507640638496499
+                    + 0.014176504653145768 * self.eta
+                    + 1.0 * self.eta_pow4
+                    + 0.012622225233586283 * self.eta_pow2
+                    - 0.00767768214056772 * self.eta_pow3
+                )
+                * self.chi_PN_hat_pow3
             )
-            * self.chi_PN_hat
             + (
-                -0.0058684526275074025
-                - 0.02876774751921441 * self.eta
-                - 2.551566872093786 * self.eta_pow4
-                - 0.019641378027236502 * self.eta_pow2
-                - 0.001956646166089053 * self.eta_pow3
+                self.delta_chi_pow2
+                * (0.00034375176678815234 + 0.000016343732281057392 * self.eta)
+                * self.eta_pow2
+                + self.delta_chi
+                * self.delta
+                * self.eta
+                * (
+                    0.08064665214195679 * self.eta_pow2
+                    + self.eta
+                    * (-0.028476219509487793 - 0.005746537021035632 * self.chi_PN_hat)
+                    - 0.0011713735642446144 * self.chi_PN_hat
+                )
             )
-            * self.chi_PN_hat_pow2
-            + (
-                0.003507640638496499
-                + 0.014176504653145768 * self.eta
-                + 1.0 * self.eta_pow4
-                + 0.012622225233586283 * self.eta_pow2
-                - 0.00767768214056772 * self.eta_pow3
-            )
-            * self.chi_PN_hat_pow3
         )
-        uneq_spin = self.delta_chi_pow2 * (
-            0.00034375176678815234 + 0.000016343732281057392 * self.eta
-        ) * self.eta_pow2 + self.delta_chi * self.delta * self.eta * (
-            0.08064665214195679 * self.eta_pow2
-            + self.eta
-            * (-0.028476219509487793 - 0.005746537021035632 * self.chi_PN_hat)
-            - 0.0011713735642446144 * self.chi_PN_hat
-        )
-        return no_spin + eq_spin + uneq_spin
 
     @ti.func
-    def _f_ISCO(self):
+    def _compute_f_ISCO(self):
         """Frequency of the innermost stable circular orbit (ISCO)."""
-        Z1 = 1.0 + (1.0 - self.chi_f_pow2) ** (1 / 3) * (
-            (1 + self.chi_f) ** (1 / 3) + (1 - self.chi_f) ** (1 / 3)
+        Z1 = 1.0 + (1.0 - self.final_spin_pow2) ** (1 / 3) * (
+            (1 + self.final_spin) ** (1 / 3) + (1 - self.final_spin) ** (1 / 3)
         )
         if Z1 > 3.0:
             Z1 = 3.0
-        Z2 = tm.sqrt(3.0 * self.chi_f_pow2 + Z1 * Z1)
+        Z2 = tm.sqrt(3.0 * self.final_spin_pow2 + Z1 * Z1)
 
         return (
             1.0
             / (
-                (3.0 + Z2 - tm.sign(self.chi_f) * tm.sqrt((3 - Z1) * (3 + Z1 + 2 * Z2)))
+                (
+                    3.0
+                    + Z2
+                    - tm.sign(self.final_spin) * tm.sqrt((3 - Z1) * (3 + Z1 + 2 * Z2))
+                )
                 ** (3 / 2)
-                + self.chi_f
+                + self.final_spin
             )
             / PI
         )
@@ -2055,10 +2168,6 @@ class IMRPhenomXAS(BaseWaveform):
             `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
         parameter_sanity_check: bool
 
-        Returns:
-        ========
-        array, the A channel without the prefactor which is determined by the TDI generation.
-
         TODO:
         check whether passed in `waveform_containter` consistent with `returned_form`
         """
@@ -2177,9 +2286,8 @@ class IMRPhenomXAS(BaseWaveform):
                 self.source_parameters[None].f_ring,
                 self.source_parameters[None].f_damp,
             )
-            / self.source_parameters[None].eta
-        )
-        # t0 = (_d_phase_merge_ringdown_ansatz(powers_of_Mf, self.phase_coefficients[None], self.source_parameters[None].f_ring, self.source_parameters[None].f_damp) + self.phase_coefficients[None].c_2_merge_ringdown)/self.source_parameters[None].eta
+            + self.phase_coefficients[None].c_2_merge_ringdown
+        ) / self.source_parameters[None].eta
         time_shift = (
             t0
             - 2

@@ -337,7 +337,17 @@ class SourceParameters:
     f_ISCO: ti.f64
 
     @ti.func
-    def update_all_source_parameters(self, params_in: ti.template()):
+    def update_all_source_parameters(
+        self,
+        mass_1: ti.f64,
+        mass_2: ti.f64,
+        chi_1: ti.f64,
+        chi_2: ti.f64,
+        luminosity_distance: ti.f64,
+        inclination: ti.f64,
+        reference_phase: ti.f64,
+        coalescence_time: ti.f64,
+    ):
         """
         Totally 9 parameters are needed: M, q, chi1, chi2, iota, tc, phi0, dL.
         """
@@ -345,14 +355,14 @@ class SourceParameters:
         # 3 only used in response function: psi, lon, lat
         # mass is in the unit of solar mass
         # dL is in the unit of Mpc
-        self.m_1 = params_in.mass_1
-        self.m_2 = params_in.mass_2
-        self.chi_1 = params_in.chi_1
-        self.chi_2 = params_in.chi_2
-        self.dL_Mpc = params_in.luminosity_distance
-        self.iota = params_in.inclination
-        self.phase_ref = params_in.reference_phase
-        self.tc = params_in.coalescence_time
+        self.m_1 = mass_1
+        self.m_2 = mass_2
+        self.chi_1 = chi_1
+        self.chi_2 = chi_2
+        self.dL_Mpc = luminosity_distance
+        self.iota = inclination
+        self.phase_ref = reference_phase
+        self.tc = coalescence_time
         # derived parameters
         self.M = self.m_1 + self.m_2
         self.m1_dimless = self.m_1 / self.M
@@ -2065,17 +2075,17 @@ def _compute_amplitude(
     source_params: ti.template(),
 ):
     amplitude = 0.0
-    if powers_of_Mf.one < amplitude_coefficients.useful_power_fjoin_int_ins.one:
+    if powers_of_Mf.one < amplitude_coefficients.useful_powers_fjoin_int_ins.one:
         amplitude = _amplitude_inspiral_ansatz(
             powers_of_Mf, amplitude_coefficients, pn_prefactors
         )
-    elif powers_of_Mf.one > amplitude_coefficients.useful_power_fjoin_MRD_int.one:
+    elif powers_of_Mf.one > amplitude_coefficients.useful_powers_fjoin_MRD_int.one:
         amplitude = _amplitude_merge_ringdown_ansatz(
             powers_of_Mf, amplitude_coefficients, source_params
         )
     else:
         amplitude = _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients)
-    return amplitude * amplitude_coefficients.amp0 / powers_of_Mf.seven_sixths
+    return amplitude * amplitude_coefficients.amp_0 / powers_of_Mf.seven_sixths
 
 
 @ti.func
@@ -2091,10 +2101,10 @@ def _compute_phase(
     phase = 0.0
     # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
     # and fmax_int as the transtion points (l. 1020 in LALSimIMRPhenomX_internals.c)
-    if powers_of_Mf.one < phase_coefficients.useful_power_fjoin_int_ins.one:
+    if powers_of_Mf.one < phase_coefficients.useful_powers_fjoin_int_ins.one:
         phase = _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
     elif (
-        powers_of_Mf.one > phase_coefficients.useful_power_fjoin_MRD_ins.one
+        powers_of_Mf.one > phase_coefficients.useful_powers_fjoin_MRD_int.one
     ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
         phase = (
             _phase_merge_ringdown_ansatz(
@@ -2120,10 +2130,10 @@ def _compute_tf(
     note that all phase ansatz are without 1/eta
     """
     tf = 0.0
-    if powers_of_Mf.one < phase_coefficients.useful_power_fjoin_int_ins.one:
+    if powers_of_Mf.one < phase_coefficients.useful_powers_fjoin_int_ins.one:
         tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
     elif (
-        powers_of_Mf.one > phase_coefficients.useful_power_fjoin_MRD_int.one
+        powers_of_Mf.one > phase_coefficients.useful_powers_fjoin_MRD_int.one
     ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
         tf = (
             _d_phase_merge_ringdown_ansatz(
@@ -2258,7 +2268,7 @@ class IMRPhenomXAS(BaseWaveform):
 
         self.waveform_container = ti.Struct.field(
             ret_content,
-            shape=(self.frequencies.length,),
+            shape=self.frequencies.shape,
         )
         return None
 
@@ -2267,13 +2277,43 @@ class IMRPhenomXAS(BaseWaveform):
         necessary preparation which need to be finished in python scope for waveform computation
         (this function may be awkward, since no interpolation function in taichi-lang)
         """
-        self.source_parameters[None].generate_all_source_parameters(parameters)
-        self._update_waveform_kernel()
+        # TODO: passed-in parameter conversion
+        self._update_waveform_kernel(
+            parameters["mass_1"],
+            parameters["mass_2"],
+            parameters["chi_1"],
+            parameters["chi_2"],
+            parameters["luminosity_distance"],
+            parameters["inclination"],
+            parameters["reference_phase"],
+            parameters["coalescence_time"],
+        )
 
     @ti.kernel
-    def _update_waveform_kernel(self):
-        if ti.static(self.parameter_sanity_check):
-            self._parameter_check()
+    def _update_waveform_kernel(
+        self,
+        mass_1: ti.f64,
+        mass_2: ti.f64,
+        chi_1: ti.f64,
+        chi_2: ti.f64,
+        luminosity_distance: ti.f64,
+        inclination: ti.f64,
+        reference_phase: ti.f64,
+        coalescence_time: ti.f64,
+    ):
+        # TODO: parameter_sanity_check
+        # if ti.static(self.parameter_sanity_check):
+        #     self._parameter_check()
+        self.source_parameters[None].update_all_source_parameters(
+            mass_1,
+            mass_2,
+            chi_1,
+            chi_2,
+            luminosity_distance,
+            inclination,
+            reference_phase,
+            coalescence_time,
+        )
 
         self.pn_prefactors[None].compute_PN_prefactors(self.source_parameters[None])
         self.amplitude_coefficients[None].compute_amplitude_coefficients(
@@ -2285,15 +2325,14 @@ class IMRPhenomXAS(BaseWaveform):
 
         powers_of_Mf = UsefulPowers()
 
-        powers_of_Mf.updating(self.amplitude_coefficients[None].f_peak)
+        powers_of_Mf.update(self.amplitude_coefficients[None].f_peak)
         t0 = (
             _d_phase_merge_ringdown_ansatz(
                 powers_of_Mf,
                 self.phase_coefficients[None],
-                self.source_parameters[None].f_ring,
-                self.source_parameters[None].f_damp,
+                self.source_parameters[None],
             )
-            + self.phase_coefficients[None].c_2_merge_ringdown
+            + self.phase_coefficients[None].C2_MRD
         ) / self.source_parameters[None].eta
         time_shift = (
             t0
@@ -2303,21 +2342,19 @@ class IMRPhenomXAS(BaseWaveform):
             / self.source_parameters[None].M_sec
         )
         Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
-        powers_of_Mf.updating(Mf_ref)
+        powers_of_Mf.update(Mf_ref)
         phase_ref_temp = _compute_phase(
             powers_of_Mf,
             self.phase_coefficients[None],
             self.pn_prefactors[None],
-            self.source_parameters[None].f_ring,
-            self.source_parameters[None].f_damp,
-            self.source_parameters[None].eta,
+            self.source_parameters[None],
         )
         phase_shift = 2.0 * self.source_parameters[None].phase_ref + phase_ref_temp
 
         for idx in self.frequencies:
             Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
             if Mf < PHENOMX_HIGH_FREQUENCY_CUT:
-                powers_of_Mf.updating(Mf)
+                powers_of_Mf.update(Mf)
                 amplitude = _compute_amplitude(
                     powers_of_Mf,
                     self.amplitude_coefficients[None],
@@ -2347,9 +2384,7 @@ class IMRPhenomXAS(BaseWaveform):
                         powers_of_Mf,
                         self.phase_coefficients[None],
                         self.pn_prefactors[None],
-                        self.source_parameters[None].f_ring,
-                        self.source_parameters[None].f_damp,
-                        self.source_parameters[None].eta,
+                        self.source_parameters[None],
                     )
                     tf -= time_shift
                     tf *= self.source_parameters[None].M_sec / PI / 2

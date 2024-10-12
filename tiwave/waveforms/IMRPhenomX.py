@@ -252,7 +252,7 @@ def _phase_merge_ringdown_ansatz(
     """
     return (
         phase_coefficients.c_0 * powers_of_Mf.one
-        + 1.5 * phase_coefficients.c_1 * powers_of_Mf.two_third
+        + 1.5 * phase_coefficients.c_1 * powers_of_Mf.two_thirds
         - phase_coefficients.c_2 / powers_of_Mf.one
         - phase_coefficients.c_4 / 3.0 / powers_of_Mf.three
         + phase_coefficients.c_L
@@ -274,7 +274,7 @@ def _d_phase_merge_ringdown_ansatz(
 
     return (
         phase_coefficients.c_0
-        + phase_coefficients.c_1 / powers_of_Mf.one_third
+        + phase_coefficients.c_1 / powers_of_Mf.third
         + phase_coefficients.c_2 / powers_of_Mf.two
         + phase_coefficients.c_4 / powers_of_Mf.four
         + phase_coefficients.c_L
@@ -320,6 +320,7 @@ class SourceParameters:
     S_tot_hat_pow2: ti.f64
     S_tot_hat_pow3: ti.f64
     S_tot_hat_pow4: ti.f64
+    S_tot_hat_pow5: ti.f64
     # fitting parameters
     final_mass: ti.f64
     final_spin: ti.f64
@@ -388,6 +389,7 @@ class SourceParameters:
         self.S_tot_hat_pow2 = self.S_tot_hat * self.S_tot_hat
         self.S_tot_hat_pow3 = self.S_tot_hat * self.S_tot_hat_pow2
         self.S_tot_hat_pow4 = self.S_tot_hat * self.S_tot_hat_pow3
+        self.S_tot_hat_pow5 = self.S_tot_hat * self.S_tot_hat_pow4
 
         # fitting parameters
         self._set_final_mass()
@@ -703,7 +705,7 @@ class AmplitudeCoefficients:
     amp_0: ti.f64
 
     @ti.func
-    def _ins_int_colloc_points(self, source_params: ti.template()):
+    def _set_ins_int_colloc_points(self, source_params: ti.template()):
         """
         Computing collocation points in insprial and intermediate range.
         Only can be called after updating merge-ringdown coefficient, since the f_peak
@@ -727,7 +729,7 @@ class AmplitudeCoefficients:
         self.useful_powers_fjoin_MRD_int.update(self.f_peak)
 
     @ti.func
-    def _inspiral_coefficients(self, source_params: ti.template()):
+    def _set_inspiral_coefficients(self, source_params: ti.template()):
         # Value for amplitude collocation point at 0.5 f^A_T,
         self.ins_colloc_values[0] = (
             (
@@ -850,7 +852,7 @@ class AmplitudeCoefficients:
         self.rho_1, self.rho_2, self.rho_3 = gauss_elimination(Ab_ins)
 
     @ti.func
-    def _intermediate_coefficients(
+    def _set_intermediate_coefficients(
         self, source_params: ti.template(), pn_prefactors: ti.template()
     ):
         """
@@ -907,8 +909,8 @@ class AmplitudeCoefficients:
                 - 10.540154508599963 * source_params.S_tot_hat
                 + 1.0 * source_params.S_tot_hat_pow2
             )
-            + self.delta_chi
-            * self.delta
+            + source_params.delta_chi
+            * source_params.delta
             * (-0.016404056649860943 - 296.473359655246 * source_params.eta)
             * source_params.eta_pow2
         )
@@ -981,7 +983,7 @@ class AmplitudeCoefficients:
         ) = gauss_elimination(Ab_int)
 
     @ti.func
-    def _merge_ringdown_coefficients(self, source_params):
+    def _set_merge_ringdown_coefficients(self, source_params):
         """
         Computing merge-ringdown coefficients. Using different notation in arXiv:2001.11412,
         a_R (gamma_1), lambda (gamma_2), sigma (gamma_3)
@@ -1114,13 +1116,13 @@ class AmplitudeCoefficients:
 
     @ti.func
     def compute_amplitude_coefficients(self, source_params, pn_prefactors):
-        self._merge_ringdown_coefficients(source_params)
-        self._ins_int_colloc_points(source_params)
-        self._inspiral_coefficients(source_params)
-        self._intermediate_coefficients(source_params, pn_prefactors)
+        self._set_merge_ringdown_coefficients(source_params)
+        self._set_ins_int_colloc_points(source_params)
+        self._set_inspiral_coefficients(source_params)
+        self._set_intermediate_coefficients(source_params, pn_prefactors)
 
         # The common prefactor, A0 (without f^{-7/6})
-        self.amp0 = (
+        self.amp_0 = (
             0.25
             * tm.sqrt(10.0 / 3.0 * source_params.eta / useful_powers_pi.four_thirds)
             * source_params.M**2
@@ -1164,7 +1166,7 @@ class PhaseCoefficients:
     C2_MRD: ti.f64
 
     @ti.func
-    def _all_colloc_points(self, source_params: ti.template()):
+    def _set_all_colloc_points(self, source_params: ti.template()):
         # Merge-ringdown
         fmin_MRD = 0.3 * source_params.f_ring + 0.6 * source_params.f_ISCO
         fmax_MRD = source_params.f_ring + 1.25 * source_params.f_damp
@@ -1196,7 +1198,7 @@ class PhaseCoefficients:
         self.useful_powers_fjoin_MRD_int.update(fmax_int)
 
     @ti.func
-    def _merge_ringdown_coefficients(self, source_params: ti.template()):
+    def _set_merge_ringdown_coefficients(self, source_params: ti.template()):
         # Difference between collocation points 1 and 2 (v1 - v2)
         d12_MRD = (
             source_params.eta
@@ -1491,7 +1493,7 @@ class PhaseCoefficients:
         self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab_MRD)
 
     @ti.func
-    def _inspiral_coefficients(self, source_params: ti.template()):
+    def _set_inspiral_coefficients(self, source_params: ti.template()):
         """104 model"""
         # Value for v1 - v3
         d13_ins = (
@@ -1696,7 +1698,7 @@ class PhaseCoefficients:
         )
 
     @ti.func
-    def _intermediate_coefficients(
+    def _set_intermediate_coefficients(
         self, source_params: ti.template(), pn_prefactors: ti.template()
     ):
         """
@@ -1995,7 +1997,7 @@ class PhaseCoefficients:
         ) = gauss_elimination(Ab_int)
 
     @ti.func
-    def _connection_coefficients(
+    def _set_connection_coefficients(
         self, source_params: ti.template(), pn_prefactors: ti.template()
     ):
         """
@@ -2048,11 +2050,11 @@ class PhaseCoefficients:
     def compute_phase_coefficients(
         self, source_params: ti.template(), pn_prefactors: ti.template()
     ):
-        self._all_colloc_points(source_params)
-        self._merge_ringdown_coefficients(source_params)
-        self._inspiral_coefficients(source_params)
-        self._intermediate_coefficients(source_params, pn_prefactors)
-        self._connection_coefficients()
+        self._set_all_colloc_points(source_params)
+        self._set_merge_ringdown_coefficients(source_params)
+        self._set_inspiral_coefficients(source_params)
+        self._set_intermediate_coefficients(source_params, pn_prefactors)
+        self._set_connection_coefficients(source_params, pn_prefactors)
 
 
 @ti.func

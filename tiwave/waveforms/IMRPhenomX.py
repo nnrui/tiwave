@@ -311,8 +311,10 @@ class SourceParameters:
     delta_chi_pow2: ti.f64
     chi_s: ti.f64  # (chi_1 + chi_2)/2
     chi_s_pow2: ti.f64
+    chi_s_pow3: ti.f64
     chi_a: ti.f64  # (chi_1 - chi_2)/2
     chi_a_pow2: ti.f64
+    chi_a_pow3: ti.f64
     chi_PN_hat: ti.f64  # Eq. 4.17 in arXiv:2001.11412
     chi_PN_hat_pow2: ti.f64
     chi_PN_hat_pow3: ti.f64
@@ -382,8 +384,10 @@ class SourceParameters:
 
         self.chi_s = (self.chi_1 + self.chi_2) * 0.5
         self.chi_s_pow2 = self.chi_s * self.chi_s
+        self.chi_s_pow3 = self.chi_s * self.chi_s_pow2
         self.chi_a = (self.chi_1 - self.chi_2) * 0.5
         self.chi_a_pow2 = self.chi_a * self.chi_a
+        self.chi_a_pow3 = self.chi_a * self.chi_a_pow2
 
         self.chi_PN_hat = (
             (self.m1_dimless * self.chi_1 + self.m2_dimless * self.chi_2)

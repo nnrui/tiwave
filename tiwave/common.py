@@ -111,6 +111,7 @@ class PostNewtonianPrefactors:
             * source_params.chi_s
         ) * useful_powers_pi.two_thirds
         # Amplitude
+        # (equatoins in PhenomD paper have some difference with PhenomX paper in A5 and A6, using equations in PhenomX paper here.)
         self.prefactor_A_0 = 1.0
         self.prefactor_A_1 = 0.0
         self.prefactor_A_2 = (
@@ -135,12 +136,29 @@ class PostNewtonianPrefactors:
         self.prefactor_A_5 = (
             -8.5 / 6.4 * PI
             + 8.5 / 1.6 * PI * source_params.eta
-            + (28.5197 / 1.6128 - 1.579 / 4.032 * source_params.eta)
+            - 3.0 / 8.0 * (-1.0 + 3.0 * source_params.eta) * source_params.chi_s_pow3
+            - 3.0
+            / 8.0
+            * (-1.0 + source_params.eta)
+            * source_params.delta
+            * source_params.chi_a_pow3
+            - 9.0
+            / 8.0
+            * (-1.0 + source_params.eta)
+            * source_params.delta
+            * source_params.chi_s_pow2
+            * source_params.chi_a
+            - 9.0
+            / 8.0
+            * (-1.0 + 3.0 * source_params.eta)
+            * source_params.chi_s
+            * source_params.chi_a_pow2
+            + (28.7213 / 1.6128 - 2.083 / 4.032 * source_params.eta)
             * source_params.delta
             * source_params.chi_a
             + (
-                28.5197 / 1.6128
-                - 153.17 / 6.72 * source_params.eta
+                28.7213 / 1.6128
+                - 155.69 / 6.72 * source_params.eta
                 - 2.227 / 1.008 * source_params.eta_pow2
             )
             * source_params.chi_s
@@ -151,25 +169,22 @@ class PostNewtonianPrefactors:
             * source_params.eta
             - 32.48849057 / 1.78827264 * source_params.eta_pow2
             + 34.473079 / 6.386688 * source_params.eta_pow3
-            + (3.1 / 1.2 * PI - 7.0 / 3.0 * PI * source_params.eta)
-            * source_params.chi_s
             + (
-                161.4569 / 6.4512
-                - 187.3643 / 1.6128 * source_params.eta
-                + 216.7 / 4.2 * source_params.eta_pow2
-            )
-            * source_params.chi_a_pow2
-            + (
-                161.4569 / 6.4512
-                - 61.391 / 1.344 * source_params.eta
-                + 57.451 / 4.032 * source_params.eta_pow2
+                -49.039 / 7.168
+                - 10.043 / 2.016 * source_params.eta
+                + 14.975 / 4.032 * source_params.eta_pow2
             )
             * source_params.chi_s_pow2
             + (
-                3.1 / 1.2 * PI
-                + (161.4569 / 3.2256 - 165.961 / 2.688 * source_params.eta)
-                * source_params.chi_s
+                -49.039 / 7.168
+                + 26.553 / 1.792 * source_params.eta
+                + 77.2 / 2.1 * source_params.eta_pow2
             )
+            * source_params.chi_a_pow2
+            - (49.039 / 3.584 + 141.359 / 8.064 * source_params.eta)
             * source_params.delta
+            * source_params.chi_s
             * source_params.chi_a
+            + (-17.0 / 6.0 + 10.0 / 3.0 * source_params.eta) * PI * source_params.chi_s
+            - 17.0 / 6.0 * PI * source_params.delta * source_params.chi_a
         ) * useful_powers_pi.two

@@ -74,7 +74,16 @@ def _amplitude_intermediate_ansatz(
     Only the recommended fitting model `104` with 4th order polynomial ansatz are implemented.
     Without amp0.
     """
-    return 1.0 / (
+    # return 1.0 / (
+    #     amplitude_coefficients.alpha_0
+    #     + amplitude_coefficients.alpha_1 * powers_of_Mf.one
+    #     + amplitude_coefficients.alpha_2 * powers_of_Mf.two
+    #     + amplitude_coefficients.alpha_3 * powers_of_Mf.three
+    #     + amplitude_coefficients.alpha_4 * powers_of_Mf.four
+    # )
+    # The ansatz used in lalsimulation corresponding to the intermediate coefficients
+    # absorbing common f^(-7/6) factor.
+    return powers_of_Mf.seven_sixths / (
         amplitude_coefficients.alpha_0
         + amplitude_coefficients.alpha_1 * powers_of_Mf.one
         + amplitude_coefficients.alpha_2 * powers_of_Mf.two
@@ -888,10 +897,73 @@ class AmplitudeCoefficients:
         The case of point at :math:`f_3` is similar. Thus there will be a different of 
         factor :math:`f^{7/6}` in amplitude_intermediate_ansatz function.
         """
-        self.int_colloc_values[0] = 1.0 / _amplitude_inspiral_ansatz(
+        # self.int_colloc_values[0] = 1.0 / _amplitude_inspiral_ansatz(
+        #     self.useful_powers_fjoin_int_ins, self, pn_prefactors
+        # )
+        # self.int_colloc_values[1] = self.int_colloc_points[1] ** (-7 / 6) / (
+        #     (
+        #         1.4873184918202145
+        #         + 1974.6112656679577 * source_params.eta
+        #         + 27563.641024162127 * source_params.eta_pow2
+        #         - 19837.908020966777 * source_params.eta_pow3
+        #     )
+        #     / (
+        #         1.0
+        #         + 143.29004876335128 * source_params.eta
+        #         + 458.4097306093354 * source_params.eta_pow2
+        #     )
+        #     + source_params.S_tot_hat
+        #     * (
+        #         27.952730865904343
+        #         + source_params.eta
+        #         * (-365.55631765202895 - 260.3494489873286 * source_params.S_tot_hat)
+        #         + 3.2646808851249016 * source_params.S_tot_hat
+        #         + 3011.446602208493 * source_params.eta_pow2 * source_params.S_tot_hat
+        #         - 19.38970173389662 * source_params.S_tot_hat_pow2
+        #         + source_params.eta_pow3
+        #         * (
+        #             1612.2681322644232
+        #             - 6962.675551371755 * source_params.S_tot_hat
+        #             + 1486.4658089990298 * source_params.S_tot_hat_pow2
+        #         )
+        #     )
+        #     / (
+        #         12.647425554323242
+        #         - 10.540154508599963 * source_params.S_tot_hat
+        #         + 1.0 * source_params.S_tot_hat_pow2
+        #     )
+        #     + source_params.delta_chi
+        #     * source_params.delta
+        #     * (-0.016404056649860943 - 296.473359655246 * source_params.eta)
+        #     * source_params.eta_pow2
+        # )
+        # self.int_colloc_values[2] = 1.0 / _amplitude_merge_ringdown_ansatz(
+        #     self.useful_powers_fjoin_MRD_int, self, source_params
+        # )
+        # self.int_colloc_values[3] = (
+        #     _d_amplitude_inspiral_ansatz(
+        #         self.useful_powers_fjoin_int_ins, self, pn_prefactors
+        #     )
+        #     / self.int_colloc_values[0] ** 2
+        # )
+        # self.int_colloc_values[4] = (
+        #     _d_amplitude_merge_ringdown_ansatz(
+        #         self.useful_powers_fjoin_MRD_int, self, source_params
+        #     )
+        #     / self.int_colloc_values[2] ** 2
+        # )
+
+        # # The way of lalsimulation, the f^(-7/6) factor is absorb into the coefficients.
+        ins_f1 = _amplitude_inspiral_ansatz(
             self.useful_powers_fjoin_int_ins, self, pn_prefactors
         )
-        self.int_colloc_values[1] = self.int_colloc_points[1] ** (-7 / 6) / (
+        MRD_f4 = _amplitude_merge_ringdown_ansatz(
+            self.useful_powers_fjoin_MRD_int, self, source_params
+        )
+        self.int_colloc_values[0] = (
+            self.useful_powers_fjoin_int_ins.seven_sixths / ins_f1
+        )
+        self.int_colloc_values[1] = 1.0 / (
             (
                 1.4873184918202145
                 + 1974.6112656679577 * source_params.eta
@@ -928,63 +1000,67 @@ class AmplitudeCoefficients:
             * (-0.016404056649860943 - 296.473359655246 * source_params.eta)
             * source_params.eta_pow2
         )
-        self.int_colloc_values[2] = 1.0 / _amplitude_merge_ringdown_ansatz(
-            self.useful_powers_fjoin_MRD_int, self, source_params
+        self.int_colloc_values[2] = (
+            self.useful_powers_fjoin_MRD_int.seven_sixths / MRD_f4
         )
         self.int_colloc_values[3] = (
-            _d_amplitude_inspiral_ansatz(
+            7 / 6 * self.int_colloc_points[0] ** (1 / 6) / ins_f1
+            - self.int_colloc_points[0] ** (7 / 6)
+            * _d_amplitude_inspiral_ansatz(
                 self.useful_powers_fjoin_int_ins, self, pn_prefactors
             )
-            / self.int_colloc_values[0] ** 2
+            / ins_f1**2
         )
         self.int_colloc_values[4] = (
-            _d_amplitude_merge_ringdown_ansatz(
+            7 / 6 * self.int_colloc_points[2] ** (1 / 6) / MRD_f4
+            - self.int_colloc_points[2] ** (7 / 6)
+            * _d_amplitude_merge_ringdown_ansatz(
                 self.useful_powers_fjoin_MRD_int, self, source_params
             )
-            / self.int_colloc_values[2] ** 2
+            / MRD_f4**2
         )
 
         Ab_int = ti.Matrix(
             [
                 [
                     1.0,
-                    self.ins_colloc_points[0],
-                    self.ins_colloc_points[0] ** 2,
-                    self.ins_colloc_points[0] ** 3,
-                    self.ins_colloc_points[0] ** 4,
-                    self.ins_colloc_values[0],
+                    self.int_colloc_points[0],
+                    self.int_colloc_points[0] ** 2,
+                    self.int_colloc_points[0] ** 3,
+                    self.int_colloc_points[0] ** 4,
+                    self.int_colloc_values[0],
                 ],
                 [
                     1.0,
-                    self.ins_colloc_points[1],
-                    self.ins_colloc_points[1] ** 2,
-                    self.ins_colloc_points[1] ** 3,
-                    self.ins_colloc_points[1] ** 4,
-                    self.ins_colloc_values[1],
+                    self.int_colloc_points[1],
+                    self.int_colloc_points[1] ** 2,
+                    self.int_colloc_points[1] ** 3,
+                    self.int_colloc_points[1] ** 4,
+                    self.int_colloc_values[1],
                 ],
                 [
                     1.0,
-                    self.ins_colloc_points[2],
-                    self.ins_colloc_points[2] ** 2,
-                    self.ins_colloc_points[2] ** 3,
-                    self.ins_colloc_points[2] ** 4,
-                    self.ins_colloc_values[2],
-                ],
-                [
-                    0.0,
-                    1.0,
-                    2.0 * self.ins_colloc_points[0],
-                    3.0 * self.ins_colloc_points[0] ** 2,
-                    4.0 * self.ins_colloc_points[0] ** 3,
-                    self.ins_colloc_values[3],
+                    self.int_colloc_points[2],
+                    self.int_colloc_points[2] ** 2,
+                    self.int_colloc_points[2] ** 3,
+                    self.int_colloc_points[2] ** 4,
+                    self.int_colloc_values[2],
                 ],
                 [
                     0.0,
                     1.0,
-                    2.0 * self.ins_colloc_points[2],
-                    3.0 * self.ins_colloc_points[2] ** 2,
-                    4.0 * self.ins_colloc_points[2] ** 3,
-                    self.ins_colloc_values[4],
+                    2.0 * self.int_colloc_points[0],
+                    3.0 * self.int_colloc_points[0] ** 2,
+                    4.0 * self.int_colloc_points[0] ** 3,
+                    self.int_colloc_values[3],
+                ],
+                [
+                    0.0,
+                    1.0,
+                    2.0 * self.int_colloc_points[2],
+                    3.0 * self.int_colloc_points[2] ** 2,
+                    4.0 * self.int_colloc_points[2] ** 3,
+                    self.int_colloc_values[4],
                 ],
             ]
         )

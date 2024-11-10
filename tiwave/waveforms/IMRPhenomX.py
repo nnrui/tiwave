@@ -1,3 +1,6 @@
+# TODO:
+# - add two opt for exactlly same with lalsim and fix amp int and phase int (potential) bugs;
+
 import os
 import warnings
 from typing import Optional
@@ -29,7 +32,7 @@ def _amplitude_inspiral_ansatz(
 ):
     """
     Eq. 6.3 in arXiv:2001.11412.
-    Without amp0.
+    Without amp0, only have the 103 fit model.
     """
     return (
         1.0
@@ -81,8 +84,9 @@ def _amplitude_intermediate_ansatz(
     #     + amplitude_coefficients.alpha_3 * powers_of_Mf.three
     #     + amplitude_coefficients.alpha_4 * powers_of_Mf.four
     # )
-    # The ansatz used in lalsimulation corresponding to the intermediate coefficients
-    # absorbing common f^(-7/6) factor.
+    # The ansatz used in lalsimulation where the intermediate coefficients have absorbed
+    # common f^(-7/6) factor. We need to take out it since A0 will be multiply when assemble
+    # the waveform.
     return powers_of_Mf.seven_sixths / (
         amplitude_coefficients.alpha_0
         + amplitude_coefficients.alpha_1 * powers_of_Mf.one
@@ -152,26 +156,35 @@ def _phase_inspiral_ansatz(
     Only the recommended fitting model `104` are implemented.
     Without :math:`1/\eta`
     """
-    return 3.0 / 128.0 * (
-        pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds
-        + pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds
-        + pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one
-        + pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds
-        + pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third
-        + pn_prefactors.prefactor_varphi_5
-        + pn_prefactors.prefactor_varphi_5l * (powers_of_Mf.log + useful_powers_pi.log)
-        + pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third
-        + pn_prefactors.prefactor_varphi_6l
-        * powers_of_Mf.third
-        * (powers_of_Mf.log + useful_powers_pi.log)
-        + pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
-    ) + (
-        phase_coefficients.sigma_0
-        + phase_coefficients.sigma_1 * powers_of_Mf.one
-        + 0.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
-        + 0.6 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds
-        + 0.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
-    )
+    return (
+        -3.0
+        * (
+            pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds
+            + pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds
+            + pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one
+            + pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds
+            + pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third
+            # neglect the constant term of phi5 and phi5l*log(pi)
+            # + pn_prefactors.prefactor_varphi_5
+            + pn_prefactors.prefactor_varphi_5l * powers_of_Mf.log
+            + pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third
+            + pn_prefactors.prefactor_varphi_6l
+            * powers_of_Mf.third
+            * (powers_of_Mf.log + useful_powers_pi.log)
+            + pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
+            + pn_prefactors.prefactor_varphi_8 * powers_of_Mf.one
+            + pn_prefactors.prefactor_varphi_8l
+            * powers_of_Mf.one
+            * (powers_of_Mf.log + useful_powers_pi.log)
+        )
+        + (
+            +5.0 * phase_coefficients.sigma_1 * powers_of_Mf.one
+            + 3.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
+            + 3.0 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds
+            + 2.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
+        )
+        / useful_powers_pi.five_thirds
+    ) / 128.0  # note the normalizing factor used in lalsim: phiNorm (-3/128/pi^(-5/3))
 
 
 @ti.func
@@ -181,26 +194,36 @@ def _d_phase_inspiral_ansatz(
     pn_prefactors: ti.template(),
 ):
     """
-    Without :math:`1/\eta`
+    Without :math:`1/\eta`, the minus have absorbed here, using h=A*exp(i*phi) when
+    assemble the waveform, and t=-d_phi.
     """
-    return 3.0 / 128.0 * (
-        -5.0 * pn_prefactors.prefactor_varphi_0 / powers_of_Mf.eight_thirds
-        - 4.0 * pn_prefactors.prefactor_varphi_1 / powers_of_Mf.seven_thirds
-        - 3.0 * pn_prefactors.prefactor_varphi_2 / powers_of_Mf.two
-        - 2.0 * pn_prefactors.prefactor_varphi_3 / powers_of_Mf.five_thirds
-        - 1.0 * pn_prefactors.prefactor_varphi_4 / powers_of_Mf.four_thirds
-        + 3 * pn_prefactors.prefactor_varphi_5l / powers_of_Mf.one
-        + pn_prefactors.prefactor_varphi_6 / powers_of_Mf.two_thirds
-        + pn_prefactors.prefactor_varphi_6l
-        / powers_of_Mf.two_thirds
-        * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
-        + 2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
-    ) / 3.0 + (
-        phase_coefficients.sigma_1
-        + phase_coefficients.sigma_2 * powers_of_Mf.third
-        + phase_coefficients.sigma_3 * powers_of_Mf.two_thirds
-        + phase_coefficients.sigma_4 * powers_of_Mf.one
-    )
+    return (
+        (
+            5.0 * pn_prefactors.prefactor_varphi_0 / powers_of_Mf.eight_thirds
+            + 4.0 * pn_prefactors.prefactor_varphi_1 / powers_of_Mf.seven_thirds
+            + 3.0 * pn_prefactors.prefactor_varphi_2 / powers_of_Mf.two
+            + 2.0 * pn_prefactors.prefactor_varphi_3 / powers_of_Mf.five_thirds
+            + 1.0 * pn_prefactors.prefactor_varphi_4 / powers_of_Mf.four_thirds
+            - 3 * pn_prefactors.prefactor_varphi_5l / powers_of_Mf.one
+            - pn_prefactors.prefactor_varphi_6 / powers_of_Mf.two_thirds
+            - pn_prefactors.prefactor_varphi_6l
+            / powers_of_Mf.two_thirds
+            * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
+            - 2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
+            - 3.0 * pn_prefactors.prefactor_varphi_8
+            - 3.0
+            * pn_prefactors.prefactor_varphi_8l
+            * (1.0 + powers_of_Mf.log + useful_powers_pi.log)
+        )
+        + (
+            phase_coefficients.sigma_1
+            + phase_coefficients.sigma_2 * powers_of_Mf.third
+            + phase_coefficients.sigma_3 * powers_of_Mf.two_thirds
+            + phase_coefficients.sigma_4 * powers_of_Mf.one
+        )
+        * 5.0
+        / useful_powers_pi.five_thirds  # note the normalizing factor used in lalsim: dphase0 (5/128/pi^(-5/3))
+    ) / 128.0
 
 
 @ti.func
@@ -218,7 +241,7 @@ def _phase_intermediate_ansatz(
         - phase_coefficients.beta_2 / powers_of_Mf.one
         - phase_coefficients.beta_3 / 2.0 / powers_of_Mf.two
         - phase_coefficients.beta_4 / 3.0 / powers_of_Mf.three
-        - 2.0
+        + 2.0
         * phase_coefficients.c_L
         / source_params.f_damp
         * tm.atan2(
@@ -242,7 +265,7 @@ def _d_phase_intermediate_ansatz(
         + phase_coefficients.beta_2 / powers_of_Mf.two
         + phase_coefficients.beta_3 / powers_of_Mf.three
         + phase_coefficients.beta_4 / powers_of_Mf.four
-        - phase_coefficients.c_L
+        + phase_coefficients.c_L
         / (
             source_params.f_damp_pow2
             + 0.25 * (powers_of_Mf.one - source_params.f_ring) ** 2
@@ -327,6 +350,7 @@ class SourceParameters:
     chi_PN_hat: ti.f64  # Eq. 4.17 in arXiv:2001.11412
     chi_PN_hat_pow2: ti.f64
     chi_PN_hat_pow3: ti.f64
+    chi_PN_hat_pow4: ti.f64
     S_tot_hat: ti.f64  # Eq. 4.18
     S_tot_hat_pow2: ti.f64
     S_tot_hat_pow3: ti.f64
@@ -404,6 +428,7 @@ class SourceParameters:
         ) / (1.0 - (76.0 / 113.0 * self.eta))
         self.chi_PN_hat_pow2 = self.chi_PN_hat * self.chi_PN_hat
         self.chi_PN_hat_pow3 = self.chi_PN_hat * self.chi_PN_hat_pow2
+        self.chi_PN_hat_pow4 = self.chi_PN_hat * self.chi_PN_hat_pow3
 
         self.S_tot_hat = (
             self.m1_dimless * self.m1_dimless * self.chi_1
@@ -1225,7 +1250,6 @@ class AmplitudeCoefficients:
 @ti.dataclass
 class PhaseCoefficients:
     # Inspiral (104 fitting model)
-    sigma_0: ti.f64
     sigma_1: ti.f64
     sigma_2: ti.f64
     sigma_3: ti.f64
@@ -1250,8 +1274,8 @@ class PhaseCoefficients:
     c_2: ti.f64  # f^-2
     c_4: ti.f64  # f_-4
     c_L: ti.f64  # Lorentzian term
-    MRD_colloc_points: ti.types.vector(4, ti.f64)
-    MRD_colloc_values: ti.types.vector(4, ti.f64)
+    MRD_colloc_points: ti.types.vector(5, ti.f64)
+    MRD_colloc_values: ti.types.vector(5, ti.f64)
     C1_MRD: ti.f64
     C2_MRD: ti.f64
 
@@ -1593,29 +1617,29 @@ class PhaseCoefficients:
                 + 483033.0998073767 * source_params.eta_pow2
             )
             / (1.0 + 4.460294035404433 * source_params.eta)
-            + source_params.S_tot_hat
+            + source_params.chi_PN_hat
             * (
                 68384.62786426462
-                + 67663.42759836042 * source_params.S_tot_hat
-                - 2179.3505885609297 * source_params.S_tot_hat_pow2
+                + 67663.42759836042 * source_params.chi_PN_hat
+                - 2179.3505885609297 * source_params.chi_PN_hat_pow2
                 + source_params.eta
                 * (
                     -58475.33302037833
-                    + 62190.404951852535 * source_params.S_tot_hat
-                    + 18298.307770807573 * source_params.S_tot_hat_pow2
-                    - 303141.1945565486 * source_params.S_tot_hat_pow3
+                    + 62190.404951852535 * source_params.chi_PN_hat
+                    + 18298.307770807573 * source_params.chi_PN_hat_pow2
+                    - 303141.1945565486 * source_params.chi_PN_hat_pow3
                 )
-                + 19703.894135534803 * source_params.S_tot_hat_pow3
+                + 19703.894135534803 * source_params.chi_PN_hat_pow3
                 + source_params.eta_pow2
                 * (
                     -148368.4954044637
-                    - 758386.5685734496 * source_params.S_tot_hat
-                    - 137991.37032619823 * source_params.S_tot_hat_pow2
-                    + 1.0765877367729193e6 * source_params.S_tot_hat_pow3
+                    - 758386.5685734496 * source_params.chi_PN_hat
+                    - 137991.37032619823 * source_params.chi_PN_hat_pow2
+                    + 1.0765877367729193e6 * source_params.chi_PN_hat_pow3
                 )
-                + 32614.091002011017 * source_params.S_tot_hat_pow4
+                + 32614.091002011017 * source_params.chi_PN_hat_pow4
             )
-            / (2.0412979553629143 + 1.0 * source_params.S_tot_hat)
+            / (2.0412979553629143 + 1.0 * source_params.chi_PN_hat)
             + 12017.062595934838
             * source_params.delta_chi
             * source_params.delta
@@ -1630,35 +1654,35 @@ class PhaseCoefficients:
                 - 557253.0066989232 * source_params.eta_pow3
             )
             / (1.0 + 18.53018618227582 * source_params.eta)
-            + source_params.S_tot_hat
+            + source_params.chi_PN_hat
             * (
                 -27089.36915061857
-                - 66228.9369155027 * source_params.S_tot_hat
+                - 66228.9369155027 * source_params.chi_PN_hat
                 + source_params.eta_pow2
                 * (
                     150022.21343386435
-                    - 50166.382087278434 * source_params.S_tot_hat
-                    - 399712.22891153296 * source_params.S_tot_hat_pow2
+                    - 50166.382087278434 * source_params.chi_PN_hat
+                    - 399712.22891153296 * source_params.chi_PN_hat_pow2
                 )
-                - 44331.41741405198 * source_params.S_tot_hat_pow2
+                - 44331.41741405198 * source_params.chi_PN_hat_pow2
                 + source_params.eta
                 * (
                     50644.13475990821
-                    + 157036.45676788126 * source_params.S_tot_hat
-                    + 126736.43159783827 * source_params.S_tot_hat_pow2
+                    + 157036.45676788126 * source_params.chi_PN_hat
+                    + 126736.43159783827 * source_params.chi_PN_hat_pow2
                 )
                 + source_params.eta_pow3
                 * (
                     -593633.5370110178
-                    - 325423.99477314285 * source_params.S_tot_hat
-                    + 847483.2999508682 * source_params.S_tot_hat_pow2
+                    - 325423.99477314285 * source_params.chi_PN_hat
+                    + 847483.2999508682 * source_params.chi_PN_hat_pow2
                 )
             )
             / (
                 -1.5232497464826662
-                - 3.062957826830017 * source_params.S_tot_hat
-                - 1.130185486082531 * source_params.S_tot_hat_pow2
-                + 1.0 * source_params.S_tot_hat_pow3
+                - 3.062957826830017 * source_params.chi_PN_hat
+                - 1.130185486082531 * source_params.chi_PN_hat_pow2
+                + 1.0 * source_params.chi_PN_hat_pow3
             )
             + 3843.083992827935
             * source_params.delta_chi
@@ -1675,35 +1699,35 @@ class PhaseCoefficients:
                 + 8.913612508054944e6 * source_params.eta_pow4
             )
             / (1.0 + 46.83697749859996 * source_params.eta)
-            + source_params.S_tot_hat
+            + source_params.chi_PN_hat
             * (
                 397951.95299014193
-                - 207180.42746987 * source_params.S_tot_hat
+                - 207180.42746987 * source_params.chi_PN_hat
                 + source_params.eta_pow3
                 * (
                     4.662143741417853e6
-                    - 584728.050612325 * source_params.S_tot_hat
-                    - 1.6894189124921719e6 * source_params.S_tot_hat_pow2
+                    - 584728.050612325 * source_params.chi_PN_hat
+                    - 1.6894189124921719e6 * source_params.chi_PN_hat_pow2
                 )
                 + source_params.eta
                 * (
                     -1.0053073129700898e6
-                    + 1.235279439281927e6 * source_params.S_tot_hat
-                    - 174952.69161683554 * source_params.S_tot_hat_pow2
+                    + 1.235279439281927e6 * source_params.chi_PN_hat
+                    - 174952.69161683554 * source_params.chi_PN_hat_pow2
                 )
-                - 130668.37221912303 * source_params.S_tot_hat_pow2
+                - 130668.37221912303 * source_params.chi_PN_hat_pow2
                 + source_params.eta_pow2
                 * (
                     -1.9826323844247842e6
-                    + 208349.45742548333 * source_params.S_tot_hat
-                    + 895372.155565861 * source_params.S_tot_hat_pow2
+                    + 208349.45742548333 * source_params.chi_PN_hat
+                    + 895372.155565861 * source_params.chi_PN_hat_pow2
                 )
             )
             / (
                 -9.675704197652225
-                + 3.5804521763363075 * source_params.S_tot_hat
-                + 2.5298346636273306 * source_params.S_tot_hat_pow2
-                + 1.0 * source_params.S_tot_hat_pow3
+                + 3.5804521763363075 * source_params.chi_PN_hat
+                + 2.5298346636273306 * source_params.chi_PN_hat_pow2
+                + 1.0 * source_params.chi_PN_hat_pow3
             )
             + (
                 -1296.9289110696955 * source_params.delta_chi_pow2 * source_params.eta
@@ -1713,7 +1737,7 @@ class PhaseCoefficients:
                 * (
                     -24708.109411857182
                     + 24703.28267342699 * source_params.eta
-                    + 47752.17032707405 * source_params.S_tot_hat
+                    + 47752.17032707405 * source_params.chi_PN_hat
                 )
             )
         )
@@ -1725,21 +1749,21 @@ class PhaseCoefficients:
                 + 28867.73328134167 * source_params.eta_pow2
             )
             / (1.0 + 0.41143032589262585 * source_params.eta)
-            + source_params.S_tot_hat
+            + source_params.chi_PN_hat
             * (
                 16116.057657391262
                 + source_params.eta_pow3
-                * (-375818.0132734753 - 386247.80765802023 * source_params.S_tot_hat)
+                * (-375818.0132734753 - 386247.80765802023 * source_params.chi_PN_hat)
                 + source_params.eta
-                * (-82355.86732027541 - 25843.06175439942 * source_params.S_tot_hat)
-                + 9861.635308837876 * source_params.S_tot_hat
+                * (-82355.86732027541 - 25843.06175439942 * source_params.chi_PN_hat)
+                + 9861.635308837876 * source_params.chi_PN_hat
                 + source_params.eta_pow2
-                * (229284.04542668918 + 117410.37432997991 * source_params.S_tot_hat)
+                * (229284.04542668918 + 117410.37432997991 * source_params.chi_PN_hat)
             )
             / (
                 -3.7385208695213668
-                + 0.25294420589064653 * source_params.S_tot_hat
-                + 1.0 * source_params.S_tot_hat_pow2
+                + 0.25294420589064653 * source_params.chi_PN_hat
+                + 1.0 * source_params.chi_PN_hat_pow2
             )
             + 194.5554531509207
             * source_params.delta_chi
@@ -1989,89 +2013,94 @@ class PhaseCoefficients:
         )
         self.int_colloc_values[2] = d_v3int_v4MRD + self.MRD_colloc_values[3]
         self.int_colloc_values[3] = d43_int + self.int_colloc_values[2]
-        self.int_colloc_values[4] = _d_phase_merge_ringdown_ansatz(
-            self.useful_powers_fjoin_MRD_int, self, source_params
-        )
+        # self.int_colloc_values[4] = _d_phase_merge_ringdown_ansatz(
+        #     self.useful_powers_fjoin_MRD_int, self, source_params
+        # )
+        # Following lalsim, using MRD_colloc_values[0] (at f_phi_T) rather recalculating
+        # the value at f_phi_T + 0.5deltaR
+        self.int_colloc_values[4] = self.MRD_colloc_values[0]
 
+        # scale using the factor of f_ring to enhance the numerical stability
+        int_colloc_points_scaled = self.int_colloc_points / source_params.f_ring
         Ab_int = ti.Matrix(
             [
                 [
                     1.0,
-                    self.ins_colloc_points[0] ** (-1),
-                    self.ins_colloc_points[0] ** (-2),
-                    self.ins_colloc_points[0] ** (-3),
-                    self.ins_colloc_points[0] ** (-4),
-                    self.ins_colloc_values[0]
-                    + (
+                    int_colloc_points_scaled[0] ** (-1),
+                    int_colloc_points_scaled[0] ** (-2),
+                    int_colloc_points_scaled[0] ** (-3),
+                    int_colloc_points_scaled[0] ** (-4),
+                    self.int_colloc_values[0]
+                    - (
                         self.c_L
                         / (
                             source_params.f_damp_pow2
                             + 0.25
-                            * (self.ins_colloc_points[0] - source_params.f_ring) ** 2
+                            * (self.int_colloc_points[0] - source_params.f_ring) ** 2
                         )
                     ),
                 ],
                 [
                     1.0,
-                    self.ins_colloc_points[1] ** (-1),
-                    self.ins_colloc_points[1] ** (-2),
-                    self.ins_colloc_points[1] ** (-3),
-                    self.ins_colloc_points[1] ** (-4),
-                    self.ins_colloc_values[1]
-                    + (
+                    int_colloc_points_scaled[1] ** (-1),
+                    int_colloc_points_scaled[1] ** (-2),
+                    int_colloc_points_scaled[1] ** (-3),
+                    int_colloc_points_scaled[1] ** (-4),
+                    self.int_colloc_values[1]
+                    - (
                         self.c_L
                         / (
                             source_params.f_damp_pow2
                             + 0.25
-                            * (self.ins_colloc_points[1] - source_params.f_ring) ** 2
+                            * (self.int_colloc_points[1] - source_params.f_ring) ** 2
                         )
                     ),
                 ],
                 [
                     1.0,
-                    self.ins_colloc_points[2] ** (-1),
-                    self.ins_colloc_points[2] ** (-2),
-                    self.ins_colloc_points[2] ** (-3),
-                    self.ins_colloc_points[2] ** (-4),
-                    self.ins_colloc_values[2]
-                    + (
+                    int_colloc_points_scaled[2] ** (-1),
+                    int_colloc_points_scaled[2] ** (-2),
+                    int_colloc_points_scaled[2] ** (-3),
+                    int_colloc_points_scaled[2] ** (-4),
+                    self.int_colloc_values[2]
+                    - (
                         self.c_L
                         / (
                             source_params.f_damp_pow2
                             + 0.25
-                            * (self.ins_colloc_points[2] - source_params.f_ring) ** 2
+                            * (self.int_colloc_points[2] - source_params.f_ring) ** 2
                         )
                     ),
                 ],
                 [
                     1.0,
-                    self.ins_colloc_points[3] ** (-1),
-                    self.ins_colloc_points[3] ** (-2),
-                    self.ins_colloc_points[3] ** (-3),
-                    self.ins_colloc_points[3] ** (-4),
-                    self.ins_colloc_values[3]
-                    + (
+                    int_colloc_points_scaled[3] ** (-1),
+                    int_colloc_points_scaled[3] ** (-2),
+                    int_colloc_points_scaled[3] ** (-3),
+                    int_colloc_points_scaled[3] ** (-4),
+                    self.int_colloc_values[3]
+                    - (
                         self.c_L
                         / (
                             source_params.f_damp_pow2
                             + 0.25
-                            * (self.ins_colloc_points[3] - source_params.f_ring) ** 2
+                            * (self.int_colloc_points[3] - source_params.f_ring) ** 2
                         )
                     ),
                 ],
                 [
                     1.0,
-                    self.ins_colloc_points[4] ** (-1),
-                    self.ins_colloc_points[4] ** (-2),
-                    self.ins_colloc_points[4] ** (-3),
-                    self.ins_colloc_points[4] ** (-4),
-                    self.ins_colloc_values[4]
-                    + (
+                    int_colloc_points_scaled[4] ** (-1),
+                    int_colloc_points_scaled[4] ** (-2),
+                    int_colloc_points_scaled[4] ** (-3),
+                    int_colloc_points_scaled[4] ** (-4),
+                    self.int_colloc_values[4]
+                    - (
                         self.c_L
                         / (
                             source_params.f_damp_pow2
                             + 0.25
-                            * (self.ins_colloc_points[4] - source_params.f_ring) ** 2
+                            * (self.int_colloc_points[4] - source_params.f_ring) ** 2
                         )
                     ),
                 ],
@@ -2079,12 +2108,17 @@ class PhaseCoefficients:
         )
 
         (
-            self.beta_0,
-            self.beta_1,
-            self.beta_2,
-            self.beta_3,
-            self.beta_4,
+            beta_0,
+            beta_1,
+            beta_2,
+            beta_3,
+            beta_4,
         ) = gauss_elimination(Ab_int)
+        self.beta_0 = beta_0
+        self.beta_1 = beta_1 * source_params.f_ring
+        self.beta_2 = beta_2 * source_params.f_ring**2
+        self.beta_3 = beta_3 * source_params.f_ring**3
+        self.beta_4 = beta_4 * source_params.f_ring**4
 
     @ti.func
     def _set_connection_coefficients(
@@ -2121,15 +2155,21 @@ class PhaseCoefficients:
             - self.C2_int * self.useful_powers_fjoin_int_ins.one
         )
         # Connection coefficients added into merge-ringdown ansatz
-        self.C2_MRD = _d_phase_intermediate_ansatz(
-            self.useful_powers_fjoin_MRD_int, self, source_params
-        ) - _d_phase_merge_ringdown_ansatz(
-            self.useful_powers_fjoin_MRD_int, self, source_params
+        self.C2_MRD = (
+            _d_phase_intermediate_ansatz(
+                self.useful_powers_fjoin_MRD_int, self, source_params
+            )
+            + self.C2_int
+            - _d_phase_merge_ringdown_ansatz(
+                self.useful_powers_fjoin_MRD_int, self, source_params
+            )
         )
         self.C1_MRD = (
             _phase_intermediate_ansatz(
                 self.useful_powers_fjoin_MRD_int, self, source_params
             )
+            + self.C1_int
+            + self.C2_int * self.useful_powers_fjoin_MRD_int.one
             - _phase_merge_ringdown_ansatz(
                 self.useful_powers_fjoin_MRD_int, self, source_params
             )

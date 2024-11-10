@@ -23,6 +23,8 @@ class PostNewtonianPrefactors:
     prefactor_varphi_6: ti.f64
     prefactor_varphi_6l: ti.f64
     prefactor_varphi_7: ti.f64
+    prefactor_varphi_8: ti.f64
+    prefactor_varphi_8l: ti.f64
     # 3 PN amplitude
     prefactor_A_0: ti.f64
     prefactor_A_1: ti.f64
@@ -82,10 +84,26 @@ class PostNewtonianPrefactors:
                 + (-15737.765635 / 3.048192 + 225.5 / 1.2 * PI * PI) * source_params.eta
                 + 76.055 / 1.728 * source_params.eta_pow2
                 - 127.825 / 1.296 * source_params.eta_pow3
-                - tm.log(4.0) * 684.8 / 2.1
+                - tm.log(2.0) * 1369.6 / 2.1
             )
             + 2270.0 / 3.0 * PI * source_params.delta * source_params.chi_a
             + (2270.0 / 3.0 - 520.0 * source_params.eta) * PI * source_params.chi_s
+            + (755.15 / 1.44 - 822.5 / 1.8 * source_params.eta)
+            * source_params.delta
+            * source_params.chi_s
+            * source_params.chi_a
+            + (
+                755.15 / 2.88
+                - 2632.45 / 2.52 * source_params.eta
+                - 480.0 * source_params.eta_pow2
+            )
+            * source_params.chi_a_pow2
+            + (
+                755.15 / 2.88
+                - 2324.15 / 5.04 * source_params.eta
+                + 1255.0 / 9.0 * source_params.eta_pow2
+            )
+            * source_params.chi_s_pow2
         ) * useful_powers_pi.third
         self.prefactor_varphi_6l = -684.8 / 6.3 * useful_powers_pi.third
         self.prefactor_varphi_7 = (
@@ -109,7 +127,46 @@ class PostNewtonianPrefactors:
                 + 534.5 / 3.6 * source_params.eta_pow3
             )
             * source_params.chi_s
+            - 1140.0
+            * PI
+            * source_params.delta
+            * source_params.chi_a
+            * source_params.chi_s
+            + (-570.0 + 2240.0 * source_params.eta) * PI * source_params.chi_a_pow2
+            + (-570.0 + 40.0 * source_params.eta) * PI * source_params.chi_s_pow2
+            + (14585.0 / 8.0 - 215.0 / 2.0 * source_params.eta)
+            * source_params.delta
+            * source_params.chi_a
+            * source_params.chi_s_pow2
+            + (
+                14585.0 / 8.0
+                - 7270.0 * source_params.eta
+                + 80.0 * source_params.eta_pow2
+            )
+            * source_params.chi_a_pow2
+            * source_params.chi_s
+            + (1458.5 / 2.4 - 2380.0 * source_params.eta)
+            * source_params.delta
+            * source_params.chi_a_pow3
+            + (
+                1458.5 / 2.4
+                - 475.0 / 6.0 * source_params.eta
+                + 100.0 / 3.0 * source_params.eta_pow2
+            )
+            * source_params.chi_s_pow3
         ) * useful_powers_pi.two_thirds
+        self.prefactor_varphi_8 = (
+            (2339.15 / 1.68 - 991.85 / 2.52 * source_params.eta)
+            * source_params.delta
+            * source_params.chi_a
+            + (
+                2339.15 / 1.68
+                - 3970.375 / 2.268 * source_params.eta
+                + 196.55 / 1.89 * source_params.eta_pow2
+            )
+            * source_params.chi_s
+        ) * useful_powers_pi.two
+        self.prefactor_varphi_8l = -self.prefactor_varphi_8
         # Amplitude
         # (equatoins in PhenomD paper have some difference with PhenomX paper in A5 and A6, using equations in PhenomX paper here.)
         self.prefactor_A_0 = 1.0

@@ -2363,9 +2363,10 @@ def _compute_tf(
 def _get_polarization_from_amplitude_phase(
     amplitude: ti.f64, phase: ti.f64, iota: ti.f64
 ):
+    # TODO: using Ylm to compatible with high mode
     cross_prefactor = tm.cos(iota)
     plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
-    plus = amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
+    plus = - amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
     cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_prefactor
     plus *= plus_prefactor
     return cross, plus
@@ -2536,7 +2537,7 @@ class IMRPhenomXAS(BaseWaveform):
 
         powers_of_Mf = UsefulPowers()
 
-        # time shift to the coalescence_time (note different waveform model using 
+        # time shift to the coalescence_time (note different waveform model using
         # different definition for coalescence time)
         freq_fit = (
             self.source_parameters[None].f_ring - self.source_parameters[None].f_damp
@@ -2552,7 +2553,9 @@ class IMRPhenomXAS(BaseWaveform):
         t0 = (
             _time_at_fit_frequency(self.source_parameters[None])
             - t_ffit
-            - 2.0 * PI * (500.0 + _time_shift_psi4_to_strain(self.source_parameters[None]))
+            - 2.0
+            * PI
+            * (500.0 + _time_shift_psi4_to_strain(self.source_parameters[None]))
         )
         # then shift to the passed-in coalescence time
         time_shift = (
@@ -2562,11 +2565,11 @@ class IMRPhenomXAS(BaseWaveform):
             * self.source_parameters[None].tc
             / self.source_parameters[None].M_sec
         )
-        # phase shift to the reference_phase (TODO: here we use different convention where the 
+        # phase shift to the reference_phase (TODO: here we use different convention where the
         # `reference_phase` directly denotes the waveform phase at the `reference_frequency`)
         Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
         powers_of_Mf.update(Mf_ref)
-        phase_shift = - (
+        phase_shift = -(
             _compute_phase(
                 powers_of_Mf,
                 self.phase_coefficients[None],
@@ -2577,7 +2580,7 @@ class IMRPhenomXAS(BaseWaveform):
         )
         phase_shift += 2.0 * self.source_parameters[None].phase_ref + PI / 4
         # phase_shift += self.source_parameters[None].phase_ref
-        
+
         # main loop for building the waveform, auto-parallelized.
         for idx in self.frequencies:
             Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
@@ -2631,28 +2634,3 @@ class IMRPhenomXAS(BaseWaveform):
     def _parameter_check(self):
         # TODO
         pass
-
-    def np_array_of_waveform_container(self):
-        ret = {}
-        if self.returned_form == "polarizations":
-            hcross_array = (
-                self.waveform_container.hcross.to_numpy()
-                .view(dtype=np.complex128)
-                .reshape((self.frequencies.shape))
-            )
-            hplus_array = (
-                self.waveform_container.hplus.to_numpy()
-                .view(dtype=np.complex128)
-                .reshape((self.frequencies.shape))
-            )
-            ret["hcross"] = hcross_array
-            ret["hplus"] = hplus_array
-        elif self.returned_form == "amplitude_phase":
-            amp_array = self.waveform_container.amplitude.to_numpy()
-            phase_array = self.waveform_container.phase.to_numpy()
-            ret["amplitude"] = amp_array
-            ret["phase"] = phase_array
-        if self.include_tf:
-            tf_array = self.waveform_container.tf.to_numpy()
-            ret["tf"] = tf_array
-        return ret

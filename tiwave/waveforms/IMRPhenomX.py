@@ -1,6 +1,6 @@
 # TODO:
 # - add two opt for exactlly same with lalsim and fix amp int and phase int (potential) bugs;
-
+# - improve the convention for constant amplitude norm factor to compatible with Ylm
 import os
 import warnings
 from typing import Optional
@@ -1323,9 +1323,11 @@ class AmplitudeCoefficients:
         self._set_intermediate_coefficients(source_params, pn_prefactors)
 
         # The common prefactor, A0 (without f^{-7/6})
+        # TODO: use amp_0 excluding the Ylm constant factor
         self.amp_0 = (
             0.25
-            * tm.sqrt(10.0 / 3.0 * source_params.eta / useful_powers_pi.four_thirds)
+            * tm.sqrt(10.0 / 3.0 * source_params.eta)
+            / useful_powers_pi.two_thirds
             * source_params.M**2
             / source_params.dL_SI
             * MRSUN_SI
@@ -2612,7 +2614,7 @@ class IMRPhenomXAS(BaseWaveform):
                         self.pn_prefactors[None],
                         self.source_parameters[None],
                     )
-                    tf -= time_shift
+                    tf += time_shift
                     tf *= self.source_parameters[None].M_sec / PI / 2
                     self.waveform_container[idx].tf = tf
             else:

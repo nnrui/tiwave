@@ -23,6 +23,92 @@ useful_powers_pi = UsefulPowers()
 useful_powers_pi.update(PI)
 
 
+@ti.func
+def _time_shift_psi4_to_strain(source_params: ti.template()) -> ti.f64:
+    """
+    The fit of the time difference between peak of strain and psi4.
+    """
+    return (
+        13.39320482758057
+        - 175.42481512989315 * source_params.eta
+        + 2097.425116152503 * source_params.eta_pow2
+        - 9862.84178637907 * source_params.eta_pow3
+        + 16026.897939722587 * source_params.eta_pow4
+        + (
+            4.7895602776763
+            - 163.04871764530466 * source_params.eta
+            + 609.5575850476959 * source_params.eta_pow2
+        )
+        * source_params.S_tot_hat
+        + (
+            1.3934428041390161
+            - 97.51812681228478 * source_params.eta
+            + 376.9200932531847 * source_params.eta_pow2
+        )
+        * source_params.S_tot_hat_pow2
+        + (
+            15.649521097877374
+            + 137.33317057388916 * source_params.eta
+            - 755.9566456906406 * source_params.eta_pow2
+        )
+        * source_params.S_tot_hat_pow3
+        + (
+            13.097315867845788
+            + 149.30405703643288 * source_params.eta
+            - 764.5242164872267 * source_params.eta_pow2
+        )
+        * source_params.S_tot_hat_pow4
+        + 105.37711654943146
+        * source_params.delta_chi
+        * source_params.delta
+        * source_params.eta_pow2
+    )
+
+
+@ti.func
+def _time_at_fit_frequency(source_params: ti.template()) -> ti.f64:
+    """
+    The fit of dphi at the fit frequency, i.e. dphi(fring-fdamp).
+    """
+    return (
+        3155.1635543201924
+        + 1257.9949740608242 * source_params.eta
+        - 32243.28428870599 * source_params.eta_pow2
+        + 347213.65466875216 * source_params.eta_pow3
+        - 1.9223851649491738e6 * source_params.eta_pow4
+        + 5.3035911346921865e6 * source_params.eta_pow5
+        - 5.789128656876938e6 * source_params.eta_pow6
+        + (
+            -24.181508118588667
+            + 115.49264174560281 * source_params.eta
+            - 380.19778216022763 * source_params.eta_pow2
+        )
+        * source_params.S_tot_hat
+        + (
+            24.72585609641552
+            - 328.3762360751952 * source_params.eta
+            + 725.6024119989094 * source_params.eta_pow2
+        )
+        * source_params.S_tot_hat_pow2
+        + (
+            23.404604124552
+            - 646.3410199799737 * source_params.eta
+            + 1941.8836639529036 * source_params.eta_pow2
+        )
+        * source_params.S_tot_hat_pow3
+        + (
+            -12.814828278938885
+            - 325.92980012408367 * source_params.eta
+            + 1320.102640190539 * source_params.eta_pow2
+        )
+        * source_params.S_tot_hat_pow4
+        - 148.17317525117338
+        * source_params.delta_chi
+        * source_params.delta
+        * source_params.eta_pow2
+    )
+
+
 # Amplitude ansatz
 @ti.func
 def _amplitude_inspiral_ansatz(
@@ -2277,7 +2363,7 @@ def _get_polarization_from_amplitude_phase(
 ):
     cross_prefactor = tm.cos(iota)
     plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
-    plus = amplitude * tm.cexp(ComplexNumber([0.0, -1.0] * phase))
+    plus = amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
     cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_prefactor
     plus *= plus_prefactor
     return cross, plus
@@ -2307,6 +2393,9 @@ class IMRPhenomXAS(BaseWaveform):
 
         TODO:
         check whether passed in `waveform_containter` consistent with `returned_form`
+
+        TODO:
+        add options for exactly same with lalsim or with modification.
         """
         self.frequencies = frequencies
         if reference_frequency is None:
@@ -2445,32 +2534,49 @@ class IMRPhenomXAS(BaseWaveform):
 
         powers_of_Mf = UsefulPowers()
 
-        powers_of_Mf.update(self.amplitude_coefficients[None].f_peak)
-        t0 = (
-            _d_phase_merge_ringdown_ansatz(
-                powers_of_Mf,
-                self.phase_coefficients[None],
-                self.source_parameters[None],
-            )
-            + self.phase_coefficients[None].C2_MRD
-        ) / self.source_parameters[None].eta
-        time_shift = (
-            t0
-            - 2
-            * PI
-            * self.source_parameters[None].tc
-            / self.source_parameters[None].M_sec
+        # time shift to the coalescence_time (note different waveform model using 
+        # different definition for coalescence time)
+        freq_fit = (
+            self.source_parameters[None].f_ring - self.source_parameters[None].f_damp
         )
-        Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
-        powers_of_Mf.update(Mf_ref)
-        phase_ref_temp = _compute_phase(
+        powers_of_Mf.update(freq_fit)
+        t_ffit = _compute_tf(
             powers_of_Mf,
             self.phase_coefficients[None],
             self.pn_prefactors[None],
             self.source_parameters[None],
         )
-        phase_shift = 2.0 * self.source_parameters[None].phase_ref + phase_ref_temp
-
+        # first shift peak time around t=0
+        t0 = (
+            _time_at_fit_frequency(self.source_parameters[None])
+            - t_ffit
+            - 2.0 * PI * (500.0 + _time_shift_psi4_to_strain(self.source_parameters[None]))
+        )
+        # then shift to the passed-in coalescence time
+        time_shift = (
+            t0
+            - 2.0
+            * PI
+            * self.source_parameters[None].tc
+            / self.source_parameters[None].M_sec
+        )
+        # phase shift to the reference_phase (TODO: here we use different convention where the 
+        # `reference_phase` directly denotes the waveform phase at the `reference_frequency`)
+        Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
+        powers_of_Mf.update(Mf_ref)
+        phase_shift = - (
+            _compute_phase(
+                powers_of_Mf,
+                self.phase_coefficients[None],
+                self.pn_prefactors[None],
+                self.source_parameters[None],
+            )
+            + time_shift * Mf_ref
+        )
+        phase_shift += 2.0 * self.source_parameters[None].phase_ref + PI / 4
+        # phase_shift += self.source_parameters[None].phase_ref
+        
+        # main loop for building the waveform, auto-parallelized.
         for idx in self.frequencies:
             Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
             if Mf < PHENOMX_HIGH_FREQUENCY_CUT:
@@ -2487,8 +2593,8 @@ class IMRPhenomXAS(BaseWaveform):
                     self.pn_prefactors[None],
                     self.source_parameters[None],
                 )
-                phase -= time_shift * (Mf - Mf_ref) + phase_shift
-                # remember multiple amp0 and shift phase and 1/eta
+                phase += time_shift * Mf + phase_shift
+
                 if ti.static(self.returned_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = amplitude
                     self.waveform_container[idx].phase = phase

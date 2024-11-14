@@ -117,29 +117,13 @@ class BaseWaveform(ABC):
     @abstractmethod
     def update_waveform(self, parameters: dict[str, float]) -> None:
         pass
- 
+
     @property
-    def numpy_array_of_waveform_container(self):
-        ret = {}
+    def waveform_numpy(self):
+        wf_array = self.waveform_container.to_numpy()
         if self.returned_form == "polarizations":
-            hcross_array = (
-                self.waveform_container.hcross.to_numpy()
-                .view(dtype=np.complex128)
-                .reshape((self.frequencies.shape))
+            wf_array["hcross"] = (
+                wf_array["hcross"][:, 0] + 1j * wf_array["hcross"][:, 1]
             )
-            hplus_array = (
-                self.waveform_container.hplus.to_numpy()
-                .view(dtype=np.complex128)
-                .reshape((self.frequencies.shape))
-            )
-            ret["hcross"] = hcross_array
-            ret["hplus"] = hplus_array
-        elif self.returned_form == "amplitude_phase":
-            amp_array = self.waveform_container.amplitude.to_numpy()
-            phase_array = self.waveform_container.phase.to_numpy()
-            ret["amplitude"] = amp_array
-            ret["phase"] = phase_array
-        if self.include_tf:
-            tf_array = self.waveform_container.tf.to_numpy()
-            ret["tf"] = tf_array
-        return ret
+            wf_array["hplus"] = wf_array["hplus"][:, 0] + 1j * wf_array["hplus"][:, 1]
+        return wf_array

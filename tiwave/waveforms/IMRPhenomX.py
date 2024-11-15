@@ -2619,7 +2619,7 @@ class IMRPhenomXAS(BaseWaveform):
                     )
                     tf += time_shift
                     tf *= self.source_parameters[None].M_sec / PI / 2
-                    self.waveform_container[idx].tf = tf
+                    self.waveform_container[idx].tf = -tf
             else:
                 if ti.static(self.returned_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = 0.0

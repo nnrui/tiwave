@@ -35,7 +35,7 @@ class PostNewtonianPrefactors:
     prefactor_A_6: ti.f64
 
     @ti.func
-    def compute_PN_prefactors(self, source_params):
+    def compute_PN_prefactors(self, source_params: ti.template()):
         """
         Using Eq.B6 - B13 and Eq.B14 - B19 in arXiv:1508.07253
         3PN spin-spin term not included

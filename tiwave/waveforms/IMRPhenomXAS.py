@@ -433,6 +433,7 @@ class SourceParameters:
     chi_a: ti.f64  # (chi_1 - chi_2)/2
     chi_a_pow2: ti.f64
     chi_a_pow3: ti.f64
+    chi_eff: ti.f64
     chi_PN_hat: ti.f64  # Eq. 4.17 in arXiv:2001.11412
     chi_PN_hat_pow2: ti.f64
     chi_PN_hat_pow3: ti.f64
@@ -458,7 +459,7 @@ class SourceParameters:
     f_ISCO: ti.f64
 
     @ti.func
-    def update_all_source_parameters(
+    def update_source_parameters(
         self,
         mass_1: ti.f64,
         mass_2: ti.f64,
@@ -508,9 +509,9 @@ class SourceParameters:
         self.chi_a_pow2 = self.chi_a * self.chi_a
         self.chi_a_pow3 = self.chi_a * self.chi_a_pow2
 
+        self.chi_eff = self.m1_dimless * self.chi_1 + self.m2_dimless * self.chi_2
         self.chi_PN_hat = (
-            (self.m1_dimless * self.chi_1 + self.m2_dimless * self.chi_2)
-            - 38.0 / 113.0 * self.eta * (self.chi_1 + self.chi_2)
+            self.chi_eff - 38.0 / 113.0 * self.eta * (self.chi_1 + self.chi_2)
         ) / (1.0 - (76.0 / 113.0 * self.eta))
         self.chi_PN_hat_pow2 = self.chi_PN_hat * self.chi_PN_hat
         self.chi_PN_hat_pow3 = self.chi_PN_hat * self.chi_PN_hat_pow2
@@ -1184,7 +1185,7 @@ class AmplitudeCoefficients:
         ) = gauss_elimination(Ab_int)
 
     @ti.func
-    def _set_merge_ringdown_coefficients(self, source_params):
+    def _set_merge_ringdown_coefficients(self, source_params: ti.template()):
         """
         Computing merge-ringdown coefficients. Using different notation in arXiv:2001.11412,
         a_R (gamma_1), lambda (gamma_2), sigma (gamma_3)
@@ -1316,7 +1317,9 @@ class AmplitudeCoefficients:
         self.gamma1_gamma3_fdamp = self.gamma_1 * self.gamma_3 * source_params.f_damp
 
     @ti.func
-    def compute_amplitude_coefficients(self, source_params, pn_prefactors):
+    def compute_amplitude_coefficients(
+        self, source_params: ti.template(), pn_prefactors: ti.template()
+    ):
         self._set_merge_ringdown_coefficients(source_params)
         self._set_ins_int_colloc_points(source_params)
         self._set_inspiral_coefficients(source_params)
@@ -1324,6 +1327,7 @@ class AmplitudeCoefficients:
 
         # The common prefactor, A0 (without f^{-7/6})
         # TODO: use amp_0 excluding the Ylm constant factor
+        # TODO: need to moedify for consistant with XHM model
         self.amp_0 = (
             0.25
             * tm.sqrt(10.0 / 3.0 * source_params.eta)
@@ -1356,7 +1360,7 @@ class PhaseCoefficients:
     C2_int: ti.f64
     useful_powers_fjoin_int_ins: UsefulPowers  # fmax_ins is not same with fmin_int, using fmin_int as the joint point when computing the phase and the connection coefficients
     useful_powers_fjoin_MRD_int: UsefulPowers  # fmin_MRD is not same with fmax_int, using fmax_int as the joint point when computing the phase and the connection coefficients
-    # Merge_ringdown
+    # Merge-ringdown
     c_0: ti.f64
     c_1: ti.f64  # f^-1/3
     c_2: ti.f64  # f^-2
@@ -2332,7 +2336,10 @@ def _compute_phase(
 
 @ti.func
 def _compute_tf(
-    powers_of_Mf, phase_coefficients, pn_prefactors, source_params: ti.template()
+    powers_of_Mf: ti.template(),
+    phase_coefficients: ti.template(),
+    pn_prefactors: ti.template(),
+    source_params: ti.template(),
 ):
     """
     note that all phase ansatz are without 1/eta
@@ -2366,7 +2373,7 @@ def _get_polarization_from_amplitude_phase(
     # TODO: using Ylm to compatible with high mode
     cross_prefactor = tm.cos(iota)
     plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
-    plus = - amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
+    plus = -amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
     cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_prefactor
     plus *= plus_prefactor
     return cross, plus
@@ -2516,7 +2523,7 @@ class IMRPhenomXAS(BaseWaveform):
         # TODO: parameter_sanity_check
         # if ti.static(self.parameter_sanity_check):
         #     self._parameter_check()
-        self.source_parameters[None].update_all_source_parameters(
+        self.source_parameters[None].update_source_parameters(
             mass_1,
             mass_2,
             chi_1,

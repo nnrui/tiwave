@@ -326,7 +326,7 @@ class SourceParameters:
     f_ring: ti.f64
     f_damp: ti.f64
 
-    def update_all_source_parameters(self, parameters):
+    def update_source_parameters(self, parameters):
         # total 11 parameters: m1, m1, chi1, chi2, iota, psi, tc, phi0, dL, lon, lat
         # 3 only used in response function: psi, lon, lat
         # mass is in the unit of solar mass
@@ -1193,7 +1193,7 @@ class IMRPhenomD(BaseWaveform):
         necessary preparation which need to be finished in python scope for waveform computation
         (this function may be awkward, since no interpolation function in taichi-lang)
         """
-        self.source_parameters[None].update_all_source_parameters(parameters)
+        self.source_parameters[None].update_source_parameters(parameters)
         self._update_waveform_kernel()
 
     @ti.kernel

@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import taichi as ti
 import taichi.math as tm
 import numpy as np
@@ -7,6 +9,38 @@ from .constants import *
 
 
 ComplexNumber = ti.types.vector(2, ti.f64)
+
+
+def sub_struct_from(parent):
+    """
+    Since inheritance is not supported in ti.dataclass currently, we use this func as
+    a decorator to copy members and bind methods of existing dataclass to current dataclass.
+    Only supporting inheritance of just one generation.
+    TODO: a usage example
+    """
+    parent_members = deepcopy(parent.members)
+    parent_methods = deepcopy(parent.methods)
+
+    def sub_struct(cls):
+        [parent_members.pop(key) for key in getattr(cls, "_removed_members", [])]
+        fields = parent_members
+        fields.update(getattr(cls, "__annotations__", {}))
+
+        substruct_methods = {
+            attr: getattr(cls, attr)
+            for attr in dir(cls)
+            if callable(getattr(cls, attr)) and not attr.startswith("__")
+        }
+        conflict_methods = [k for k in substruct_methods if k in parent_methods]
+        # TODO: can have problem if the parent of parent has already had the method with same name
+        for k in conflict_methods:
+            parent_methods[f"_parent_{k}"] = parent_methods[k]
+        parent_methods.update(substruct_methods)
+        fields["__struct_methods"] = parent_methods
+
+        return ti.types.struct(**fields)
+
+    return sub_struct
 
 
 def complex_ti_field_to_np_array(

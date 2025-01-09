@@ -22,7 +22,7 @@ def sub_struct_from(parent):
     parent_methods = deepcopy(parent.methods)
 
     def sub_struct(cls):
-        [parent_members.pop(key) for key in getattr(cls, "_removed_members", [])]
+        [parent_members.pop(key) for key in getattr(cls, "removed_members", [])]
         fields = parent_members
         fields.update(getattr(cls, "__annotations__", {}))
 

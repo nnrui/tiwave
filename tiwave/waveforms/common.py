@@ -1,8 +1,8 @@
 import taichi as ti
 import taichi.math as tm
 
-from .constants import *
-from .utils import UsefulPowers
+from ..constants import *
+from ..utils import UsefulPowers
 
 
 useful_powers_pi = UsefulPowers()

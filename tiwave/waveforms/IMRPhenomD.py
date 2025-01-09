@@ -8,7 +8,7 @@ import numpy as np
 
 from ..constants import *
 from ..utils import ComplexNumber, UsefulPowers
-from ..common import PostNewtonianPrefactors
+from .common import PostNewtonianPrefactors
 from .base_waveform import BaseWaveform
 
 

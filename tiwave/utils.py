@@ -1,4 +1,4 @@
-from copy import deepcopy
+import copy
 
 import taichi as ti
 import taichi.math as tm
@@ -18,8 +18,11 @@ def sub_struct_from(parent):
     Only supporting inheritance of just one generation.
     TODO: a usage example
     """
-    parent_members = deepcopy(parent.members)
-    parent_methods = deepcopy(parent.methods)
+    # parent_members = copy.deepcopy(parent.members)
+    # parent_methods = copy.deepcopy(parent.methods)
+    # values of the dict point to address of taichi type object or func, using shallow copy is fine
+    parent_members = copy.copy(parent.members)
+    parent_methods = copy.copy(parent.methods)
 
     def sub_struct(cls):
         [parent_members.pop(key) for key in getattr(cls, "removed_members", [])]

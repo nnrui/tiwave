@@ -1,3 +1,4 @@
+# TODO: IMRPhenomD and IMRPhenomX use different orders!!
 import taichi as ti
 import taichi.math as tm
 
@@ -13,45 +14,45 @@ useful_powers_pi.update(PI)
 @ti.dataclass
 class PostNewtonianPrefactors:
     # 3.5 PN phase
-    prefactor_varphi_0: ti.f64
-    prefactor_varphi_1: ti.f64
-    prefactor_varphi_2: ti.f64
-    prefactor_varphi_3: ti.f64
-    prefactor_varphi_4: ti.f64
-    prefactor_varphi_5: ti.f64
-    prefactor_varphi_5l: ti.f64
-    prefactor_varphi_6: ti.f64
-    prefactor_varphi_6l: ti.f64
-    prefactor_varphi_7: ti.f64
-    prefactor_varphi_8: ti.f64
-    prefactor_varphi_8l: ti.f64
+    phi_0: ti.f64
+    phi_1: ti.f64
+    phi_2: ti.f64
+    phi_3: ti.f64
+    phi_4: ti.f64
+    # the constant term of phi_5 and phi_5l*log(pi) is dropped
+    phi_5l: ti.f64
+    phi_6: ti.f64
+    phi_6l: ti.f64
+    phi_7: ti.f64
+    phi_8: ti.f64
+    phi_8l: ti.f64
     # 3 PN amplitude
-    prefactor_A_0: ti.f64
-    prefactor_A_1: ti.f64
-    prefactor_A_2: ti.f64
-    prefactor_A_3: ti.f64
-    prefactor_A_4: ti.f64
-    prefactor_A_5: ti.f64
-    prefactor_A_6: ti.f64
+    amp_0: ti.f64
+    amp_1: ti.f64
+    amp_2: ti.f64
+    amp_3: ti.f64
+    amp_4: ti.f64
+    amp_5: ti.f64
+    amp_6: ti.f64
 
     @ti.func
-    def compute_PN_prefactors(self, source_params: ti.template()):
+    def update_PN_prefactors(self, source_params: ti.template()):
         """
         Using Eq.B6 - B13 and Eq.B14 - B19 in arXiv:1508.07253
         3PN spin-spin term not included
         """
         # Phase
-        self.prefactor_varphi_0 = 1.0 / useful_powers_pi.five_thirds
-        self.prefactor_varphi_1 = 0.0 / useful_powers_pi.four_thirds
-        self.prefactor_varphi_2 = (
+        self.phi_0 = 1.0 / useful_powers_pi.five_thirds
+        self.phi_1 = 0.0 / useful_powers_pi.four_thirds
+        self.phi_2 = (
             37.15 / 7.56 + 55.0 / 9.0 * source_params.eta
         ) / useful_powers_pi.one
-        self.prefactor_varphi_3 = (
+        self.phi_3 = (
             -16.0 * PI
             + (113.0 / 3.0 * source_params.delta * source_params.chi_a)
             + (113.0 / 3.0 - 76.0 / 3.0 * source_params.eta) * source_params.chi_s
         ) / useful_powers_pi.two_thirds
-        self.prefactor_varphi_4 = (
+        self.phi_4 = (
             152.93365 / 5.08032
             + 271.45 / 5.04 * source_params.eta
             + 308.5 / 7.2 * source_params.eta_pow2
@@ -63,7 +64,7 @@ class PostNewtonianPrefactors:
             * source_params.chi_s
             + (-405.0 / 8.0 + 5.0 / 2.0 * source_params.eta) * source_params.chi_s_pow2
         ) / useful_powers_pi.third
-        self.prefactor_varphi_5 = (
+        self.phi_5l = (
             (386.45 / 7.56 - 65.0 / 9.0 * source_params.eta) * PI
             + (-732.985 / 2.268 - 140.0 / 9.0 * source_params.eta)
             * source_params.delta
@@ -75,8 +76,7 @@ class PostNewtonianPrefactors:
             )
             * source_params.chi_s
         )
-        self.prefactor_varphi_5l = self.prefactor_varphi_5
-        self.prefactor_varphi_6 = (
+        self.phi_6 = (
             (
                 11583.231236531 / 4.694215680
                 - 640.0 / 3.0 * PI * PI
@@ -105,8 +105,8 @@ class PostNewtonianPrefactors:
             )
             * source_params.chi_s_pow2
         ) * useful_powers_pi.third
-        self.prefactor_varphi_6l = -684.8 / 6.3 * useful_powers_pi.third
-        self.prefactor_varphi_7 = (
+        self.phi_6l = -684.8 / 6.3 * useful_powers_pi.third
+        self.phi_7 = (
             (
                 770.96675 / 2.54016
                 + 378.515 / 1.512 * source_params.eta
@@ -155,7 +155,7 @@ class PostNewtonianPrefactors:
             )
             * source_params.chi_s_pow3
         ) * useful_powers_pi.two_thirds
-        self.prefactor_varphi_8 = (
+        self.phi_8 = (
             (2339.15 / 1.68 - 991.85 / 2.52 * source_params.eta)
             * source_params.delta
             * source_params.chi_a
@@ -166,19 +166,19 @@ class PostNewtonianPrefactors:
             )
             * source_params.chi_s
         ) * useful_powers_pi.two
-        self.prefactor_varphi_8l = -self.prefactor_varphi_8
+        self.phi_8l = -self.phi_8
         # Amplitude
         # (equatoins in PhenomD paper have some difference with PhenomX paper in A5 and A6, using equations in PhenomX paper here.)
-        self.prefactor_A_0 = 1.0
-        self.prefactor_A_1 = 0.0
-        self.prefactor_A_2 = (
+        self.amp_0 = 1.0
+        self.amp_1 = 0.0
+        self.amp_2 = (
             -3.23 / 2.24 + 4.51 / 1.68 * source_params.eta
         ) * useful_powers_pi.two_thirds
-        self.prefactor_A_3 = (
+        self.amp_3 = (
             27.0 / 8.0 * source_params.delta * source_params.chi_a
             + (27.0 / 8.0 - 11.0 / 6.0 * source_params.eta) * source_params.chi_s
         ) * useful_powers_pi.one
-        self.prefactor_A_4 = (
+        self.amp_4 = (
             -27.312085 / 8.128512
             - 19.75055 / 3.38688 * source_params.eta
             + 10.5271 / 2.4192 * source_params.eta_pow2
@@ -190,7 +190,7 @@ class PostNewtonianPrefactors:
             * source_params.chi_s
             + (-8.1 / 3.2 + 17.0 / 8.0 * source_params.eta) * source_params.chi_s_pow2
         ) * useful_powers_pi.four_thirds
-        self.prefactor_A_5 = (
+        self.amp_5 = (
             -8.5 / 6.4 * PI
             + 8.5 / 1.6 * PI * source_params.eta
             - 3.0 / 8.0 * (-1.0 + 3.0 * source_params.eta) * source_params.chi_s_pow3
@@ -220,7 +220,7 @@ class PostNewtonianPrefactors:
             )
             * source_params.chi_s
         ) * useful_powers_pi.five_thirds
-        self.prefactor_A_6 = (
+        self.amp_6 = (
             -177.520268561 / 8.583708672
             + (545.384828789 / 5.007163392 - 20.5 / 4.8 * useful_powers_pi.two)
             * source_params.eta

@@ -1,4 +1,6 @@
 # TODO:
+# - compute_ -> update_
+# - amp_0 conflict with pn amp_0
 # - add two opt for exactlly same with lalsim and fix amp int and phase int (potential) bugs;
 # - improve the convention for constant amplitude norm factor to compatible with Ylm
 import os
@@ -68,7 +70,7 @@ def _time_shift_psi4_to_strain(source_params: ti.template()) -> ti.f64:
 @ti.func
 def _time_at_fit_frequency(source_params: ti.template()) -> ti.f64:
     """
-    The fit of dphi at the fit frequency, i.e. dphi(fring-fdamp).
+    The fit of dphi at the fit frequency, dphi(fring-fdamp).
     """
     return (
         3155.1635543201924
@@ -122,11 +124,11 @@ def _amplitude_inspiral_ansatz(
     """
     return (
         1.0
-        + pn_prefactors.prefactor_A_2 * powers_of_Mf.two_thirds
-        + pn_prefactors.prefactor_A_3 * powers_of_Mf.one
-        + pn_prefactors.prefactor_A_4 * powers_of_Mf.four_thirds
-        + pn_prefactors.prefactor_A_5 * powers_of_Mf.five_thirds
-        + pn_prefactors.prefactor_A_6 * powers_of_Mf.two
+        + pn_prefactors.amp_2 * powers_of_Mf.two_thirds
+        + pn_prefactors.amp_3 * powers_of_Mf.one
+        + pn_prefactors.amp_4 * powers_of_Mf.four_thirds
+        + pn_prefactors.amp_5 * powers_of_Mf.five_thirds
+        + pn_prefactors.amp_6 * powers_of_Mf.two
         + amplitude_coefficients.rho_1 * powers_of_Mf.seven_thirds
         + amplitude_coefficients.rho_2 * powers_of_Mf.eight_thirds
         + amplitude_coefficients.rho_3 * powers_of_Mf.three
@@ -143,11 +145,11 @@ def _d_amplitude_inspiral_ansatz(
     Without amp0.
     """
     return (
-        2.0 * pn_prefactors.prefactor_A_2 / powers_of_Mf.third
-        + 3.0 * pn_prefactors.prefactor_A_3
-        + 4.0 * pn_prefactors.prefactor_A_4 * powers_of_Mf.third
-        + 5.0 * pn_prefactors.prefactor_A_5 * powers_of_Mf.two_thirds
-        + 6.0 * pn_prefactors.prefactor_A_6 * powers_of_Mf.one
+        2.0 * pn_prefactors.amp_2 / powers_of_Mf.third
+        + 3.0 * pn_prefactors.amp_3
+        + 4.0 * pn_prefactors.amp_4 * powers_of_Mf.third
+        + 5.0 * pn_prefactors.amp_5 * powers_of_Mf.two_thirds
+        + 6.0 * pn_prefactors.amp_6 * powers_of_Mf.one
         + 7.0 * amplitude_coefficients.rho_1 * powers_of_Mf.four_thirds
         + 8.0 * amplitude_coefficients.rho_2 * powers_of_Mf.five_thirds
         + 9.0 * amplitude_coefficients.rho_3 * powers_of_Mf.two
@@ -245,21 +247,21 @@ def _phase_inspiral_ansatz(
     return (
         -3.0
         * (
-            pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds
-            + pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds
-            + pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one
-            + pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds
-            + pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third
+            pn_prefactors.phi_0 / powers_of_Mf.five_thirds
+            + pn_prefactors.phi_1 / powers_of_Mf.four_thirds
+            + pn_prefactors.phi_2 / powers_of_Mf.one
+            + pn_prefactors.phi_3 / powers_of_Mf.two_thirds
+            + pn_prefactors.phi_4 / powers_of_Mf.third
             # neglect the constant term of phi5 and phi5l*log(pi)
-            # + pn_prefactors.prefactor_varphi_5
-            + pn_prefactors.prefactor_varphi_5l * powers_of_Mf.log
-            + pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third
-            + pn_prefactors.prefactor_varphi_6l
+            # + pn_prefactors.phi_5
+            + pn_prefactors.phi_5l * powers_of_Mf.log
+            + pn_prefactors.phi_6 * powers_of_Mf.third
+            + pn_prefactors.phi_6l
             * powers_of_Mf.third
             * (powers_of_Mf.log + useful_powers_pi.log)
-            + pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
-            + pn_prefactors.prefactor_varphi_8 * powers_of_Mf.one
-            + pn_prefactors.prefactor_varphi_8l
+            + pn_prefactors.phi_7 * powers_of_Mf.two_thirds
+            + pn_prefactors.phi_8 * powers_of_Mf.one
+            + pn_prefactors.phi_8l
             * powers_of_Mf.one
             * (powers_of_Mf.log + useful_powers_pi.log)
         )
@@ -285,20 +287,20 @@ def _d_phase_inspiral_ansatz(
     """
     return (
         (
-            5.0 * pn_prefactors.prefactor_varphi_0 / powers_of_Mf.eight_thirds
-            + 4.0 * pn_prefactors.prefactor_varphi_1 / powers_of_Mf.seven_thirds
-            + 3.0 * pn_prefactors.prefactor_varphi_2 / powers_of_Mf.two
-            + 2.0 * pn_prefactors.prefactor_varphi_3 / powers_of_Mf.five_thirds
-            + 1.0 * pn_prefactors.prefactor_varphi_4 / powers_of_Mf.four_thirds
-            - 3 * pn_prefactors.prefactor_varphi_5l / powers_of_Mf.one
-            - pn_prefactors.prefactor_varphi_6 / powers_of_Mf.two_thirds
-            - pn_prefactors.prefactor_varphi_6l
+            5.0 * pn_prefactors.phi_0 / powers_of_Mf.eight_thirds
+            + 4.0 * pn_prefactors.phi_1 / powers_of_Mf.seven_thirds
+            + 3.0 * pn_prefactors.phi_2 / powers_of_Mf.two
+            + 2.0 * pn_prefactors.phi_3 / powers_of_Mf.five_thirds
+            + 1.0 * pn_prefactors.phi_4 / powers_of_Mf.four_thirds
+            - 3 * pn_prefactors.phi_5l / powers_of_Mf.one
+            - pn_prefactors.phi_6 / powers_of_Mf.two_thirds
+            - pn_prefactors.phi_6l
             / powers_of_Mf.two_thirds
             * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
-            - 2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
-            - 3.0 * pn_prefactors.prefactor_varphi_8
+            - 2.0 * pn_prefactors.phi_7 / powers_of_Mf.third
+            - 3.0 * pn_prefactors.phi_8
             - 3.0
-            * pn_prefactors.prefactor_varphi_8l
+            * pn_prefactors.phi_8l
             * (1.0 + powers_of_Mf.log + useful_powers_pi.log)
         )
         + (
@@ -2269,7 +2271,150 @@ class PhaseCoefficients:
         )
 
     @ti.func
-    def compute_phase_coefficients(
+    def _inspiral_phase(
+        self,
+        pn_prefactors: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        return (
+            -3.0
+            * (
+                pn_prefactors.phi_0 / powers_of_Mf.five_thirds
+                + pn_prefactors.phi_1 / powers_of_Mf.four_thirds
+                + pn_prefactors.phi_2 / powers_of_Mf.one
+                + pn_prefactors.phi_3 / powers_of_Mf.two_thirds
+                + pn_prefactors.phi_4 / powers_of_Mf.third
+                # neglect the constant term of phi5 and phi5l*log(pi)
+                # + pn_prefactors.phi_5
+                + pn_prefactors.phi_5l * powers_of_Mf.log
+                + pn_prefactors.phi_6 * powers_of_Mf.third
+                + pn_prefactors.phi_6l
+                * powers_of_Mf.third
+                * (powers_of_Mf.log + useful_powers_pi.log)
+                + pn_prefactors.phi_7 * powers_of_Mf.two_thirds
+                + pn_prefactors.phi_8 * powers_of_Mf.one
+                + pn_prefactors.phi_8l
+                * powers_of_Mf.one
+                * (powers_of_Mf.log + useful_powers_pi.log)
+            )
+            + (
+                +5.0 * self.sigma_1 * powers_of_Mf.one
+                + 3.75 * self.sigma_2 * powers_of_Mf.four_thirds
+                + 3.0 * self.sigma_3 * powers_of_Mf.five_thirds
+                + 2.5 * self.sigma_4 * powers_of_Mf.two
+            )
+            / useful_powers_pi.five_thirds
+        ) / 128.0  # note the normalizing factor used in lalsim: phiNorm (-3/128/pi^(-5/3))
+
+    @ti.func
+    def _inspiral_d_phase(
+        self,
+        pn_prefactors: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        return (
+            (
+                5.0 * pn_prefactors.phi_0 / powers_of_Mf.eight_thirds
+                + 4.0 * pn_prefactors.phi_1 / powers_of_Mf.seven_thirds
+                + 3.0 * pn_prefactors.phi_2 / powers_of_Mf.two
+                + 2.0 * pn_prefactors.phi_3 / powers_of_Mf.five_thirds
+                + 1.0 * pn_prefactors.phi_4 / powers_of_Mf.four_thirds
+                - 3 * pn_prefactors.phi_5l / powers_of_Mf.one
+                - pn_prefactors.phi_6 / powers_of_Mf.two_thirds
+                - pn_prefactors.phi_6l
+                / powers_of_Mf.two_thirds
+                * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
+                - 2.0 * pn_prefactors.phi_7 / powers_of_Mf.third
+                - 3.0 * pn_prefactors.phi_8
+                - 3.0
+                * pn_prefactors.phi_8l
+                * (1.0 + powers_of_Mf.log + useful_powers_pi.log)
+            )
+            + (
+                self.sigma_1
+                + self.sigma_2 * powers_of_Mf.third
+                + self.sigma_3 * powers_of_Mf.two_thirds
+                + self.sigma_4 * powers_of_Mf.one
+            )
+            * 5.0
+            / useful_powers_pi.five_thirds  # note the normalizing factor used in lalsim: dphase0 (5/128/pi^(-5/3))
+        ) / 128.0
+
+    @ti.func
+    def _intermediate_phase(
+        self,
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        return (
+            self.beta_0 * powers_of_Mf.one
+            + self.beta_1 * powers_of_Mf.log
+            - self.beta_2 / powers_of_Mf.one
+            - self.beta_3 / 2.0 / powers_of_Mf.two
+            - self.beta_4 / 3.0 / powers_of_Mf.three
+            + 2.0
+            * self.c_L
+            / source_params.f_damp
+            * tm.atan2(
+                (powers_of_Mf.one - source_params.f_ring), 2.0 * source_params.f_damp
+            )
+        )
+
+    @ti.func
+    def _intermediate_d_phase(
+        self,
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        return (
+            self.beta_0
+            + self.beta_1 / powers_of_Mf.one
+            + self.beta_2 / powers_of_Mf.two
+            + self.beta_3 / powers_of_Mf.three
+            + self.beta_4 / powers_of_Mf.four
+            + self.c_L
+            / (
+                source_params.f_damp_pow2
+                + 0.25 * (powers_of_Mf.one - source_params.f_ring) ** 2
+            )
+        )
+
+    @ti.func
+    def _merge_ringdown_phase(
+        self,
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        return (
+            self.c_0 * powers_of_Mf.one
+            + 1.5 * self.c_1 * powers_of_Mf.two_thirds
+            - self.c_2 / powers_of_Mf.one
+            - self.c_4 / 3.0 / powers_of_Mf.three
+            + self.c_L
+            / source_params.f_damp
+            * tm.atan2((powers_of_Mf.one - source_params.f_ring), source_params.f_damp)
+        )
+
+    @ti.func
+    def _merge_ringdown_d_phase(
+        self,
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        return (
+            self.c_0
+            + self.c_1 / powers_of_Mf.third
+            + self.c_2 / powers_of_Mf.two
+            + self.c_4 / powers_of_Mf.four
+            + self.c_L
+            / (
+                source_params.f_damp_pow2
+                + (powers_of_Mf.one - source_params.f_ring) ** 2
+            )
+        )
+
+    @ti.func
+    def update_phase_coefficients(
         self, source_params: ti.template(), pn_prefactors: ti.template()
     ):
         self._set_all_colloc_points(source_params)
@@ -2277,6 +2422,58 @@ class PhaseCoefficients:
         self._set_inspiral_coefficients(source_params)
         self._set_intermediate_coefficients(source_params, pn_prefactors)
         self._set_connection_coefficients(source_params, pn_prefactors)
+
+    @ti.func
+    def compute_phase(
+        self,
+        pn_prefactors: ti.template(),
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ):
+        """
+        Note that all phase ansatz are without 1/eta.
+        """
+        phase = 0.0
+        # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
+        # and fmax_int as the transtion points (l. 1020 in LALSimIMRPhenomX_internals.c)
+        if powers_of_Mf.one < self.useful_powers_fjoin_int_ins.one:
+            phase = self._inspiral_phase(pn_prefactors, powers_of_Mf)
+        elif (
+            powers_of_Mf.one > self.useful_powers_fjoin_MRD_int.one
+        ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
+            phase = (
+                self._merge_ringdown_phase(source_params, powers_of_Mf)
+                + self.C1_MRD
+                + self.C2_MRD * powers_of_Mf.one
+            )
+        else:
+            phase = (
+                self._intermediate_phase(source_params, powers_of_Mf)
+                + self.C1_int
+                + self.C2_int * powers_of_Mf.one
+            )
+        return phase / source_params.eta
+
+    @ti.func
+    def compute_tf(
+        self,
+        pn_prefactors: ti.template(),
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ):
+        """
+        note that all phase ansatz are without 1/eta
+        """
+        tf = 0.0
+        if powers_of_Mf.one < self.useful_powers_fjoin_int_ins.one:
+            tf = self._inspiral_d_phase(pn_prefactors, powers_of_Mf)
+        elif (
+            powers_of_Mf.one > self.useful_powers_fjoin_MRD_int.one
+        ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
+            tf = self._merge_ringdown_d_phase(source_params, powers_of_Mf) + self.C2_MRD
+        else:
+            tf = self._intermediate_d_phase(source_params, powers_of_Mf) + self.C2_int
+        return tf / source_params.eta
 
 
 @ti.func
@@ -2534,7 +2731,7 @@ class IMRPhenomXAS(BaseWaveform):
             coalescence_time,
         )
 
-        self.pn_prefactors[None].compute_PN_prefactors(self.source_parameters[None])
+        self.pn_prefactors[None].update_PN_prefactors(self.source_parameters[None])
         self.amplitude_coefficients[None].compute_amplitude_coefficients(
             self.source_parameters[None], self.pn_prefactors[None]
         )

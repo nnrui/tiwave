@@ -8,7 +8,7 @@ import numpy as np
 
 from ..constants import *
 from ..utils import ComplexNumber, UsefulPowers
-from .common import PostNewtonianPrefactors
+from .common import PostNewtonianCoefficients
 from .base_waveform import BaseWaveform
 
 
@@ -95,17 +95,17 @@ def _gauss_elimination_5x5(Ab):
 
 # Amplitude ansatz
 @ti.func
-def _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+def _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_coefficients):
     """
     Eq.30 in arXiv:1508.07253, without amp0
     """
     return (
         1.0
-        + pn_prefactors.prefactor_A_2 * powers_of_Mf.two_thirds
-        + pn_prefactors.prefactor_A_3 * powers_of_Mf.one
-        + pn_prefactors.prefactor_A_4 * powers_of_Mf.four_thirds
-        + pn_prefactors.prefactor_A_5 * powers_of_Mf.five_thirds
-        + pn_prefactors.prefactor_A_6 * powers_of_Mf.two
+        + pn_coefficients.coefficient_A_2 * powers_of_Mf.two_thirds
+        + pn_coefficients.coefficient_A_3 * powers_of_Mf.one
+        + pn_coefficients.coefficient_A_4 * powers_of_Mf.four_thirds
+        + pn_coefficients.coefficient_A_5 * powers_of_Mf.five_thirds
+        + pn_coefficients.coefficient_A_6 * powers_of_Mf.two
         + amplitude_coefficients.rho_1 * powers_of_Mf.seven_thirds
         + amplitude_coefficients.rho_2 * powers_of_Mf.eight_thirds
         + amplitude_coefficients.rho_3 * powers_of_Mf.three
@@ -113,16 +113,16 @@ def _amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefacto
 
 
 @ti.func
-def _d_amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_prefactors):
+def _d_amplitude_inspiral_ansatz(powers_of_Mf, amplitude_coefficients, pn_coefficients):
     """
     without amp0
     """
     return (
-        2.0 * pn_prefactors.prefactor_A_2 / powers_of_Mf.third
-        + 3.0 * pn_prefactors.prefactor_A_3
-        + 4.0 * pn_prefactors.prefactor_A_4 * powers_of_Mf.third
-        + 5.0 * pn_prefactors.prefactor_A_5 * powers_of_Mf.two_thirds
-        + 6.0 * pn_prefactors.prefactor_A_6 * powers_of_Mf.one
+        2.0 * pn_coefficients.coefficient_A_2 / powers_of_Mf.third
+        + 3.0 * pn_coefficients.coefficient_A_3
+        + 4.0 * pn_coefficients.coefficient_A_4 * powers_of_Mf.third
+        + 5.0 * pn_coefficients.coefficient_A_5 * powers_of_Mf.two_thirds
+        + 6.0 * pn_coefficients.coefficient_A_6 * powers_of_Mf.one
         + 7.0 * amplitude_coefficients.rho_1 * powers_of_Mf.four_thirds
         + 8.0 * amplitude_coefficients.rho_2 * powers_of_Mf.five_thirds
         + 9.0 * amplitude_coefficients.rho_3 * powers_of_Mf.two
@@ -189,23 +189,24 @@ def _d_amplitude_merge_ringdown_ansatz(
 
 # Phase ansatz
 @ti.func
-def _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
+def _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_coefficients):
     """
     without 1/eta
     """
     return 3.0 / 128.0 * (
-        pn_prefactors.prefactor_varphi_0 / powers_of_Mf.five_thirds
-        + pn_prefactors.prefactor_varphi_1 / powers_of_Mf.four_thirds
-        + pn_prefactors.prefactor_varphi_2 / powers_of_Mf.one
-        + pn_prefactors.prefactor_varphi_3 / powers_of_Mf.two_thirds
-        + pn_prefactors.prefactor_varphi_4 / powers_of_Mf.third
-        + pn_prefactors.prefactor_varphi_5
-        + pn_prefactors.prefactor_varphi_5l * (powers_of_Mf.log + useful_powers_pi.log)
-        + pn_prefactors.prefactor_varphi_6 * powers_of_Mf.third
-        + pn_prefactors.prefactor_varphi_6l
+        pn_coefficients.coefficient_varphi_0 / powers_of_Mf.five_thirds
+        + pn_coefficients.coefficient_varphi_1 / powers_of_Mf.four_thirds
+        + pn_coefficients.coefficient_varphi_2 / powers_of_Mf.one
+        + pn_coefficients.coefficient_varphi_3 / powers_of_Mf.two_thirds
+        + pn_coefficients.coefficient_varphi_4 / powers_of_Mf.third
+        + pn_coefficients.coefficient_varphi_5
+        + pn_coefficients.coefficient_varphi_5l
+        * (powers_of_Mf.log + useful_powers_pi.log)
+        + pn_coefficients.coefficient_varphi_6 * powers_of_Mf.third
+        + pn_coefficients.coefficient_varphi_6l
         * powers_of_Mf.third
         * (powers_of_Mf.log + useful_powers_pi.log)
-        + pn_prefactors.prefactor_varphi_7 * powers_of_Mf.two_thirds
+        + pn_coefficients.coefficient_varphi_7 * powers_of_Mf.two_thirds
     ) + (
         phase_coefficients.sigma_1 * powers_of_Mf.one
         + 0.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
@@ -215,22 +216,22 @@ def _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
 
 
 @ti.func
-def _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors):
+def _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_coefficients):
     """
     without 1/eta
     """
     return 3.0 / 128.0 * (
-        -5.0 * pn_prefactors.prefactor_varphi_0 / powers_of_Mf.eight_thirds
-        - 4.0 * pn_prefactors.prefactor_varphi_1 / powers_of_Mf.seven_thirds
-        - 3.0 * pn_prefactors.prefactor_varphi_2 / powers_of_Mf.two
-        - 2.0 * pn_prefactors.prefactor_varphi_3 / powers_of_Mf.five_thirds
-        - 1.0 * pn_prefactors.prefactor_varphi_4 / powers_of_Mf.four_thirds
-        + 3 * pn_prefactors.prefactor_varphi_5l / powers_of_Mf.one
-        + pn_prefactors.prefactor_varphi_6 / powers_of_Mf.two_thirds
-        + pn_prefactors.prefactor_varphi_6l
+        -5.0 * pn_coefficients.coefficient_varphi_0 / powers_of_Mf.eight_thirds
+        - 4.0 * pn_coefficients.coefficient_varphi_1 / powers_of_Mf.seven_thirds
+        - 3.0 * pn_coefficients.coefficient_varphi_2 / powers_of_Mf.two
+        - 2.0 * pn_coefficients.coefficient_varphi_3 / powers_of_Mf.five_thirds
+        - 1.0 * pn_coefficients.coefficient_varphi_4 / powers_of_Mf.four_thirds
+        + 3 * pn_coefficients.coefficient_varphi_5l / powers_of_Mf.one
+        + pn_coefficients.coefficient_varphi_6 / powers_of_Mf.two_thirds
+        + pn_coefficients.coefficient_varphi_6l
         / powers_of_Mf.two_thirds
         * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
-        + 2.0 * pn_prefactors.prefactor_varphi_7 / powers_of_Mf.third
+        + 2.0 * pn_coefficients.coefficient_varphi_7 / powers_of_Mf.third
     ) / 3.0 + (
         phase_coefficients.sigma_1
         + phase_coefficients.sigma_2 * powers_of_Mf.third
@@ -438,7 +439,7 @@ class PhaseCoefficients:
     phase_merge_ringdown_f_join: ti.f64
 
     @ti.func
-    def compute_phase_coefficients(self, source_params, pn_prefactors):
+    def compute_phase_coefficients(self, source_params, pn_coefficients):
         """
         Compute phase coefficients in Eq. 28, 16, 14 of arXiv:1508.07253
         """
@@ -725,11 +726,11 @@ class PhaseCoefficients:
         # compute connection coefficients
         # transition between inspiral (region I) and intermediate (region IIa)
         self.C2_intermediate = _d_phase_inspiral_ansatz(
-            powers_phase_intermediate_f_join, self, pn_prefactors
+            powers_phase_intermediate_f_join, self, pn_coefficients
         ) - _d_phase_intermediate_ansatz(powers_phase_intermediate_f_join, self)
         self.C1_intermediate = (
             _phase_inspiral_ansatz(
-                powers_phase_intermediate_f_join, self, pn_prefactors
+                powers_phase_intermediate_f_join, self, pn_coefficients
             )
             - _phase_intermediate_ansatz(powers_phase_intermediate_f_join, self)
             - self.C2_intermediate * PHASE_INSPIRAL_fJoin
@@ -784,7 +785,7 @@ class AmplitudeCoefficients:
     amp0: ti.f64
 
     @ti.func
-    def compute_amplitude_coefficients(self, source_params, pn_prefactors):
+    def compute_amplitude_coefficients(self, source_params, pn_coefficients):
         # Inspiral (Region I)
         self.rho_1 = (
             3931.8979897196696
@@ -944,7 +945,7 @@ class AmplitudeCoefficients:
 
         f_mid = 0.5 * (AMPLITUDE_INSPIRAL_fJoin + self.f_peak)
         v1 = _amplitude_inspiral_ansatz(
-            powers_amplitude_intermediate_f_join, self, pn_prefactors
+            powers_amplitude_intermediate_f_join, self, pn_coefficients
         )
         v2 = (
             0.8149838730507785
@@ -973,7 +974,7 @@ class AmplitudeCoefficients:
             powers_amplitude_f_peak, self, source_params.f_ring, source_params.f_damp
         )
         d1 = _d_amplitude_inspiral_ansatz(
-            powers_amplitude_intermediate_f_join, self, pn_prefactors
+            powers_amplitude_intermediate_f_join, self, pn_coefficients
         )
         d2 = _d_amplitude_merge_ringdown_ansatz(
             powers_amplitude_f_peak, self, source_params.f_ring, source_params.f_damp
@@ -1000,12 +1001,12 @@ class AmplitudeCoefficients:
 
 @ti.func
 def _compute_amplitude(
-    powers_of_Mf, amplitude_coefficients, pn_prefactors, f_ring, f_damp
+    powers_of_Mf, amplitude_coefficients, pn_coefficients, f_ring, f_damp
 ):
     amplitude = 0.0
     if powers_of_Mf.one < AMPLITUDE_INSPIRAL_fJoin:
         amplitude = _amplitude_inspiral_ansatz(
-            powers_of_Mf, amplitude_coefficients, pn_prefactors
+            powers_of_Mf, amplitude_coefficients, pn_coefficients
         )
     elif powers_of_Mf.one > amplitude_coefficients.f_peak:
         amplitude = _amplitude_merge_ringdown_ansatz(
@@ -1018,14 +1019,16 @@ def _compute_amplitude(
 
 @ti.func
 def _compute_phase(
-    powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp, eta
+    powers_of_Mf, phase_coefficients, pn_coefficients, f_ring, f_damp, eta
 ):
     """
     note that all phase ansatz are without 1/eta
     """
     phase = 0.0
     if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
-        phase = _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
+        phase = _phase_inspiral_ansatz(
+            powers_of_Mf, phase_coefficients, pn_coefficients
+        )
     elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
         phase = (
             _phase_merge_ringdown_ansatz(
@@ -1044,13 +1047,13 @@ def _compute_phase(
 
 
 @ti.func
-def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp, eta):
+def _compute_tf(powers_of_Mf, phase_coefficients, pn_coefficients, f_ring, f_damp, eta):
     """
     note that all phase ansatz are without 1/eta
     """
     tf = 0.0
     if powers_of_Mf.one < PHASE_INSPIRAL_fJoin:
-        tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
+        tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_coefficients)
     elif powers_of_Mf.one > phase_coefficients.phase_merge_ringdown_f_join:
         tf = (
             _d_phase_merge_ringdown_ansatz(
@@ -1068,11 +1071,11 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_prefactors, f_ring, f_damp,
 
 @ti.func
 def _get_polarization_from_amplitude_phase(amplitude, phase, iota):
-    cross_prefactor = tm.cos(iota)
-    plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
+    cross_coefficient = tm.cos(iota)
+    plus_coefficient = 0.5 * (1.0 + cross_coefficient**2)
     plus = amplitude * tm.cexp(ComplexNumber([0.0, -1.0] * phase))
-    cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_prefactor
-    plus *= plus_prefactor
+    cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_coefficient
+    plus *= plus_coefficient
     return cross, plus
 
 
@@ -1099,7 +1102,7 @@ class IMRPhenomD(BaseWaveform):
 
         Returns:
         ========
-        array, the A channel without the prefactor which is determined by the TDI generation.
+        array, the A channel without the coefficient which is determined by the TDI generation.
 
         TODO:
         check whether passed in `waveform_containter` consistent with `returned_form`
@@ -1164,7 +1167,7 @@ class IMRPhenomD(BaseWaveform):
         self.source_parameters = SourceParameters.field(shape=())
         self.phase_coefficients = PhaseCoefficients.field(shape=())
         self.amplitude_coefficients = AmplitudeCoefficients.field(shape=())
-        self.pn_prefactors = PostNewtonianPrefactors.field(shape=())
+        self.pn_coefficients = PostNewtonianCoefficients.field(shape=())
 
     def _initialize_waveform_container(
         self, returned_form: str, include_tf: bool
@@ -1201,12 +1204,12 @@ class IMRPhenomD(BaseWaveform):
         if ti.static(self.parameter_sanity_check):
             self._parameter_check()
 
-        self.pn_prefactors[None].compute_PN_prefactors(self.source_parameters[None])
+        self.pn_coefficients[None].compute_pn_coefficients(self.source_parameters[None])
         self.amplitude_coefficients[None].compute_amplitude_coefficients(
-            self.source_parameters[None], self.pn_prefactors[None]
+            self.source_parameters[None], self.pn_coefficients[None]
         )
         self.phase_coefficients[None].compute_phase_coefficients(
-            self.source_parameters[None], self.pn_prefactors[None]
+            self.source_parameters[None], self.pn_coefficients[None]
         )
 
         powers_of_Mf = UsefulPowers()
@@ -1243,7 +1246,7 @@ class IMRPhenomD(BaseWaveform):
         phase_ref_temp = _compute_phase(
             powers_of_Mf,
             self.phase_coefficients[None],
-            self.pn_prefactors[None],
+            self.pn_coefficients[None],
             self.source_parameters[None].f_ring,
             self.source_parameters[None].f_damp,
             self.source_parameters[None].eta,
@@ -1257,14 +1260,14 @@ class IMRPhenomD(BaseWaveform):
                 amplitude = _compute_amplitude(
                     powers_of_Mf,
                     self.amplitude_coefficients[None],
-                    self.pn_prefactors[None],
+                    self.pn_coefficients[None],
                     self.source_parameters[None].f_ring,
                     self.source_parameters[None].f_damp,
                 )
                 phase = _compute_phase(
                     powers_of_Mf,
                     self.phase_coefficients[None],
-                    self.pn_prefactors[None],
+                    self.pn_coefficients[None],
                     self.source_parameters[None].f_ring,
                     self.source_parameters[None].f_damp,
                     self.source_parameters[None].eta,
@@ -1285,7 +1288,7 @@ class IMRPhenomD(BaseWaveform):
                     tf = _compute_tf(
                         powers_of_Mf,
                         self.phase_coefficients[None],
-                        self.pn_prefactors[None],
+                        self.pn_coefficients[None],
                         self.source_parameters[None].f_ring,
                         self.source_parameters[None].f_damp,
                         self.source_parameters[None].eta,

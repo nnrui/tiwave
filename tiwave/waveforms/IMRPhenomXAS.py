@@ -13,7 +13,7 @@ import numpy as np
 
 from ..constants import *
 from ..utils import ComplexNumber, gauss_elimination, UsefulPowers
-from .common import PostNewtonianPrefactors
+from .common import PostNewtonianCoefficients
 from .base_waveform import BaseWaveform
 
 
@@ -116,7 +116,7 @@ def _time_at_fit_frequency(source_params: ti.template()) -> ti.f64:
 def _amplitude_inspiral_ansatz(
     powers_of_Mf: ti.template(),
     amplitude_coefficients: ti.template(),
-    pn_prefactors: ti.template(),
+    pn_coefficients: ti.template(),
 ):
     """
     Eq. 6.3 in arXiv:2001.11412.
@@ -124,11 +124,11 @@ def _amplitude_inspiral_ansatz(
     """
     return (
         1.0
-        + pn_prefactors.amp_2 * powers_of_Mf.two_thirds
-        + pn_prefactors.amp_3 * powers_of_Mf.one
-        + pn_prefactors.amp_4 * powers_of_Mf.four_thirds
-        + pn_prefactors.amp_5 * powers_of_Mf.five_thirds
-        + pn_prefactors.amp_6 * powers_of_Mf.two
+        + pn_coefficients.A_2 * powers_of_Mf.two_thirds
+        + pn_coefficients.A_3 * powers_of_Mf.one
+        + pn_coefficients.A_4 * powers_of_Mf.four_thirds
+        + pn_coefficients.A_5 * powers_of_Mf.five_thirds
+        + pn_coefficients.A_6 * powers_of_Mf.two
         + amplitude_coefficients.rho_1 * powers_of_Mf.seven_thirds
         + amplitude_coefficients.rho_2 * powers_of_Mf.eight_thirds
         + amplitude_coefficients.rho_3 * powers_of_Mf.three
@@ -139,17 +139,17 @@ def _amplitude_inspiral_ansatz(
 def _d_amplitude_inspiral_ansatz(
     powers_of_Mf: ti.template(),
     amplitude_coefficients: ti.template(),
-    pn_prefactors: ti.template(),
+    pn_coefficients: ti.template(),
 ):
     """
     Without amp0.
     """
     return (
-        2.0 * pn_prefactors.amp_2 / powers_of_Mf.third
-        + 3.0 * pn_prefactors.amp_3
-        + 4.0 * pn_prefactors.amp_4 * powers_of_Mf.third
-        + 5.0 * pn_prefactors.amp_5 * powers_of_Mf.two_thirds
-        + 6.0 * pn_prefactors.amp_6 * powers_of_Mf.one
+        2.0 * pn_coefficients.A_2 / powers_of_Mf.third
+        + 3.0 * pn_coefficients.A_3
+        + 4.0 * pn_coefficients.A_4 * powers_of_Mf.third
+        + 5.0 * pn_coefficients.A_5 * powers_of_Mf.two_thirds
+        + 6.0 * pn_coefficients.A_6 * powers_of_Mf.one
         + 7.0 * amplitude_coefficients.rho_1 * powers_of_Mf.four_thirds
         + 8.0 * amplitude_coefficients.rho_2 * powers_of_Mf.five_thirds
         + 9.0 * amplitude_coefficients.rho_3 * powers_of_Mf.two
@@ -237,7 +237,7 @@ def _d_amplitude_merge_ringdown_ansatz(
 def _phase_inspiral_ansatz(
     powers_of_Mf: ti.template(),
     phase_coefficients: ti.template(),
-    pn_prefactors: ti.template(),
+    pn_coefficients: ti.template(),
 ):
     """
     Eq. 7.1 in arXiv:2001.11412.
@@ -247,21 +247,21 @@ def _phase_inspiral_ansatz(
     return (
         -3.0
         * (
-            pn_prefactors.phi_0 / powers_of_Mf.five_thirds
-            + pn_prefactors.phi_1 / powers_of_Mf.four_thirds
-            + pn_prefactors.phi_2 / powers_of_Mf.one
-            + pn_prefactors.phi_3 / powers_of_Mf.two_thirds
-            + pn_prefactors.phi_4 / powers_of_Mf.third
+            pn_coefficients.phi_0 / powers_of_Mf.five_thirds
+            + pn_coefficients.phi_1 / powers_of_Mf.four_thirds
+            + pn_coefficients.phi_2 / powers_of_Mf.one
+            + pn_coefficients.phi_3 / powers_of_Mf.two_thirds
+            + pn_coefficients.phi_4 / powers_of_Mf.third
             # neglect the constant term of phi5 and phi5l*log(pi)
-            # + pn_prefactors.phi_5
-            + pn_prefactors.phi_5l * powers_of_Mf.log
-            + pn_prefactors.phi_6 * powers_of_Mf.third
-            + pn_prefactors.phi_6l
+            # + pn_coefficients.phi_5
+            + pn_coefficients.phi_5l * powers_of_Mf.log
+            + pn_coefficients.phi_6 * powers_of_Mf.third
+            + pn_coefficients.phi_6l
             * powers_of_Mf.third
             * (powers_of_Mf.log + useful_powers_pi.log)
-            + pn_prefactors.phi_7 * powers_of_Mf.two_thirds
-            + pn_prefactors.phi_8 * powers_of_Mf.one
-            + pn_prefactors.phi_8l
+            + pn_coefficients.phi_7 * powers_of_Mf.two_thirds
+            + pn_coefficients.phi_8 * powers_of_Mf.one
+            + pn_coefficients.phi_8l
             * powers_of_Mf.one
             * (powers_of_Mf.log + useful_powers_pi.log)
         )
@@ -279,7 +279,7 @@ def _phase_inspiral_ansatz(
 def _d_phase_inspiral_ansatz(
     powers_of_Mf: ti.template(),
     phase_coefficients: ti.template(),
-    pn_prefactors: ti.template(),
+    pn_coefficients: ti.template(),
 ):
     """
     Without :math:`1/\eta`, the minus have absorbed here, using h=A*exp(i*phi) when
@@ -287,20 +287,20 @@ def _d_phase_inspiral_ansatz(
     """
     return (
         (
-            5.0 * pn_prefactors.phi_0 / powers_of_Mf.eight_thirds
-            + 4.0 * pn_prefactors.phi_1 / powers_of_Mf.seven_thirds
-            + 3.0 * pn_prefactors.phi_2 / powers_of_Mf.two
-            + 2.0 * pn_prefactors.phi_3 / powers_of_Mf.five_thirds
-            + 1.0 * pn_prefactors.phi_4 / powers_of_Mf.four_thirds
-            - 3 * pn_prefactors.phi_5l / powers_of_Mf.one
-            - pn_prefactors.phi_6 / powers_of_Mf.two_thirds
-            - pn_prefactors.phi_6l
+            5.0 * pn_coefficients.phi_0 / powers_of_Mf.eight_thirds
+            + 4.0 * pn_coefficients.phi_1 / powers_of_Mf.seven_thirds
+            + 3.0 * pn_coefficients.phi_2 / powers_of_Mf.two
+            + 2.0 * pn_coefficients.phi_3 / powers_of_Mf.five_thirds
+            + 1.0 * pn_coefficients.phi_4 / powers_of_Mf.four_thirds
+            - 3 * pn_coefficients.phi_5l / powers_of_Mf.one
+            - pn_coefficients.phi_6 / powers_of_Mf.two_thirds
+            - pn_coefficients.phi_6l
             / powers_of_Mf.two_thirds
             * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
-            - 2.0 * pn_prefactors.phi_7 / powers_of_Mf.third
-            - 3.0 * pn_prefactors.phi_8
+            - 2.0 * pn_coefficients.phi_7 / powers_of_Mf.third
+            - 3.0 * pn_coefficients.phi_8
             - 3.0
-            * pn_prefactors.phi_8l
+            * pn_coefficients.phi_8l
             * (1.0 + powers_of_Mf.log + useful_powers_pi.log)
         )
         + (
@@ -990,7 +990,7 @@ class AmplitudeCoefficients:
 
     @ti.func
     def _set_intermediate_coefficients(
-        self, source_params: ti.template(), pn_prefactors: ti.template()
+        self, source_params: ti.template(), pn_coefficients: ti.template()
     ):
         """
         Only the recommended fit model `104` is implemented, and only can be called after
@@ -1012,7 +1012,7 @@ class AmplitudeCoefficients:
         factor :math:`f^{7/6}` in amplitude_intermediate_ansatz function.
         """
         # self.int_colloc_values[0] = 1.0 / _amplitude_inspiral_ansatz(
-        #     self.useful_powers_fjoin_int_ins, self, pn_prefactors
+        #     self.useful_powers_fjoin_int_ins, self, pn_coefficients
         # )
         # self.int_colloc_values[1] = self.int_colloc_points[1] ** (-7 / 6) / (
         #     (
@@ -1056,7 +1056,7 @@ class AmplitudeCoefficients:
         # )
         # self.int_colloc_values[3] = (
         #     _d_amplitude_inspiral_ansatz(
-        #         self.useful_powers_fjoin_int_ins, self, pn_prefactors
+        #         self.useful_powers_fjoin_int_ins, self, pn_coefficients
         #     )
         #     / self.int_colloc_values[0] ** 2
         # )
@@ -1069,7 +1069,7 @@ class AmplitudeCoefficients:
 
         # # The way of lalsimulation, the f^(-7/6) factor is absorb into the coefficients.
         ins_f1 = _amplitude_inspiral_ansatz(
-            self.useful_powers_fjoin_int_ins, self, pn_prefactors
+            self.useful_powers_fjoin_int_ins, self, pn_coefficients
         )
         MRD_f4 = _amplitude_merge_ringdown_ansatz(
             self.useful_powers_fjoin_MRD_int, self, source_params
@@ -1121,7 +1121,7 @@ class AmplitudeCoefficients:
             7 / 6 * self.int_colloc_points[0] ** (1 / 6) / ins_f1
             - self.int_colloc_points[0] ** (7 / 6)
             * _d_amplitude_inspiral_ansatz(
-                self.useful_powers_fjoin_int_ins, self, pn_prefactors
+                self.useful_powers_fjoin_int_ins, self, pn_coefficients
             )
             / ins_f1**2
         )
@@ -1320,12 +1320,12 @@ class AmplitudeCoefficients:
 
     @ti.func
     def compute_amplitude_coefficients(
-        self, source_params: ti.template(), pn_prefactors: ti.template()
+        self, source_params: ti.template(), pn_coefficients: ti.template()
     ):
         self._set_merge_ringdown_coefficients(source_params)
         self._set_ins_int_colloc_points(source_params)
         self._set_inspiral_coefficients(source_params)
-        self._set_intermediate_coefficients(source_params, pn_prefactors)
+        self._set_intermediate_coefficients(source_params, pn_coefficients)
 
         # The common prefactor, A0 (without f^{-7/6})
         # TODO: use amp_0 excluding the Ylm constant factor
@@ -1901,13 +1901,16 @@ class PhaseCoefficients:
                 ],
             ]
         )
-        self.sigma_1, self.sigma_2, self.sigma_3, self.sigma_4 = gauss_elimination(
-            Ab_ins
+        # absorbing common factor into the pseudo PN parameters
+        # note the normalizing factor used in lalsim: dphase0=(5/128/pi^(5/3))
+        common_factor = 5.0 / 128.0 / source_params.eta / useful_powers_pi.five_thirds
+        self.sigma_1, self.sigma_2, self.sigma_3, self.sigma_4 = (
+            common_factor * gauss_elimination(Ab_ins)
         )
 
     @ti.func
     def _set_intermediate_coefficients(
-        self, source_params: ti.template(), pn_prefactors: ti.template()
+        self, source_params: ti.template(), pn_coefficients: ti.template()
     ):
         """
         Require inspiral and merge-ringdown coefficients, can only be called after updating
@@ -2100,7 +2103,7 @@ class PhaseCoefficients:
         )
 
         self.int_colloc_values[0] = _d_phase_inspiral_ansatz(
-            self.useful_powers_fjoin_int_ins, self, pn_prefactors
+            self.useful_powers_fjoin_int_ins, self, pn_coefficients
         )
         self.int_colloc_values[1] = (
             0.75 * (d_v2int_v4MRD + self.MRD_colloc_values[3]) + 0.25 * v2_int_bar
@@ -2216,7 +2219,7 @@ class PhaseCoefficients:
 
     @ti.func
     def _set_connection_coefficients(
-        self, source_params: ti.template(), pn_prefactors: ti.template()
+        self, source_params: ti.template(), pn_coefficients: ti.template()
     ):
         """
         Since the fmax_ins and fmin_MRD are not same with fmin_int and fmax_int, addition
@@ -2235,13 +2238,13 @@ class PhaseCoefficients:
         """
         # Connection coefficients added into intermediate ansatz
         self.C2_int = _d_phase_inspiral_ansatz(
-            self.useful_powers_fjoin_int_ins, self, pn_prefactors
+            self.useful_powers_fjoin_int_ins, self, pn_coefficients
         ) - _d_phase_intermediate_ansatz(
             self.useful_powers_fjoin_int_ins, self, source_params
         )
         self.C1_int = (
             _phase_inspiral_ansatz(
-                self.useful_powers_fjoin_int_ins, self, pn_prefactors
+                self.useful_powers_fjoin_int_ins, self, pn_coefficients
             )
             - _phase_intermediate_ansatz(
                 self.useful_powers_fjoin_int_ins, self, source_params
@@ -2273,72 +2276,30 @@ class PhaseCoefficients:
     @ti.func
     def _inspiral_phase(
         self,
-        pn_prefactors: ti.template(),
+        pn_coefficients: ti.template(),
         powers_of_Mf: ti.template(),
     ) -> ti.f64:
         return (
-            -3.0
-            * (
-                pn_prefactors.phi_0 / powers_of_Mf.five_thirds
-                + pn_prefactors.phi_1 / powers_of_Mf.four_thirds
-                + pn_prefactors.phi_2 / powers_of_Mf.one
-                + pn_prefactors.phi_3 / powers_of_Mf.two_thirds
-                + pn_prefactors.phi_4 / powers_of_Mf.third
-                # neglect the constant term of phi5 and phi5l*log(pi)
-                # + pn_prefactors.phi_5
-                + pn_prefactors.phi_5l * powers_of_Mf.log
-                + pn_prefactors.phi_6 * powers_of_Mf.third
-                + pn_prefactors.phi_6l
-                * powers_of_Mf.third
-                * (powers_of_Mf.log + useful_powers_pi.log)
-                + pn_prefactors.phi_7 * powers_of_Mf.two_thirds
-                + pn_prefactors.phi_8 * powers_of_Mf.one
-                + pn_prefactors.phi_8l
-                * powers_of_Mf.one
-                * (powers_of_Mf.log + useful_powers_pi.log)
-            )
-            + (
-                +5.0 * self.sigma_1 * powers_of_Mf.one
-                + 3.75 * self.sigma_2 * powers_of_Mf.four_thirds
-                + 3.0 * self.sigma_3 * powers_of_Mf.five_thirds
-                + 2.5 * self.sigma_4 * powers_of_Mf.two
-            )
-            / useful_powers_pi.five_thirds
-        ) / 128.0  # note the normalizing factor used in lalsim: phiNorm (-3/128/pi^(-5/3))
+            pn_coefficients.PN_phase(powers_of_Mf)
+            + self.sigma_1 * powers_of_Mf.one
+            + 0.75 * self.sigma_2 * powers_of_Mf.four_thirds
+            + 0.6 * self.sigma_3 * powers_of_Mf.five_thirds
+            + 0.5 * self.sigma_4 * powers_of_Mf.two
+        )
 
     @ti.func
     def _inspiral_d_phase(
         self,
-        pn_prefactors: ti.template(),
+        pn_coefficients: ti.template(),
         powers_of_Mf: ti.template(),
     ) -> ti.f64:
         return (
-            (
-                5.0 * pn_prefactors.phi_0 / powers_of_Mf.eight_thirds
-                + 4.0 * pn_prefactors.phi_1 / powers_of_Mf.seven_thirds
-                + 3.0 * pn_prefactors.phi_2 / powers_of_Mf.two
-                + 2.0 * pn_prefactors.phi_3 / powers_of_Mf.five_thirds
-                + 1.0 * pn_prefactors.phi_4 / powers_of_Mf.four_thirds
-                - 3 * pn_prefactors.phi_5l / powers_of_Mf.one
-                - pn_prefactors.phi_6 / powers_of_Mf.two_thirds
-                - pn_prefactors.phi_6l
-                / powers_of_Mf.two_thirds
-                * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
-                - 2.0 * pn_prefactors.phi_7 / powers_of_Mf.third
-                - 3.0 * pn_prefactors.phi_8
-                - 3.0
-                * pn_prefactors.phi_8l
-                * (1.0 + powers_of_Mf.log + useful_powers_pi.log)
-            )
-            + (
-                self.sigma_1
-                + self.sigma_2 * powers_of_Mf.third
-                + self.sigma_3 * powers_of_Mf.two_thirds
-                + self.sigma_4 * powers_of_Mf.one
-            )
-            * 5.0
-            / useful_powers_pi.five_thirds  # note the normalizing factor used in lalsim: dphase0 (5/128/pi^(-5/3))
-        ) / 128.0
+            pn_coefficients.d_PN_phase(powers_of_Mf)
+            + self.sigma_1
+            + self.sigma_2 * powers_of_Mf.third
+            + self.sigma_3 * powers_of_Mf.two_thirds
+            + self.sigma_4 * powers_of_Mf.one
+        )
 
     @ti.func
     def _intermediate_phase(
@@ -2415,18 +2376,20 @@ class PhaseCoefficients:
 
     @ti.func
     def update_phase_coefficients(
-        self, source_params: ti.template(), pn_prefactors: ti.template()
+        self,
+        pn_coefficients: ti.template(),
+        source_params: ti.template(),
     ):
         self._set_all_colloc_points(source_params)
         self._set_merge_ringdown_coefficients(source_params)
         self._set_inspiral_coefficients(source_params)
-        self._set_intermediate_coefficients(source_params, pn_prefactors)
-        self._set_connection_coefficients(source_params, pn_prefactors)
+        self._set_intermediate_coefficients(source_params, pn_coefficients)
+        self._set_connection_coefficients(source_params, pn_coefficients)
 
     @ti.func
     def compute_phase(
         self,
-        pn_prefactors: ti.template(),
+        pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
     ):
@@ -2437,7 +2400,7 @@ class PhaseCoefficients:
         # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
         # and fmax_int as the transtion points (l. 1020 in LALSimIMRPhenomX_internals.c)
         if powers_of_Mf.one < self.useful_powers_fjoin_int_ins.one:
-            phase = self._inspiral_phase(pn_prefactors, powers_of_Mf)
+            phase = self._inspiral_phase(pn_coefficients, powers_of_Mf)
         elif (
             powers_of_Mf.one > self.useful_powers_fjoin_MRD_int.one
         ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
@@ -2455,9 +2418,9 @@ class PhaseCoefficients:
         return phase / source_params.eta
 
     @ti.func
-    def compute_tf(
+    def compute_d_phase(
         self,
-        pn_prefactors: ti.template(),
+        pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
     ):
@@ -2466,7 +2429,7 @@ class PhaseCoefficients:
         """
         tf = 0.0
         if powers_of_Mf.one < self.useful_powers_fjoin_int_ins.one:
-            tf = self._inspiral_d_phase(pn_prefactors, powers_of_Mf)
+            tf = self._inspiral_d_phase(pn_coefficients, powers_of_Mf)
         elif (
             powers_of_Mf.one > self.useful_powers_fjoin_MRD_int.one
         ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
@@ -2480,13 +2443,13 @@ class PhaseCoefficients:
 def _compute_amplitude(
     powers_of_Mf: ti.template(),
     amplitude_coefficients: ti.template(),
-    pn_prefactors: ti.template(),
+    pn_coefficients: ti.template(),
     source_params: ti.template(),
 ):
     amplitude = 0.0
     if powers_of_Mf.one < amplitude_coefficients.useful_powers_fjoin_int_ins.one:
         amplitude = _amplitude_inspiral_ansatz(
-            powers_of_Mf, amplitude_coefficients, pn_prefactors
+            powers_of_Mf, amplitude_coefficients, pn_coefficients
         )
     elif powers_of_Mf.one > amplitude_coefficients.useful_powers_fjoin_MRD_int.one:
         amplitude = _amplitude_merge_ringdown_ansatz(
@@ -2501,7 +2464,7 @@ def _compute_amplitude(
 def _compute_phase(
     powers_of_Mf: ti.template(),
     phase_coefficients: ti.template(),
-    pn_prefactors: ti.template(),
+    pn_coefficients: ti.template(),
     source_params: ti.template(),
 ):
     """
@@ -2511,7 +2474,9 @@ def _compute_phase(
     # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
     # and fmax_int as the transtion points (l. 1020 in LALSimIMRPhenomX_internals.c)
     if powers_of_Mf.one < phase_coefficients.useful_powers_fjoin_int_ins.one:
-        phase = _phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
+        phase = _phase_inspiral_ansatz(
+            powers_of_Mf, phase_coefficients, pn_coefficients
+        )
     elif (
         powers_of_Mf.one > phase_coefficients.useful_powers_fjoin_MRD_int.one
     ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
@@ -2535,7 +2500,7 @@ def _compute_phase(
 def _compute_tf(
     powers_of_Mf: ti.template(),
     phase_coefficients: ti.template(),
-    pn_prefactors: ti.template(),
+    pn_coefficients: ti.template(),
     source_params: ti.template(),
 ):
     """
@@ -2543,7 +2508,7 @@ def _compute_tf(
     """
     tf = 0.0
     if powers_of_Mf.one < phase_coefficients.useful_powers_fjoin_int_ins.one:
-        tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_prefactors)
+        tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_coefficients)
     elif (
         powers_of_Mf.one > phase_coefficients.useful_powers_fjoin_MRD_int.one
     ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
@@ -2664,7 +2629,7 @@ class IMRPhenomXAS(BaseWaveform):
         self.source_parameters = SourceParameters.field(shape=())
         self.phase_coefficients = PhaseCoefficients.field(shape=())
         self.amplitude_coefficients = AmplitudeCoefficients.field(shape=())
-        self.pn_prefactors = PostNewtonianPrefactors.field(shape=())
+        self.pn_coefficients = PostNewtonianCoefficients.field(shape=())
 
     def _initialize_waveform_container(
         self, returned_form: str, include_tf: bool
@@ -2731,12 +2696,12 @@ class IMRPhenomXAS(BaseWaveform):
             coalescence_time,
         )
 
-        self.pn_prefactors[None].update_PN_prefactors(self.source_parameters[None])
+        self.pn_coefficients[None].update_pn_coefficients(self.source_parameters[None])
         self.amplitude_coefficients[None].compute_amplitude_coefficients(
-            self.source_parameters[None], self.pn_prefactors[None]
+            self.source_parameters[None], self.pn_coefficients[None]
         )
         self.phase_coefficients[None].compute_phase_coefficients(
-            self.source_parameters[None], self.pn_prefactors[None]
+            self.source_parameters[None], self.pn_coefficients[None]
         )
 
         powers_of_Mf = UsefulPowers()
@@ -2750,7 +2715,7 @@ class IMRPhenomXAS(BaseWaveform):
         t_ffit = _compute_tf(
             powers_of_Mf,
             self.phase_coefficients[None],
-            self.pn_prefactors[None],
+            self.pn_coefficients[None],
             self.source_parameters[None],
         )
         # first shift peak time around t=0
@@ -2777,7 +2742,7 @@ class IMRPhenomXAS(BaseWaveform):
             _compute_phase(
                 powers_of_Mf,
                 self.phase_coefficients[None],
-                self.pn_prefactors[None],
+                self.pn_coefficients[None],
                 self.source_parameters[None],
             )
             + time_shift * Mf_ref
@@ -2793,13 +2758,13 @@ class IMRPhenomXAS(BaseWaveform):
                 amplitude = _compute_amplitude(
                     powers_of_Mf,
                     self.amplitude_coefficients[None],
-                    self.pn_prefactors[None],
+                    self.pn_coefficients[None],
                     self.source_parameters[None],
                 )
                 phase = _compute_phase(
                     powers_of_Mf,
                     self.phase_coefficients[None],
-                    self.pn_prefactors[None],
+                    self.pn_coefficients[None],
                     self.source_parameters[None],
                 )
                 phase += time_shift * Mf + phase_shift
@@ -2818,7 +2783,7 @@ class IMRPhenomXAS(BaseWaveform):
                     tf = _compute_tf(
                         powers_of_Mf,
                         self.phase_coefficients[None],
-                        self.pn_prefactors[None],
+                        self.pn_coefficients[None],
                         self.source_parameters[None],
                     )
                     tf += time_shift

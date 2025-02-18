@@ -759,7 +759,7 @@ class PostNewtonianCoefficientsMode21:
             + 11.7 / 5.6 * source_params.delta * source_params.eta
         ) * useful_powers_2pi.one
         self.A_4 = (
-            ti.length(
+            tm.length(
                 ComplexNumber(
                     [
                         (0.5 + 2.0 * tm.log(2.0)) * source_params.delta,
@@ -801,7 +801,7 @@ class PostNewtonianCoefficientsMode21:
             * source_params.eta
         ) * useful_powers_2pi.five_thirds
         self.A_6 = (
-            ti.length(
+            tm.length(
                 ComplexNumber(
                     [
                         (
@@ -895,7 +895,7 @@ class PostNewtonianCoefficientsMode33:
             + 27.0 / 8.0 * source_params.delta * source_params.eta
         ) * useful_powers_2pi_over_3.one
         self.A_4 = (
-            ti.length(
+            tm.length(
                 ComplexNumber(
                     [
                         (21.0 / 5.0 - 6.0 * tm.log(1.5)) * source_params.delta,
@@ -931,7 +931,7 @@ class PostNewtonianCoefficientsMode33:
             + 81.0 / 4.0 * source_params.chi_a * source_params.chi_s * source_params.eta
         ) * useful_powers_2pi_over_3.five_thirds
         self.A_6 = (
-            ti.length(
+            tm.length(
                 ComplexNumber(
                     [
                         (
@@ -991,7 +991,7 @@ class PostNewtonianCoefficientsMode32:
             + 58.9 / 7.2 * source_params.eta_pow2
         ) * useful_powers_pi.four_thirds
         self.A_5 = (
-            ti.length(
+            tm.length(
                 ComplexNumber(
                     [
                         (
@@ -1059,7 +1059,7 @@ class PostNewtonianCoefficientsMode44:
             - 106.3 / 8.8 * source_params.eta_pow2
         ) * useful_powers_pi_over_2.four_thirds
         self.A_5 = (
-            ti.length(
+            tm.length(
                 ComplexNumber(
                     [
                         (
@@ -4861,16 +4861,14 @@ class PhaseCoefficientsMode21:
         # continuous conditions
         self.ins_C1 = self._intermediate_d_phase(
             source_params.QNM_freqs_lm["21"], self._useful_powers.ins_f_end
-        ) - self._inspiral_d_phase(
-            pn_coefficients_21, source_params, self._useful_powers.ins_f_end
-        )
+        ) - self._inspiral_d_phase(pn_coefficients_21, self._useful_powers.ins_f_end)
+        # Note we have dropped the constant of phi_5, ins_C0 is different with CINSP in 
+        # lalsimulation. ins_C0 (tiwave) = CINSP (lalsim) - phi_5
         self.ins_C0 = (
             self._intermediate_phase(
                 source_params.QNM_freqs_lm["21"], self._useful_powers.ins_f_end
             )
-            - self._inspiral_phase(
-                pn_coefficients_21, source_params, self._useful_powers.ins_f_end
-            )
+            - self._inspiral_phase(pn_coefficients_21, self._useful_powers.ins_f_end)
             - self.ins_C1 * self.ins_f_end
         )
         self.MRD_C1 = self._intermediate_d_phase(

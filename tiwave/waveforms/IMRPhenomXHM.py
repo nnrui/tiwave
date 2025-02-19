@@ -236,6 +236,46 @@ class PhaseCoefficientsHighModesBase:
     # constant for aligning each mode under the choice of tetrad convention
     delta_phi_lm: ti.f64
 
+    # cache powers of some collocation points for converience
+    _useful_powers: ti.types.struct(
+        ins_f_end=UsefulPowers,
+        int_f_end=UsefulPowers,
+    )
+
+    @ti.func
+    def _set_colloc_points_no_mixing(
+        self,
+        f_MECO_lm: ti.f64,
+        QNM_freqs_lm: ti.template(),
+        source_params: ti.template(),
+    ):
+        """for modes 21, 33, 44"""
+        self.ins_f_end = f_MECO_lm
+        self.int_f_end = QNM_freqs_lm.f_ring - QNM_freqs_lm.f_damp
+        # shifting forward the frequency of the first collocation points for small eta
+        beta = 1.0 + 0.001 * (0.25 / source_params.eta - 1.0)
+
+        self.int_colloc_points[0] = beta * self.ins_f_end
+        self.int_colloc_points[1] = (
+            tm.sqrt(3.0) * (self.int_colloc_points[0] - QNM_freqs_lm.f_ring)
+            + 2.0 * (self.int_colloc_points[0] + QNM_freqs_lm.f_ring)
+        ) / 4.0
+        self.int_colloc_points[2] = (
+            3.0 * self.int_colloc_points[0] + QNM_freqs_lm.f_ring
+        ) / 4.0
+        self.int_colloc_points[3] = (
+            self.int_colloc_points[0] + QNM_freqs_lm.f_ring
+        ) / 2.0
+        self.int_colloc_points[4] = (
+            self.int_colloc_points[0] + 3.0 * QNM_freqs_lm.f_ring
+        ) / 4.0
+        self.int_colloc_points[5] = (
+            self.int_colloc_points[0] + 7.0 * QNM_freqs_lm.f_ring
+        ) / 8.0
+
+        self._useful_powers.ins_f_end.update(self.ins_f_end)
+        self._useful_powers.int_f_end.update(self.int_f_end)
+
     @ti.func
     def _set_ins_rescaling_coefficients(
         self,
@@ -4451,42 +4491,6 @@ class PhaseCoefficientsMode21:
     )
 
     @ti.func
-    def _set_colloc_points(self, source_params: ti.template()):
-        self.ins_f_end = source_params.f_MECO_lm["21"]
-        self.int_f_end = (
-            source_params.QNM_freqs_lm["21"].f_ring
-            - source_params.QNM_freqs_lm["21"].f_damp
-        )
-        # shifting forward the frequency of the first collocation points for small eta
-        beta = 1.0 + 0.001 * (0.25 / source_params.eta - 1.0)
-
-        self.int_colloc_points[0] = beta * self.ins_f_end
-        self.int_colloc_points[1] = (
-            tm.sqrt(3.0)
-            * (self.int_colloc_points[0] - source_params.QNM_freqs_lm["21"].f_ring)
-            + 2.0
-            * (self.int_colloc_points[0] + source_params.QNM_freqs_lm["21"].f_ring)
-        ) / 4.0
-        self.int_colloc_points[2] = (
-            3.0 * self.int_colloc_points[0] + source_params.QNM_freqs_lm["21"].f_ring
-        ) / 4.0
-        self.int_colloc_points[3] = (
-            self.int_colloc_points[0] + source_params.QNM_freqs_lm["21"].f_ring
-        ) / 2.0
-        self.int_colloc_points[4] = (
-            self.int_colloc_points[0] + 3.0 * source_params.QNM_freqs_lm["21"].f_ring
-        ) / 4.0
-        self.int_colloc_points[5] = (
-            self.int_colloc_points[0] + 7.0 * source_params.QNM_freqs_lm["21"].f_ring
-        ) / 8.0
-
-        self._useful_powers.int_f0.update(self.int_colloc_points[0])
-        self._useful_powers.int_f1.update(self.int_colloc_points[1])
-        self._useful_powers.int_f2.update(self.int_colloc_points[2])
-        self._useful_powers.ins_f_end.update(self.ins_f_end)
-        self._useful_powers.int_f_end.update(self.int_f_end)
-
-    @ti.func
     def _Lambda_21_PN(self) -> ti.f64:
         return 2.0 * PI * (0.5 + 2.0 * tm.log(2.0))
 
@@ -4844,7 +4848,15 @@ class PhaseCoefficientsMode21:
         source_params: ti.template(),
     ):
         # intermediate
-        self._set_colloc_points(source_params)
+        self._set_colloc_points_no_mixing(
+            source_params.f_MECO_lm["21"],
+            source_params.QNM_freqs_lm["21"],
+            source_params,
+        )
+        self._useful_powers.int_f0.update(self.int_colloc_points[0])
+        self._useful_powers.int_f1.update(self.int_colloc_points[1])
+        self._useful_powers.int_f2.update(self.int_colloc_points[2])
+
         self._set_intermediate_coefficients(
             pn_coefficients_22, phase_coefficients_22, source_params
         )
@@ -4862,7 +4874,7 @@ class PhaseCoefficientsMode21:
         self.ins_C1 = self._intermediate_d_phase(
             source_params.QNM_freqs_lm["21"], self._useful_powers.ins_f_end
         ) - self._inspiral_d_phase(pn_coefficients_21, self._useful_powers.ins_f_end)
-        # Note we have dropped the constant of phi_5, ins_C0 is different with CINSP in 
+        # Note we have dropped the constant of phi_5, ins_C0 is different with CINSP in
         # lalsimulation. ins_C0 (tiwave) = CINSP (lalsim) - phi_5
         self.ins_C0 = (
             self._intermediate_phase(
@@ -4889,24 +4901,6 @@ class PhaseCoefficientsMode21:
 
 @sub_struct_from(PhaseCoefficientsHighModesBase)
 class PhaseCoefficientsMode33:
-    # # Inspiral
-    # Lambda_PN: ti.f64  # corrections for the complex PN amplitudes, eq 4.9
-    # C1_ins: ti.f64
-    # C2_ins: ti.f64
-
-    # # Intermediate
-    # c_0: ti.f64
-    # c_1: ti.f64
-    # c_2: ti.f64
-    # c_3: ti.f64
-    # c_4: ti.f64
-    # c_L: ti.f64
-    # int_colloc_points: ti.types.vector(6, ti.f64)
-    # int_colloc_values: ti.types.vector(6, ti.f64)
-
-    # # Merge-ringdown
-    # alpha_2: ti.f64
-    # alpha_L: ti.f64
 
     # @ti.func
     # def _set_colloc_points(self, source_params: ti.template()):

@@ -1,53 +1,102 @@
-# **tiwave** - gravitational waveforms using taichi-lang
+# tiwave - commonly used gravitational waveform models implemented with taichi-lang
+
+![last commit](https://img.shields.io/github/last-commit/niuiniuin/tiwave)
+[![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![docs:]()]
+[![test.yaml:]()]
+[![test coverage:]()]
+[![downloads:]()]
+
+`tiwave` is a python implementation of several commonly used gravitational waveform models powered by [`taichi-lang`](https://www.taichi-lang.org/), developed mainly for preparatory science of space-borne gravitaional wave observation projects. It can be used to generate waveforms in high performance on both CPUs and GPUs, with useful features like automatic differentiation, while keeping python's virtues of usability and maintainability. 
 
 
+## Supported models
 
-`tiwave` is a python implementation for some gravitational waveform models using [`taichi-lang`](https://www.taichi-lang.org/) which is designed for high-performance parallel programming and allows the codes to run fast while keeping the python's virtues of readability and maintainability.
+- [x] TaylorF2 (arXiv: )
+- [x] IMRPhenomD (arXiv: [1508.07250](https://arxiv.org/abs/1508.07250), [1508.07253](https://arxiv.org/abs/1508.07253))
+- [x] IMRPhenomXAS (arXiv: [2001.11412](https://arxiv.org/abs/2001.11412))
+- [x] IMRPhenomXHM (arXiv: [2001.10914](https://arxiv.org/abs/2001.10914))
+- [ ] IMRPhenomXPHM (arXiv: [2004.06503](https://arxiv.org/abs/2004.06503))
+- [ ] IMRPhenomXP 
+- [ ] FASTGB (arXiv: [0704.1808](https://arxiv.org/abs/0704.1808))
+- [ ] AAK (arXiv: )
 
-## Supported waveforms
-- IMRPhenomD
-- IMRPhenomXAS (only recommended fitting models are implemented, i.e. inspiral phase: 104, intermediate phase: 105, intermediate amplitude: 104)
-- IMRPhenomXHM
-- IMRPhenomXPHM
-- TaylorF2
-- FASTGB
+*(For waveforms of X family, only the default configuration are implemented, see [docs](https://git.ligo.org/lscsoft/lalsuite/-/blob/master/lalsimulation/lib/LALSimIMRPhenomX.c#L136) in lalsimulation for more details.)*
+
 
 ## Installation
+Using pip is the easiest way to install.
+```sh
+pip install git+https://github.com/niuiniuin/tiwave.git@master
+```
 
-## Basic usage
+While, if you are concerned that this may mess up your environment, you can use conda to create an isolated environment.
+```sh
+conda create -f https://raw.githubusercontent.com/niuiniuin/tiwave/refs/heads/master/environment.yml
+conda activate tiwave
+pip install git+https://github.com/niuiniuin/tiwave.git@master
+```
 
-More examples and detail api can be found in the document().
+
+## Quickstart
+```python
+import taichi as ti
+ti.init(arch=ti.cpu, default_fp=ti.f64)
+
+from tiwave.waveforms import IMRPhenomXAS
+
+params_in = dict(total_mass=2590590.325070,
+                 mass_ratio=0.6560166,
+                 chi_1=-0.448101,
+                 chi_2=0.014488,
+                 luminosity_distance=800.0,
+                 inclination=2.123734,
+                 reference_phase=3.211444,
+                 reference_frequency=1e-5,
+                 coalescence_time=0.0,)
+minimum_frequency = 1e-5
+maximum_frequency = 0.1
+
+wf = IMRPhenomXAS(freqs_ti, reference_frequency=params_in['reference_frequency'])
+wf.update_waveform(params_in)
+```
+More examples and detail APIs can be found in the document ().
+
 
 ## Testing with lalsimulation
-(TODO: testing in whole parameter space)
-Note, the performance is depend on the hardware and software environment. You may obtain differenc results when runing the same test script. The result shown above are obtained on hanhai20 system in USTC with H100
 
-## Development
-Code Organization
-The codes are modularized as much as possible, which allow to easily modify and add some effects. A example of adding environment effects (cite[]) in inspiral can be found here.
-(TODO: development installation)
+*Comparing the waveform*
+
+*Mismatch in the whole parameter space*
+
+*Performance*
+
+(The performance tests are highly depending on the hardware and software environment. The results shown above are obtained on the [hanhai20](https://scc.ustc.edu.cn/zlsc/user_doc/html/introduction/hanhai20-introduction.html) system in USTC with Intel Xeon Scale 6248 and NVIDIA Tesla V100.)
+
+More thorough tests can be found [here]().
 
 
-## Similar tools
-Other similar tools for gravitaional waveform generation which may meet your different needs (Due to the limitation of author's knowledge, this list may be not complete. Please open a new issue or PR if you know others.):
+## Other tools
+If `tiwave` cannot meet your needs, you may find other packages for gravitaional waveform generation (Please open a new issue or PR if you know more):
 
-- [`lalsimulation`](https://github.com/lscsoft/lalsuite), the most authoritative and inclusive waveform library developed by LVK.
-- [`bbhx`](https://github.com/mikekatz04/BBHx), using `cuda` to generate waveforms on GPU.
-- [`wf4py`](https://github.com/CosmoStatGW/WF4Py), a python implementation of gravitaional waveforms.
-- [`ripple`](https://github.com/tedwards2412/ripple), a python implementation of gravitaional wavefroms with `jax`.
+- [`lalsimulation`](https://github.com/lscsoft/lalsuite)
+- [`bbhx`](https://github.com/mikekatz04/BBHx)
+- [`wf4py`](https://github.com/CosmoStatGW/WF4Py)
+- [`ripple`](https://github.com/tedwards2412/ripple)
+
+
+## Contact
+Any suggestions and comments are extremely welcome. Feel free to open issues or email me (nrui@mail.ustc.edu.cn).
 
 
 ## Citation
 If you think this package is useful, please considering cite
 ```
-
 ```
 The development of this package depending on many previous works including:
+```
+```
+Please cite the original works for the corresponding modules you have used.
 
-Please cite the original works for the correnpond modules you have used.
-
-
-## Contact
-Any suggestions and comments are extremely welcome. Feel free to open issues or email me (nrui@mail.ustc.edu.cn).
 
 

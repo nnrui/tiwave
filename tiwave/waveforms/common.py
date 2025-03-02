@@ -290,7 +290,7 @@ class PostNewtonianCoefficients:
         )
 
     @ti.func
-    def d_PN_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def PN_d_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
         """ """
         return self.amp_global * (
             1.0 / 3.0 * self.A_1 / powers_of_Mf.two_thirds
@@ -298,7 +298,7 @@ class PostNewtonianCoefficients:
             + self.A_3
             + 4.0 / 3.0 * self.A_4 * powers_of_Mf.third
             + 5.0 / 3.0 * self.A_5 * powers_of_Mf.two_thirds
-            + 2.0 * self.A_6 * powers_of_Mf
+            + 2.0 * self.A_6 * powers_of_Mf.one
         )
 
     @ti.func
@@ -322,7 +322,7 @@ class PostNewtonianCoefficients:
         )
 
     @ti.func
-    def d_PN_phase(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def PN_d_phase(self, powers_of_Mf: ti.template()) -> ti.f64:
         """ """
         return (
             -5.0 / 3.0 * self.phi_0 / powers_of_Mf.eight_thirds

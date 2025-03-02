@@ -1,5 +1,4 @@
 # TODO:
-# - compute_ -> update_
 # - amp_0 conflict with pn amp_0
 # - add two opt for exactlly same with lalsim and fix amp int and phase int (potential) bugs;
 # - improve the convention for constant amplitude norm factor to compatible with Ylm
@@ -25,381 +24,295 @@ useful_powers_pi = UsefulPowers()
 useful_powers_pi.update(PI)
 
 
-@ti.func
-def _time_shift_psi4_to_strain(source_params: ti.template()) -> ti.f64:
-    """
-    The fit of the time difference between peak of strain and psi4.
-    """
-    return (
-        13.39320482758057
-        - 175.42481512989315 * source_params.eta
-        + 2097.425116152503 * source_params.eta_pow2
-        - 9862.84178637907 * source_params.eta_pow3
-        + 16026.897939722587 * source_params.eta_pow4
-        + (
-            4.7895602776763
-            - 163.04871764530466 * source_params.eta
-            + 609.5575850476959 * source_params.eta_pow2
-        )
-        * source_params.S_tot_hat
-        + (
-            1.3934428041390161
-            - 97.51812681228478 * source_params.eta
-            + 376.9200932531847 * source_params.eta_pow2
-        )
-        * source_params.S_tot_hat_pow2
-        + (
-            15.649521097877374
-            + 137.33317057388916 * source_params.eta
-            - 755.9566456906406 * source_params.eta_pow2
-        )
-        * source_params.S_tot_hat_pow3
-        + (
-            13.097315867845788
-            + 149.30405703643288 * source_params.eta
-            - 764.5242164872267 * source_params.eta_pow2
-        )
-        * source_params.S_tot_hat_pow4
-        + 105.37711654943146
-        * source_params.delta_chi
-        * source_params.delta
-        * source_params.eta_pow2
-    )
+# # Amplitude ansatz
+# @ti.func
+# def _amplitude_inspiral_ansatz(
+#     powers_of_Mf: ti.template(),
+#     amplitude_coefficients: ti.template(),
+#     pn_coefficients: ti.template(),
+# ):
+#     """
+#     Eq. 6.3 in arXiv:2001.11412.
+#     Without amp0, only have the 103 fit model.
+#     """
+#     return (
+#         1.0
+#         + pn_coefficients.A_2 * powers_of_Mf.two_thirds
+#         + pn_coefficients.A_3 * powers_of_Mf.one
+#         + pn_coefficients.A_4 * powers_of_Mf.four_thirds
+#         + pn_coefficients.A_5 * powers_of_Mf.five_thirds
+#         + pn_coefficients.A_6 * powers_of_Mf.two
+#         + amplitude_coefficients.rho_1 * powers_of_Mf.seven_thirds
+#         + amplitude_coefficients.rho_2 * powers_of_Mf.eight_thirds
+#         + amplitude_coefficients.rho_3 * powers_of_Mf.three
+#     )
 
 
-@ti.func
-def _time_at_fit_frequency(source_params: ti.template()) -> ti.f64:
-    """
-    The fit of dphi at the fit frequency, dphi(fring-fdamp).
-    """
-    return (
-        3155.1635543201924
-        + 1257.9949740608242 * source_params.eta
-        - 32243.28428870599 * source_params.eta_pow2
-        + 347213.65466875216 * source_params.eta_pow3
-        - 1.9223851649491738e6 * source_params.eta_pow4
-        + 5.3035911346921865e6 * source_params.eta_pow5
-        - 5.789128656876938e6 * source_params.eta_pow6
-        + (
-            -24.181508118588667
-            + 115.49264174560281 * source_params.eta
-            - 380.19778216022763 * source_params.eta_pow2
-        )
-        * source_params.S_tot_hat
-        + (
-            24.72585609641552
-            - 328.3762360751952 * source_params.eta
-            + 725.6024119989094 * source_params.eta_pow2
-        )
-        * source_params.S_tot_hat_pow2
-        + (
-            23.404604124552
-            - 646.3410199799737 * source_params.eta
-            + 1941.8836639529036 * source_params.eta_pow2
-        )
-        * source_params.S_tot_hat_pow3
-        + (
-            -12.814828278938885
-            - 325.92980012408367 * source_params.eta
-            + 1320.102640190539 * source_params.eta_pow2
-        )
-        * source_params.S_tot_hat_pow4
-        - 148.17317525117338
-        * source_params.delta_chi
-        * source_params.delta
-        * source_params.eta_pow2
-    )
+# @ti.func
+# def _d_amplitude_inspiral_ansatz(
+#     powers_of_Mf: ti.template(),
+#     amplitude_coefficients: ti.template(),
+#     pn_coefficients: ti.template(),
+# ):
+#     """
+#     Without amp0.
+#     """
+#     return (
+#         2.0 * pn_coefficients.A_2 / powers_of_Mf.third
+#         + 3.0 * pn_coefficients.A_3
+#         + 4.0 * pn_coefficients.A_4 * powers_of_Mf.third
+#         + 5.0 * pn_coefficients.A_5 * powers_of_Mf.two_thirds
+#         + 6.0 * pn_coefficients.A_6 * powers_of_Mf.one
+#         + 7.0 * amplitude_coefficients.rho_1 * powers_of_Mf.four_thirds
+#         + 8.0 * amplitude_coefficients.rho_2 * powers_of_Mf.five_thirds
+#         + 9.0 * amplitude_coefficients.rho_3 * powers_of_Mf.two
+#     ) / 3.0
 
 
-# Amplitude ansatz
-@ti.func
-def _amplitude_inspiral_ansatz(
-    powers_of_Mf: ti.template(),
-    amplitude_coefficients: ti.template(),
-    pn_coefficients: ti.template(),
-):
-    """
-    Eq. 6.3 in arXiv:2001.11412.
-    Without amp0, only have the 103 fit model.
-    """
-    return (
-        1.0
-        + pn_coefficients.A_2 * powers_of_Mf.two_thirds
-        + pn_coefficients.A_3 * powers_of_Mf.one
-        + pn_coefficients.A_4 * powers_of_Mf.four_thirds
-        + pn_coefficients.A_5 * powers_of_Mf.five_thirds
-        + pn_coefficients.A_6 * powers_of_Mf.two
-        + amplitude_coefficients.rho_1 * powers_of_Mf.seven_thirds
-        + amplitude_coefficients.rho_2 * powers_of_Mf.eight_thirds
-        + amplitude_coefficients.rho_3 * powers_of_Mf.three
-    )
+# @ti.func
+# def _amplitude_intermediate_ansatz(
+#     powers_of_Mf: ti.template(), amplitude_coefficients: ti.template()
+# ):
+#     """
+#     Eq. 6.7 in arXiv:2001.11412.
+#     Only the recommended fitting model `104` with 4th order polynomial ansatz are implemented.
+#     Without amp0.
+#     """
+#     # return 1.0 / (
+#     #     amplitude_coefficients.alpha_0
+#     #     + amplitude_coefficients.alpha_1 * powers_of_Mf.one
+#     #     + amplitude_coefficients.alpha_2 * powers_of_Mf.two
+#     #     + amplitude_coefficients.alpha_3 * powers_of_Mf.three
+#     #     + amplitude_coefficients.alpha_4 * powers_of_Mf.four
+#     # )
+#     # The ansatz used in lalsimulation where the intermediate coefficients have absorbed
+#     # common f^(-7/6) factor. We need to take out it since A0 will be multiply when assemble
+#     # the waveform.
+#     return powers_of_Mf.seven_sixths / (
+#         amplitude_coefficients.alpha_0
+#         + amplitude_coefficients.alpha_1 * powers_of_Mf.one
+#         + amplitude_coefficients.alpha_2 * powers_of_Mf.two
+#         + amplitude_coefficients.alpha_3 * powers_of_Mf.three
+#         + amplitude_coefficients.alpha_4 * powers_of_Mf.four
+#     )
 
 
-@ti.func
-def _d_amplitude_inspiral_ansatz(
-    powers_of_Mf: ti.template(),
-    amplitude_coefficients: ti.template(),
-    pn_coefficients: ti.template(),
-):
-    """
-    Without amp0.
-    """
-    return (
-        2.0 * pn_coefficients.A_2 / powers_of_Mf.third
-        + 3.0 * pn_coefficients.A_3
-        + 4.0 * pn_coefficients.A_4 * powers_of_Mf.third
-        + 5.0 * pn_coefficients.A_5 * powers_of_Mf.two_thirds
-        + 6.0 * pn_coefficients.A_6 * powers_of_Mf.one
-        + 7.0 * amplitude_coefficients.rho_1 * powers_of_Mf.four_thirds
-        + 8.0 * amplitude_coefficients.rho_2 * powers_of_Mf.five_thirds
-        + 9.0 * amplitude_coefficients.rho_3 * powers_of_Mf.two
-    ) / 3.0
+# @ti.func
+# def _amplitude_merge_ringdown_ansatz(
+#     powers_of_Mf: ti.template(),
+#     amplitude_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     """
+#     Eq. 6.19 in arXiv:2001.11412.
+#     Different notation with Eq. 6.19: gamma_1: a_R, gamma_2: lambda, gamma_3: sigma
+#     gamma1_gamma3_fdamp: a_R * f_damp * sigma
+#     gamma2_over_gamma3_fdamp: lambda / (f_damp * sigma)
+#     gamma3_fdamp: f_damp * sigma
+#     gamma3_fdamp_pow2: (f_damp * sigma)^2
+#     """
+#     f_minus_fring = powers_of_Mf.one - source_params.f_ring
+#     return (
+#         amplitude_coefficients.gamma1_gamma3_fdamp
+#         / (f_minus_fring * f_minus_fring + amplitude_coefficients.gamma3_fdamp_pow2)
+#         * tm.exp(-f_minus_fring * amplitude_coefficients.gamma2_over_gamma3_fdamp)
+#     )
 
 
-@ti.func
-def _amplitude_intermediate_ansatz(
-    powers_of_Mf: ti.template(), amplitude_coefficients: ti.template()
-):
-    """
-    Eq. 6.7 in arXiv:2001.11412.
-    Only the recommended fitting model `104` with 4th order polynomial ansatz are implemented.
-    Without amp0.
-    """
-    # return 1.0 / (
-    #     amplitude_coefficients.alpha_0
-    #     + amplitude_coefficients.alpha_1 * powers_of_Mf.one
-    #     + amplitude_coefficients.alpha_2 * powers_of_Mf.two
-    #     + amplitude_coefficients.alpha_3 * powers_of_Mf.three
-    #     + amplitude_coefficients.alpha_4 * powers_of_Mf.four
-    # )
-    # The ansatz used in lalsimulation where the intermediate coefficients have absorbed
-    # common f^(-7/6) factor. We need to take out it since A0 will be multiply when assemble
-    # the waveform.
-    return powers_of_Mf.seven_sixths / (
-        amplitude_coefficients.alpha_0
-        + amplitude_coefficients.alpha_1 * powers_of_Mf.one
-        + amplitude_coefficients.alpha_2 * powers_of_Mf.two
-        + amplitude_coefficients.alpha_3 * powers_of_Mf.three
-        + amplitude_coefficients.alpha_4 * powers_of_Mf.four
-    )
+# @ti.func
+# def _d_amplitude_merge_ringdown_ansatz(
+#     powers_of_Mf: ti.template(),
+#     amplitude_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     """
+#     Derivative with respect to f of the amplitude merge-ringdown ansatz.
+#     """
+#     # f - f_ring
+#     f_minus_fring = powers_of_Mf.one - source_params.f_ring
+#     # (f - f_ring)^2
+#     f_minus_fring_pow2 = f_minus_fring * f_minus_fring
+#     # (f - f_ring)^2 + (gamma_3 * f_damp)^2
+#     common_term = f_minus_fring_pow2 + amplitude_coefficients.gamma3_fdamp_pow2
+#     return (
+#         -amplitude_coefficients.gamma_1
+#         * tm.exp(-f_minus_fring * amplitude_coefficients.gamma2_over_gamma3_fdamp)
+#         * (
+#             amplitude_coefficients.gamma_2 * common_term
+#             + 2.0 * amplitude_coefficients.gamma3_fdamp * f_minus_fring
+#         )
+#         / common_term**2
+#     )
 
 
-@ti.func
-def _amplitude_merge_ringdown_ansatz(
-    powers_of_Mf: ti.template(),
-    amplitude_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    """
-    Eq. 6.19 in arXiv:2001.11412.
-    Different notation with Eq. 6.19: gamma_1: a_R, gamma_2: lambda, gamma_3: sigma
-    gamma1_gamma3_fdamp: a_R * f_damp * sigma
-    gamma2_over_gamma3_fdamp: lambda / (f_damp * sigma)
-    gamma3_fdamp: f_damp * sigma
-    gamma3_fdamp_pow2: (f_damp * sigma)^2
-    """
-    f_minus_fring = powers_of_Mf.one - source_params.f_ring
-    return (
-        amplitude_coefficients.gamma1_gamma3_fdamp
-        / (f_minus_fring * f_minus_fring + amplitude_coefficients.gamma3_fdamp_pow2)
-        * tm.exp(-f_minus_fring * amplitude_coefficients.gamma2_over_gamma3_fdamp)
-    )
+# # Phase ansatz
+# @ti.func
+# def _phase_inspiral_ansatz(
+#     powers_of_Mf: ti.template(),
+#     phase_coefficients: ti.template(),
+#     pn_coefficients: ti.template(),
+# ):
+#     """
+#     Eq. 7.1 in arXiv:2001.11412.
+#     Only the recommended fitting model `104` are implemented.
+#     Without :math:`1/\eta`
+#     """
+#     return (
+#         -3.0
+#         * (
+#             pn_coefficients.phi_0 / powers_of_Mf.five_thirds
+#             + pn_coefficients.phi_1 / powers_of_Mf.four_thirds
+#             + pn_coefficients.phi_2 / powers_of_Mf.one
+#             + pn_coefficients.phi_3 / powers_of_Mf.two_thirds
+#             + pn_coefficients.phi_4 / powers_of_Mf.third
+#             # neglect the constant term of phi5 and phi5l*log(pi)
+#             # + pn_coefficients.phi_5
+#             + pn_coefficients.phi_5l * powers_of_Mf.log
+#             + pn_coefficients.phi_6 * powers_of_Mf.third
+#             + pn_coefficients.phi_6l
+#             * powers_of_Mf.third
+#             * (powers_of_Mf.log + useful_powers_pi.log)
+#             + pn_coefficients.phi_7 * powers_of_Mf.two_thirds
+#             + pn_coefficients.phi_8 * powers_of_Mf.one
+#             + pn_coefficients.phi_8l
+#             * powers_of_Mf.one
+#             * (powers_of_Mf.log + useful_powers_pi.log)
+#         )
+#         + (
+#             +5.0 * phase_coefficients.sigma_1 * powers_of_Mf.one
+#             + 3.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
+#             + 3.0 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds
+#             + 2.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
+#         )
+#         / useful_powers_pi.five_thirds
+#     ) / 128.0  # note the normalizing factor used in lalsim: phiNorm (-3/128/pi^(-5/3))
 
 
-@ti.func
-def _d_amplitude_merge_ringdown_ansatz(
-    powers_of_Mf: ti.template(),
-    amplitude_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    """
-    Derivative with respect to f of the amplitude merge-ringdown ansatz.
-    """
-    # f - f_ring
-    f_minus_fring = powers_of_Mf.one - source_params.f_ring
-    # (f - f_ring)^2
-    f_minus_fring_pow2 = f_minus_fring * f_minus_fring
-    # (f - f_ring)^2 + (gamma_3 * f_damp)^2
-    common_term = f_minus_fring_pow2 + amplitude_coefficients.gamma3_fdamp_pow2
-    return (
-        -amplitude_coefficients.gamma_1
-        * tm.exp(-f_minus_fring * amplitude_coefficients.gamma2_over_gamma3_fdamp)
-        * (
-            amplitude_coefficients.gamma_2 * common_term
-            + 2.0 * amplitude_coefficients.gamma3_fdamp * f_minus_fring
-        )
-        / common_term**2
-    )
+# @ti.func
+# def _d_phase_inspiral_ansatz(
+#     powers_of_Mf: ti.template(),
+#     phase_coefficients: ti.template(),
+#     pn_coefficients: ti.template(),
+# ):
+#     """
+#     Without :math:`1/\eta`, the minus have absorbed here, using h=A*exp(i*phi) when
+#     assemble the waveform, and t=-d_phi.
+#     """
+#     return (
+#         (
+#             5.0 * pn_coefficients.phi_0 / powers_of_Mf.eight_thirds
+#             + 4.0 * pn_coefficients.phi_1 / powers_of_Mf.seven_thirds
+#             + 3.0 * pn_coefficients.phi_2 / powers_of_Mf.two
+#             + 2.0 * pn_coefficients.phi_3 / powers_of_Mf.five_thirds
+#             + 1.0 * pn_coefficients.phi_4 / powers_of_Mf.four_thirds
+#             - 3 * pn_coefficients.phi_5l / powers_of_Mf.one
+#             - pn_coefficients.phi_6 / powers_of_Mf.two_thirds
+#             - pn_coefficients.phi_6l
+#             / powers_of_Mf.two_thirds
+#             * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
+#             - 2.0 * pn_coefficients.phi_7 / powers_of_Mf.third
+#             - 3.0 * pn_coefficients.phi_8
+#             - 3.0
+#             * pn_coefficients.phi_8l
+#             * (1.0 + powers_of_Mf.log + useful_powers_pi.log)
+#         )
+#         + (
+#             phase_coefficients.sigma_1
+#             + phase_coefficients.sigma_2 * powers_of_Mf.third
+#             + phase_coefficients.sigma_3 * powers_of_Mf.two_thirds
+#             + phase_coefficients.sigma_4 * powers_of_Mf.one
+#         )
+#         * 5.0
+#         / useful_powers_pi.five_thirds  # note the normalizing factor used in lalsim: dphase0 (5/128/pi^(-5/3))
+#     ) / 128.0
 
 
-# Phase ansatz
-@ti.func
-def _phase_inspiral_ansatz(
-    powers_of_Mf: ti.template(),
-    phase_coefficients: ti.template(),
-    pn_coefficients: ti.template(),
-):
-    """
-    Eq. 7.1 in arXiv:2001.11412.
-    Only the recommended fitting model `104` are implemented.
-    Without :math:`1/\eta`
-    """
-    return (
-        -3.0
-        * (
-            pn_coefficients.phi_0 / powers_of_Mf.five_thirds
-            + pn_coefficients.phi_1 / powers_of_Mf.four_thirds
-            + pn_coefficients.phi_2 / powers_of_Mf.one
-            + pn_coefficients.phi_3 / powers_of_Mf.two_thirds
-            + pn_coefficients.phi_4 / powers_of_Mf.third
-            # neglect the constant term of phi5 and phi5l*log(pi)
-            # + pn_coefficients.phi_5
-            + pn_coefficients.phi_5l * powers_of_Mf.log
-            + pn_coefficients.phi_6 * powers_of_Mf.third
-            + pn_coefficients.phi_6l
-            * powers_of_Mf.third
-            * (powers_of_Mf.log + useful_powers_pi.log)
-            + pn_coefficients.phi_7 * powers_of_Mf.two_thirds
-            + pn_coefficients.phi_8 * powers_of_Mf.one
-            + pn_coefficients.phi_8l
-            * powers_of_Mf.one
-            * (powers_of_Mf.log + useful_powers_pi.log)
-        )
-        + (
-            +5.0 * phase_coefficients.sigma_1 * powers_of_Mf.one
-            + 3.75 * phase_coefficients.sigma_2 * powers_of_Mf.four_thirds
-            + 3.0 * phase_coefficients.sigma_3 * powers_of_Mf.five_thirds
-            + 2.5 * phase_coefficients.sigma_4 * powers_of_Mf.two
-        )
-        / useful_powers_pi.five_thirds
-    ) / 128.0  # note the normalizing factor used in lalsim: phiNorm (-3/128/pi^(-5/3))
+# @ti.func
+# def _phase_intermediate_ansatz(
+#     powers_of_Mf: ti.template(),
+#     phase_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     """
+#     without 1/eta
+#     """
+#     return (
+#         phase_coefficients.beta_0 * powers_of_Mf.one
+#         + phase_coefficients.beta_1 * powers_of_Mf.log
+#         - phase_coefficients.beta_2 / powers_of_Mf.one
+#         - phase_coefficients.beta_3 / 2.0 / powers_of_Mf.two
+#         - phase_coefficients.beta_4 / 3.0 / powers_of_Mf.three
+#         + 2.0
+#         * phase_coefficients.c_L
+#         / source_params.f_damp
+#         * tm.atan2(
+#             (powers_of_Mf.one - source_params.f_ring), 2.0 * source_params.f_damp
+#         )
+#     )
 
 
-@ti.func
-def _d_phase_inspiral_ansatz(
-    powers_of_Mf: ti.template(),
-    phase_coefficients: ti.template(),
-    pn_coefficients: ti.template(),
-):
-    """
-    Without :math:`1/\eta`, the minus have absorbed here, using h=A*exp(i*phi) when
-    assemble the waveform, and t=-d_phi.
-    """
-    return (
-        (
-            5.0 * pn_coefficients.phi_0 / powers_of_Mf.eight_thirds
-            + 4.0 * pn_coefficients.phi_1 / powers_of_Mf.seven_thirds
-            + 3.0 * pn_coefficients.phi_2 / powers_of_Mf.two
-            + 2.0 * pn_coefficients.phi_3 / powers_of_Mf.five_thirds
-            + 1.0 * pn_coefficients.phi_4 / powers_of_Mf.four_thirds
-            - 3 * pn_coefficients.phi_5l / powers_of_Mf.one
-            - pn_coefficients.phi_6 / powers_of_Mf.two_thirds
-            - pn_coefficients.phi_6l
-            / powers_of_Mf.two_thirds
-            * (3.0 + powers_of_Mf.log + useful_powers_pi.log)
-            - 2.0 * pn_coefficients.phi_7 / powers_of_Mf.third
-            - 3.0 * pn_coefficients.phi_8
-            - 3.0
-            * pn_coefficients.phi_8l
-            * (1.0 + powers_of_Mf.log + useful_powers_pi.log)
-        )
-        + (
-            phase_coefficients.sigma_1
-            + phase_coefficients.sigma_2 * powers_of_Mf.third
-            + phase_coefficients.sigma_3 * powers_of_Mf.two_thirds
-            + phase_coefficients.sigma_4 * powers_of_Mf.one
-        )
-        * 5.0
-        / useful_powers_pi.five_thirds  # note the normalizing factor used in lalsim: dphase0 (5/128/pi^(-5/3))
-    ) / 128.0
+# @ti.func
+# def _d_phase_intermediate_ansatz(
+#     powers_of_Mf: ti.template(),
+#     phase_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     """
+#     without 1/eta
+#     """
+#     return (
+#         phase_coefficients.beta_0
+#         + phase_coefficients.beta_1 / powers_of_Mf.one
+#         + phase_coefficients.beta_2 / powers_of_Mf.two
+#         + phase_coefficients.beta_3 / powers_of_Mf.three
+#         + phase_coefficients.beta_4 / powers_of_Mf.four
+#         + phase_coefficients.c_L
+#         / (
+#             source_params.f_damp_pow2
+#             + 0.25 * (powers_of_Mf.one - source_params.f_ring) ** 2
+#         )
+#     )
 
 
-@ti.func
-def _phase_intermediate_ansatz(
-    powers_of_Mf: ti.template(),
-    phase_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    """
-    without 1/eta
-    """
-    return (
-        phase_coefficients.beta_0 * powers_of_Mf.one
-        + phase_coefficients.beta_1 * powers_of_Mf.log
-        - phase_coefficients.beta_2 / powers_of_Mf.one
-        - phase_coefficients.beta_3 / 2.0 / powers_of_Mf.two
-        - phase_coefficients.beta_4 / 3.0 / powers_of_Mf.three
-        + 2.0
-        * phase_coefficients.c_L
-        / source_params.f_damp
-        * tm.atan2(
-            (powers_of_Mf.one - source_params.f_ring), 2.0 * source_params.f_damp
-        )
-    )
+# @ti.func
+# def _phase_merge_ringdown_ansatz(
+#     powers_of_Mf: ti.template(),
+#     phase_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     """
+#     without 1/eta
+#     """
+#     return (
+#         phase_coefficients.c_0 * powers_of_Mf.one
+#         + 1.5 * phase_coefficients.c_1 * powers_of_Mf.two_thirds
+#         - phase_coefficients.c_2 / powers_of_Mf.one
+#         - phase_coefficients.c_4 / 3.0 / powers_of_Mf.three
+#         + phase_coefficients.c_L
+#         / source_params.f_damp
+#         * tm.atan2((powers_of_Mf.one - source_params.f_ring), source_params.f_damp)
+#     )
 
 
-@ti.func
-def _d_phase_intermediate_ansatz(
-    powers_of_Mf: ti.template(),
-    phase_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    """
-    without 1/eta
-    """
-    return (
-        phase_coefficients.beta_0
-        + phase_coefficients.beta_1 / powers_of_Mf.one
-        + phase_coefficients.beta_2 / powers_of_Mf.two
-        + phase_coefficients.beta_3 / powers_of_Mf.three
-        + phase_coefficients.beta_4 / powers_of_Mf.four
-        + phase_coefficients.c_L
-        / (
-            source_params.f_damp_pow2
-            + 0.25 * (powers_of_Mf.one - source_params.f_ring) ** 2
-        )
-    )
+# @ti.func
+# def _d_phase_merge_ringdown_ansatz(
+#     powers_of_Mf: ti.template(),
+#     phase_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     """
+#     without 1/eta
+#     Eq. 7.12 of arXiv:2001.11412.
+#     """
 
-
-@ti.func
-def _phase_merge_ringdown_ansatz(
-    powers_of_Mf: ti.template(),
-    phase_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    """
-    without 1/eta
-    """
-    return (
-        phase_coefficients.c_0 * powers_of_Mf.one
-        + 1.5 * phase_coefficients.c_1 * powers_of_Mf.two_thirds
-        - phase_coefficients.c_2 / powers_of_Mf.one
-        - phase_coefficients.c_4 / 3.0 / powers_of_Mf.three
-        + phase_coefficients.c_L
-        / source_params.f_damp
-        * tm.atan2((powers_of_Mf.one - source_params.f_ring), source_params.f_damp)
-    )
-
-
-@ti.func
-def _d_phase_merge_ringdown_ansatz(
-    powers_of_Mf: ti.template(),
-    phase_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    """
-    without 1/eta
-    Eq. 7.12 of arXiv:2001.11412.
-    """
-
-    return (
-        phase_coefficients.c_0
-        + phase_coefficients.c_1 / powers_of_Mf.third
-        + phase_coefficients.c_2 / powers_of_Mf.two
-        + phase_coefficients.c_4 / powers_of_Mf.four
-        + phase_coefficients.c_L
-        / (source_params.f_damp_pow2 + (powers_of_Mf.one - source_params.f_ring) ** 2)
-    )
+#     return (
+#         phase_coefficients.c_0
+#         + phase_coefficients.c_1 / powers_of_Mf.third
+#         + phase_coefficients.c_2 / powers_of_Mf.two
+#         + phase_coefficients.c_4 / powers_of_Mf.four
+#         + phase_coefficients.c_L
+#         / (source_params.f_damp_pow2 + (powers_of_Mf.one - source_params.f_ring) ** 2)
+#     )
 
 
 @ti.dataclass
@@ -413,13 +326,14 @@ class SourceParameters:
     dL_Mpc: ti.f64  # luminosity distance (Mpc)
     iota: ti.f64
     phase_ref: ti.f64
-    tc: ti.f64
     # derived parameters
     M: ti.f64  # total mass
     m1_dimless: ti.f64
     m2_dimless: ti.f64
     dL_SI: ti.f64  # luminosity distance in meter
     M_sec: ti.f64  # total mass in second
+    Mf_ref: ti.f64  # dimensionless reference frequency
+    dimension_factor: ti.f64  # dimension factor of mass and distance in amplitude
     eta: ti.f64  # symmetric_mass_ratio
     eta_pow2: ti.f64  # eta^2
     eta_pow3: ti.f64
@@ -459,6 +373,7 @@ class SourceParameters:
     f_damp_pow2: ti.f64
     f_MECO: ti.f64
     f_ISCO: ti.f64
+    peak_time_diff: ti.f64
 
     @ti.func
     def update_source_parameters(
@@ -470,10 +385,11 @@ class SourceParameters:
         luminosity_distance: ti.f64,
         inclination: ti.f64,
         reference_phase: ti.f64,
-        coalescence_time: ti.f64,
+        reference_frequency: ti.f64,
     ):
         """
-        Totally 9 parameters are needed: M, q, chi1, chi2, iota, tc, phi0, dL.
+        TODO: doc parameters definition and units,
+        return waveform with tc=0
         """
         # total 11 parameters: m1, m1, chi1, chi2, iota, psi, tc, phi0, dL, lon, lat
         # 3 only used in response function: psi, lon, lat
@@ -486,13 +402,16 @@ class SourceParameters:
         self.dL_Mpc = luminosity_distance
         self.iota = inclination
         self.phase_ref = reference_phase
-        self.tc = coalescence_time
+
         # derived parameters
         self.M = self.m_1 + self.m_2
         self.m1_dimless = self.m_1 / self.M
         self.m2_dimless = self.m_2 / self.M
         self.dL_SI = self.dL_Mpc * 1e6 * PC_SI
         self.M_sec = self.M * MTSUN_SI
+        self.Mf_ref = self.M_sec * reference_frequency
+        self.dimension_factor = self.M**2 / self.dL_SI * MRSUN_SI * MTSUN_SI
+
         self.eta = self.m_1 * self.m_2 / (self.M * self.M)
         self.eta_pow2 = self.eta * self.eta
         self.eta_pow3 = self.eta * self.eta_pow2
@@ -529,27 +448,66 @@ class SourceParameters:
         self.S_tot_hat_pow5 = self.S_tot_hat * self.S_tot_hat_pow4
 
         # fitting parameters
-        self._set_final_mass()
-        self._set_final_spin()
+        self.final_mass = self._get_final_mass()
+        self.final_spin = self._get_final_spin()
         self.final_spin_pow2 = self.final_spin * self.final_spin
         self.final_spin_pow3 = self.final_spin * self.final_spin_pow2
         self.final_spin_pow4 = self.final_spin * self.final_spin_pow3
         self.final_spin_pow5 = self.final_spin * self.final_spin_pow4
         self.final_spin_pow6 = self.final_spin * self.final_spin_pow5
         self.final_spin_pow7 = self.final_spin * self.final_spin_pow6
-        self._set_f_ring()
-        self._set_f_damp()
+        self.f_ring = self._get_f_ring()
+        self.f_damp = self._get_f_damp()
         self.f_damp_pow2 = self.f_damp * self.f_damp
-        self._set_f_MECO()
-        self._set_f_ISCO()
+        self.f_MECO = self._get_f_MECO()
+        self.f_ISCO = self._get_f_ISCO()
+        self.peak_time_diff = -2.0 * PI * (500.0 + self._psi4_to_strain())
 
     @ti.func
-    def _set_final_mass(self):
+    def _psi4_to_strain(self) -> ti.f64:
+        """
+        The fit of the time internal between peak of strain and psi4.
+        """
+        return (
+            13.39320482758057
+            - 175.42481512989315 * self.eta
+            + 2097.425116152503 * self.eta_pow2
+            - 9862.84178637907 * self.eta_pow3
+            + 16026.897939722587 * self.eta_pow4
+            + (
+                4.7895602776763
+                - 163.04871764530466 * self.eta
+                + 609.5575850476959 * self.eta_pow2
+            )
+            * self.S_tot_hat
+            + (
+                1.3934428041390161
+                - 97.51812681228478 * self.eta
+                + 376.9200932531847 * self.eta_pow2
+            )
+            * self.S_tot_hat_pow2
+            + (
+                15.649521097877374
+                + 137.33317057388916 * self.eta
+                - 755.9566456906406 * self.eta_pow2
+            )
+            * self.S_tot_hat_pow3
+            + (
+                13.097315867845788
+                + 149.30405703643288 * self.eta
+                - 764.5242164872267 * self.eta_pow2
+            )
+            * self.S_tot_hat_pow4
+            + 105.37711654943146 * self.delta_chi * self.delta * self.eta_pow2
+        )
+
+    @ti.func
+    def _get_final_mass(self) -> ti.f64:
         """
         Assuming that M = m1 + m2 = 1, final_mass = 1 - energy_radiated.
         arXiv:1611.00332
         """
-        self.final_mass = 1.0 - (
+        return 1.0 - (
             (
                 0.057190958417936644 * self.eta
                 + 0.5609904135313374 * self.eta_pow2
@@ -599,8 +557,8 @@ class SourceParameters:
         )
 
     @ti.func
-    def _set_final_spin(self):
-        self.final_spin = (
+    def _get_final_spin(self) -> ti.f64:
+        return (
             (
                 3.4641016151377544 * self.eta
                 + 20.0830030082033 * self.eta_pow2
@@ -657,8 +615,8 @@ class SourceParameters:
         )
 
     @ti.func
-    def _set_f_ring(self):
-        self.f_ring = (
+    def _get_f_ring(self) -> ti.f64:
+        return (
             (
                 0.05947169566573468
                 - 0.14989771215394762 * self.final_spin
@@ -680,8 +638,8 @@ class SourceParameters:
         )
 
     @ti.func
-    def _set_f_damp(self):
-        self.f_damp = (
+    def _get_f_damp(self) -> ti.f64:
+        return (
             (
                 0.014158792290965177
                 - 0.036989395871554566 * self.final_spin
@@ -702,8 +660,8 @@ class SourceParameters:
         )
 
     @ti.func
-    def _set_f_MECO(self):
-        self.f_MECO = (
+    def _get_f_MECO(self) -> ti.f64:
+        return (
             (
                 0.018744340279608845
                 + 0.0077903147004616865 * self.eta
@@ -785,7 +743,7 @@ class SourceParameters:
         )
 
     @ti.func
-    def _set_f_ISCO(self):
+    def _get_f_ISCO(self) -> ti.f64:
         """Frequency of the innermost stable circular orbit (ISCO)."""
         Z1 = 1.0 + (1.0 - self.final_spin_pow2) ** (1 / 3) * (
             (1 + self.final_spin) ** (1 / 3) + (1 - self.final_spin) ** (1 / 3)
@@ -794,7 +752,7 @@ class SourceParameters:
             Z1 = 3.0
         Z2 = tm.sqrt(3.0 * self.final_spin_pow2 + Z1 * Z1)
 
-        self.f_ISCO = (
+        return (
             1.0
             / (
                 (
@@ -832,14 +790,18 @@ class AmplitudeCoefficients:
     gamma_3: ti.f64  # sigma
     f_peak: ti.f64
     # joint frequencies
-    useful_powers_fjoin_int_ins: UsefulPowers
-    useful_powers_fjoin_MRD_int: UsefulPowers
+    fjoin_int_ins: ti.f64
+    fjoin_MRD_int: ti.f64
+    _useful_powers: ti.types.struct(
+        fjoin_int_ins=UsefulPowers,
+        fjoin_MRD_int=UsefulPowers,
+    )
     # cached parameters
     gamma1_gamma3_fdamp: ti.f64  # a_R * f_damp * sigma
     gamma2_over_gamma3_fdamp: ti.f64  # lambda / (f_damp * sigma)
     gamma3_fdamp: ti.f64  # f_damp * sigma
     gamma3_fdamp_pow2: ti.f64  # (f_damp * sigma)^2
-    amp_0: ti.f64
+    common_factor: ti.f64  # sqrt(2.0/3.0/pi^(1/3)*eta) (NOT including Y22)
 
     @ti.func
     def _set_ins_int_colloc_points(self, source_params: ti.template()):
@@ -848,26 +810,26 @@ class AmplitudeCoefficients:
         Only can be called after updating merge-ringdown coefficient, since the f_peak
         is needed for intermediate collocation points.
         """
-        # Insprial, Eq.6.5.
-        fmax_ins = source_params.f_MECO + 0.25 * (
+        # Joint frequencies
+        self.fjoin_int_ins = source_params.f_MECO + 0.25 * (
             source_params.f_ISCO - source_params.f_MECO
-        )
+        )  # Eq.6.5.
+        self.fjoin_MRD_int = self.f_peak
+        self._useful_powers.fjoin_int_ins.update(self.fjoin_int_ins)
+        self._useful_powers.fjoin_MRD_int.update(self.fjoin_MRD_int)
+
         # Note the equation of Eq. 6.5 uses f_MECO, while fAT (Eq. 5.7) is used in
         # lalsimumation (l. 781 in LALSimIMRPhenomX_internals.c).
-        self.ins_colloc_points[0] = fmax_ins * 0.5
-        self.ins_colloc_points[1] = fmax_ins * 0.75
-        self.ins_colloc_points[2] = fmax_ins
+        self.ins_colloc_points[0] = self.fjoin_int_ins * 0.5
+        self.ins_colloc_points[1] = self.fjoin_int_ins * 0.75
+        self.ins_colloc_points[2] = self.fjoin_int_ins
         # Intermediate, Tab. II
-        self.int_colloc_points[0] = fmax_ins
-        self.int_colloc_points[1] = (fmax_ins + self.f_peak) * 0.5
-        self.int_colloc_points[2] = self.f_peak
-        # Joint frequencies
-        self.useful_powers_fjoin_int_ins.update(fmax_ins)
-        self.useful_powers_fjoin_MRD_int.update(self.f_peak)
+        self.int_colloc_points[0] = self.fjoin_int_ins
+        self.int_colloc_points[1] = (self.fjoin_int_ins + self.fjoin_MRD_int) * 0.5
+        self.int_colloc_points[2] = self.fjoin_MRD_int
 
     @ti.func
     def _set_inspiral_coefficients(self, source_params: ti.template()):
-        # Value for amplitude collocation point at 0.5 f^A_T,
         self.ins_colloc_values[0] = (
             (
                 -0.015178276424448592
@@ -890,7 +852,6 @@ class AmplitudeCoefficients:
             * source_params.eta_pow4
             * (0.0018724905795891192 + 34.90874132485147 * source_params.eta)
         )
-        # Value for amplitude collocation point at 0.75 f^A_T,
         self.ins_colloc_values[1] = (
             (
                 -0.058572000924124644
@@ -921,7 +882,6 @@ class AmplitudeCoefficients:
             * source_params.eta_pow4
             * (0.004389995099201855 + 105.84553997647659 * source_params.eta)
         )
-        # Value for amplitude collocation point at 1.0 f^A_T,
         self.ins_colloc_values[2] = (
             (
                 -0.16212854591357853
@@ -990,29 +950,32 @@ class AmplitudeCoefficients:
 
     @ti.func
     def _set_intermediate_coefficients(
-        self, source_params: ti.template(), pn_coefficients: ti.template()
+        self, pn_coefficients: ti.template(), source_params: ti.template()
     ):
         """
-        Only the recommended fit model `104` is implemented, and only can be called after
-        updated the inspiral and merge-ringdown coefficients. 
+        TODO: comparing two different ways!!
 
-        Different with the implementaion in lalsimulation, here we fully simply :math:`A_0` as:
-        .. math::
-            \begin{aligned}
-            \frac{A_0(f_1)}{A_{\mathrm{int}}^{\mathrm{inv}}(f_1)} &= A_0(f_1)A_{\mathrm{ins}}(f_1),\\
-            A_{\mathrm{int}}^{\mathrm{inv}}(f_1) &= 1/A_{\mathrm{ins}}(f_1),
-            \end{aligned}      
-        and 
-        .. math::
-            \begin{aligned}
-            \left[\frac{A_0(f_1)}{A_{\mathrm{int}}^{\mathrm{inv}}(f_1)}\right]' &= \left[A_0(f_1)A_{\mathrm{ins}}(f_1)\right]', \\
-            \left[A_{\mathrm{int}}^{\mathrm{inv}}(f_1)\right]' &= \frac{A'_{\mathrm{ins}}(f_1)}{A_{\mathrm{ins}}^{2}(f_1)}
-            \end{aligned}        
-        The case of point at :math:`f_3` is similar. Thus there will be a different of 
-        factor :math:`f^{7/6}` in amplitude_intermediate_ansatz function.
+        Only the recommended fit model `104` is implemented, and only can be called after
+        updated the inspiral and merge-ringdown coefficients.
         """
-        # self.int_colloc_values[0] = 1.0 / _amplitude_inspiral_ansatz(
-        #     self.useful_powers_fjoin_int_ins, self, pn_coefficients
+        # # Different with the implementaion in lalsimulation, here we simply the global
+        # # factor of :math:`f^{-7/6}` as:
+        # # .. math::
+        # #     \begin{aligned}
+        # #     \frac{A_0(f_1)}{A_{\mathrm{int}}^{\mathrm{inv}}(f_1)} &= A_0(f_1)A_{\mathrm{ins}}(f_1),\\
+        # #     A_{\mathrm{int}}^{\mathrm{inv}}(f_1) &= 1/A_{\mathrm{ins}}(f_1),
+        # #     \end{aligned}
+        # # and
+        # # .. math::
+        # #     \begin{aligned}
+        # #     \left[\frac{A_0(f_1)}{A_{\mathrm{int}}^{\mathrm{inv}}(f_1)}\right]' &= \left[A_0(f_1)A_{\mathrm{ins}}(f_1)\right]', \\
+        # #     \left[A_{\mathrm{int}}^{\mathrm{inv}}(f_1)\right]' &= \frac{A'_{\mathrm{ins}}(f_1)}{A_{\mathrm{ins}}^{2}(f_1)}
+        # #     \end{aligned}
+        # # The case of point at :math:`f_3` is similar. Thus there will be a different of
+        # # factor :math:`f^{-7/6}` in amplitude intermediate ansatz function.
+        #
+        # self.int_colloc_values[0] = 1.0 / self._inspiral_amplitude(
+        #     pn_coefficients, self._useful_powers.fjoin_int_ins
         # )
         # self.int_colloc_values[1] = self.int_colloc_points[1] ** (-7 / 6) / (
         #     (
@@ -1051,31 +1014,37 @@ class AmplitudeCoefficients:
         #     * (-0.016404056649860943 - 296.473359655246 * source_params.eta)
         #     * source_params.eta_pow2
         # )
-        # self.int_colloc_values[2] = 1.0 / _amplitude_merge_ringdown_ansatz(
-        #     self.useful_powers_fjoin_MRD_int, self, source_params
+        # self.int_colloc_values[2] = 1.0 / self._merge_ringdown_amplitude(
+        #     source_params,self._useful_powers.fjoin_MRD_int
         # )
+        # TODO: minus??
         # self.int_colloc_values[3] = (
-        #     _d_amplitude_inspiral_ansatz(
-        #         self.useful_powers_fjoin_int_ins, self, pn_coefficients
+        #     self._inspiral_d_amplitude(
+        #         pn_coefficients, self._useful_powers.fjoin_int_ins
         #     )
         #     / self.int_colloc_values[0] ** 2
         # )
         # self.int_colloc_values[4] = (
-        #     _d_amplitude_merge_ringdown_ansatz(
-        #         self.useful_powers_fjoin_MRD_int, self, source_params
+        #     self._merge_ringdown_d_amplitude
+        #         source_params, self.useful_powers_fjoin_MRD_int
         #     )
         #     / self.int_colloc_values[2] ** 2
         # )
 
-        # # The way of lalsimulation, the f^(-7/6) factor is absorb into the coefficients.
-        ins_f1 = _amplitude_inspiral_ansatz(
-            self.useful_powers_fjoin_int_ins, self, pn_coefficients
+        # The way to compute intermediate coefficients used in lalsimulation.
+        # the f^(-7/6) factor is absorbed into the coefficients, which may not be an
+        # appropriate approach?? Since the coefficients are no longer constants. There
+        # is a common factor of f0^(7/6) multiplied with ansatz coefficients in the first
+        # equation, but f1^(7/6) in the second equation, etc.
+        v0_ins = self._inspiral_amplitude(
+            pn_coefficients, self._useful_powers.fjoin_int_ins
         )
-        MRD_f4 = _amplitude_merge_ringdown_ansatz(
-            self.useful_powers_fjoin_MRD_int, self, source_params
+        v2_MRD = self._merge_ringdown_amplitude(
+            source_params, self._useful_powers.fjoin_MRD_int
         )
+
         self.int_colloc_values[0] = (
-            self.useful_powers_fjoin_int_ins.seven_sixths / ins_f1
+            self._useful_powers.fjoin_int_ins.seven_sixths / v0_ins
         )
         self.int_colloc_values[1] = 1.0 / (
             (
@@ -1115,23 +1084,23 @@ class AmplitudeCoefficients:
             * source_params.eta_pow2
         )
         self.int_colloc_values[2] = (
-            self.useful_powers_fjoin_MRD_int.seven_sixths / MRD_f4
+            self._useful_powers.fjoin_MRD_int.seven_sixths / v2_MRD
         )
         self.int_colloc_values[3] = (
-            7 / 6 * self.int_colloc_points[0] ** (1 / 6) / ins_f1
+            7 / 6 * self.int_colloc_points[0] ** (1 / 6) / v0_ins
             - self.int_colloc_points[0] ** (7 / 6)
-            * _d_amplitude_inspiral_ansatz(
-                self.useful_powers_fjoin_int_ins, self, pn_coefficients
+            * self._inspiral_d_amplitude(
+                pn_coefficients, self._useful_powers.fjoin_int_ins
             )
-            / ins_f1**2
+            / v0_ins**2
         )
         self.int_colloc_values[4] = (
-            7 / 6 * self.int_colloc_points[2] ** (1 / 6) / MRD_f4
+            7 / 6 * self.int_colloc_points[2] ** (1 / 6) / v2_MRD
             - self.int_colloc_points[2] ** (7 / 6)
-            * _d_amplitude_merge_ringdown_ansatz(
-                self.useful_powers_fjoin_MRD_int, self, source_params
+            * self._merge_ringdown_d_amplitude(
+                source_params, self._useful_powers.fjoin_MRD_int
             )
-            / MRD_f4**2
+            / v2_MRD**2
         )
 
         Ab_int = ti.Matrix(
@@ -1319,26 +1288,141 @@ class AmplitudeCoefficients:
         self.gamma1_gamma3_fdamp = self.gamma_1 * self.gamma_3 * source_params.f_damp
 
     @ti.func
-    def compute_amplitude_coefficients(
-        self, source_params: ti.template(), pn_coefficients: ti.template()
+    def _inspiral_amplitude(
+        self, pn_coefficients: ti.template(), powers_of_Mf: ti.template()
+    ) -> ti.f64:
+        """
+        Eq. 6.3 in arXiv:2001.11412.
+        Without amp0, only have the 103 fit model.
+        """
+        return (
+            pn_coefficients.PN_amplitude(powers_of_Mf)
+            + self.rho_1 * powers_of_Mf.seven_thirds
+            + self.rho_2 * powers_of_Mf.eight_thirds
+            + self.rho_3 * powers_of_Mf.three
+        )
+
+    @ti.func
+    def _inspiral_d_amplitude(
+        self, pn_coefficients: ti.template(), powers_of_Mf: ti.template()
+    ) -> ti.f64:
+        """
+        Without amp0.
+        """
+        return (
+            pn_coefficients.PN_d_amplitude(powers_of_Mf)
+            + 7.0 / 3.0 * self.rho_1 * powers_of_Mf.four_thirds
+            + 8.0 / 3.0 * self.rho_2 * powers_of_Mf.five_thirds
+            + 3.0 * self.rho_3 * powers_of_Mf.two
+        )
+
+    @ti.func
+    def _intermediate_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
+        """
+        Eq. 6.7 in arXiv:2001.11412.
+        Only the recommended fitting model `104` with 4th order polynomial ansatz are implemented.
+        Without amp0.
+        """
+        # return 1.0 / (
+        #     amplitude_coefficients.alpha_0
+        #     + amplitude_coefficients.alpha_1 * powers_of_Mf.one
+        #     + amplitude_coefficients.alpha_2 * powers_of_Mf.two
+        #     + amplitude_coefficients.alpha_3 * powers_of_Mf.three
+        #     + amplitude_coefficients.alpha_4 * powers_of_Mf.four
+        # )
+        # NOTE the ansatz used in lalsimulation where the intermediate coefficients have absorbed
+        # common f^(-7/6) factor.
+        return 1.0 / (
+            self.alpha_0
+            + self.alpha_1 * powers_of_Mf.one
+            + self.alpha_2 * powers_of_Mf.two
+            + self.alpha_3 * powers_of_Mf.three
+            + self.alpha_4 * powers_of_Mf.four
+        )
+
+    @ti.func
+    def _merge_ringdown_amplitude(
+        self, source_params: ti.template(), powers_of_Mf: ti.template()
+    ) -> ti.f64:
+        """
+        Eq. 6.19 in arXiv:2001.11412.
+        Different notation with Eq. 6.19: gamma_1: a_R, gamma_2: lambda, gamma_3: sigma
+        gamma1_gamma3_fdamp: a_R * f_damp * sigma
+        gamma2_over_gamma3_fdamp: lambda / (f_damp * sigma)
+        gamma3_fdamp: f_damp * sigma
+        gamma3_fdamp_pow2: (f_damp * sigma)^2
+        """
+        f_minus_fring = powers_of_Mf.one - source_params.f_ring
+        return (
+            self.gamma1_gamma3_fdamp
+            / (f_minus_fring * f_minus_fring + self.gamma3_fdamp_pow2)
+            * tm.exp(-f_minus_fring * self.gamma2_over_gamma3_fdamp)
+        )
+
+    @ti.func
+    def _merge_ringdown_d_amplitude(
+        self, source_params: ti.template(), powers_of_Mf: ti.template()
+    ) -> ti.f64:
+        """
+        Derivative with respect to f of the amplitude merge-ringdown ansatz.
+        """
+        # f - f_ring
+        f_minus_fring = powers_of_Mf.one - source_params.f_ring
+        # (f - f_ring)^2
+        f_minus_fring_pow2 = f_minus_fring * f_minus_fring
+        # (f - f_ring)^2 + (gamma_3 * f_damp)^2
+        common_term = f_minus_fring_pow2 + self.gamma3_fdamp_pow2
+        return (
+            -self.gamma_1
+            * tm.exp(-f_minus_fring * self.gamma2_over_gamma3_fdamp)
+            * (self.gamma_2 * common_term + 2.0 * self.gamma3_fdamp * f_minus_fring)
+            / common_term**2
+        )
+
+    @ti.func
+    def update_amplitude_coefficients(
+        self, pn_coefficients: ti.template(), source_params: ti.template()
     ):
         self._set_merge_ringdown_coefficients(source_params)
         self._set_ins_int_colloc_points(source_params)
         self._set_inspiral_coefficients(source_params)
-        self._set_intermediate_coefficients(source_params, pn_coefficients)
+        self._set_intermediate_coefficients(pn_coefficients, source_params)
 
-        # The common prefactor, A0 (without f^{-7/6})
-        # TODO: use amp_0 excluding the Ylm constant factor
-        # TODO: need to moedify for consistant with XHM model
-        self.amp_0 = (
-            0.25
-            * tm.sqrt(10.0 / 3.0 * source_params.eta)
-            / useful_powers_pi.two_thirds
-            * source_params.M**2
-            / source_params.dL_SI
-            * MRSUN_SI
-            * MTSUN_SI
+        # The common factor (without f^{-7/6} and the constant factor in Y22)
+        self.common_factor = tm.sqrt(
+            2.0 * source_params.eta / 3.0 / useful_powers_pi.third
         )
+
+    @ti.func
+    def compute_amplitude(
+        self,
+        pn_coefficients: ti.template(),
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        # amplitude = 0.0
+        # if powers_of_Mf.one < self.fjoin_int_ins:
+        #     amplitude = self._inspiral_amplitude(pn_coefficients, powers_of_Mf)
+        # elif powers_of_Mf.one > self.fjoin_MRD_int:
+        #     amplitude = self._merge_ringdown_amplitude(source_params, powers_of_Mf)
+        # else:
+        #     amplitude = self._intermediate_amplitude(powers_of_Mf)
+        # return self.common_factor * amplitude / powers_of_Mf.seven_sixths
+        amplitude = 0.0
+        if powers_of_Mf.one < self.fjoin_int_ins:
+            amplitude = (
+                self._inspiral_amplitude(pn_coefficients, powers_of_Mf)
+                / powers_of_Mf.seven_sixths
+            )
+        elif powers_of_Mf.one > self.fjoin_MRD_int:
+            amplitude = (
+                self._merge_ringdown_amplitude(source_params, powers_of_Mf)
+                / powers_of_Mf.seven_sixths
+            )
+        else:
+            # Note the intermediate coefficients used in lalsimulation have absorbed the factor of f^(-7/6)
+            amplitude = self._intermediate_amplitude(powers_of_Mf)
+        return source_params.dimension_factor * self.common_factor * amplitude
 
 
 @ti.dataclass
@@ -1358,10 +1442,8 @@ class PhaseCoefficients:
     beta_4: ti.f64
     int_colloc_points: ti.types.vector(5, ti.f64)
     int_colloc_values: ti.types.vector(5, ti.f64)
+    C0_int: ti.f64
     C1_int: ti.f64
-    C2_int: ti.f64
-    useful_powers_fjoin_int_ins: UsefulPowers  # fmax_ins is not same with fmin_int, using fmin_int as the joint point when computing the phase and the connection coefficients
-    useful_powers_fjoin_MRD_int: UsefulPowers  # fmin_MRD is not same with fmax_int, using fmax_int as the joint point when computing the phase and the connection coefficients
     # Merge-ringdown
     c_0: ti.f64
     c_1: ti.f64  # f^-1/3
@@ -1370,8 +1452,18 @@ class PhaseCoefficients:
     c_L: ti.f64  # Lorentzian term
     MRD_colloc_points: ti.types.vector(5, ti.f64)
     MRD_colloc_values: ti.types.vector(5, ti.f64)
+    C0_MRD: ti.f64
     C1_MRD: ti.f64
-    C2_MRD: ti.f64
+    # joint frequencies
+    fjoin_int_ins: ti.f64
+    fjoin_MRD_int: ti.f64
+    _useful_powers: ti.types.struct(
+        fjoin_int_ins=UsefulPowers,  # fmax_ins is not same with fmin_int, using fmin_int as the joint point when computing the phase and the connection coefficients
+        fjoin_MRD_int=UsefulPowers,  # fmin_MRD is not same with fmax_int, using fmax_int as the joint point when computing the phase and the connection coefficients
+    )
+    # time and phase shift
+    time_shift: ti.f64
+    phase_shift: ti.f64
 
     @ti.func
     def _set_all_colloc_points(self, source_params: ti.template()):
@@ -1402,13 +1494,20 @@ class PhaseCoefficients:
         self.int_colloc_points[2] = fmin_int + 0.5 * frange_int
         self.int_colloc_points[3] = fmin_int + 0.5 * (1.0 + 1 / sqrt2) * frange_int
         self.int_colloc_points[4] = fmax_int
-        self.useful_powers_fjoin_int_ins.update(fmin_int)
-        self.useful_powers_fjoin_MRD_int.update(fmax_int)
+        # Note fmax_ins is not same with fmin_int, using fmin_int as the joint point
+        # when computing the phase and the connection coefficients.
+        # Similarly, fmin_MRD is not same with fmax_int, using fmax_int as the joint
+        # point when computing the phase and the connection coefficients.
+        self.fjoin_int_ins = fmin_int
+        self.fjoin_MRD_int = fmax_int
+        self._useful_powers.fjoin_int_ins.update(fmin_int)
+        self._useful_powers.fjoin_MRD_int.update(fmax_int)
 
     @ti.func
     def _set_merge_ringdown_coefficients(self, source_params: ti.template()):
-        # Difference between collocation points 1 and 2 (v1 - v2)
-        d12_MRD = (
+        # Note we use 0 as the first index
+        # Difference between values on collocation points 0 and 1 (v0 - v1)
+        d01_MRD = (
             source_params.eta
             * (
                 0.7207992174994245
@@ -1465,8 +1564,8 @@ class PhaseCoefficients:
             * source_params.delta
             * source_params.eta_pow2
         )
-        # Difference between collocation points 2 and 4 (v2 - v4)
-        d24_MRD = (
+        # Difference between values on collocation points 1 and 3 (v1 - v3)
+        d13_MRD = (
             (
                 source_params.eta
                 * (
@@ -1507,8 +1606,8 @@ class PhaseCoefficients:
             * (-36.66374091965371 + 91.60477826830407 * source_params.eta)
             * source_params.eta_pow2
         )
-        # Difference between collocation points 3 and 4 (v3 - v4)
-        d34_MRD = (
+        # Difference between values on collocation points 2 and 3 (v2 - v3)
+        d23_MRD = (
             (
                 source_params.eta
                 * (-8.506898502692536 + 13.936621412517798 * source_params.eta)
@@ -1543,8 +1642,8 @@ class PhaseCoefficients:
             * source_params.delta
             * source_params.eta_pow5
         )
-        # Merge-ringdown phase at collocation point f4 (f_ring)
-        v4_MRD = (
+        # the value on collocation point 3 (v3)
+        v3_MRD = (
             (
                 -85.86062966719405
                 - 4616.740713893726 * source_params.eta
@@ -1600,8 +1699,8 @@ class PhaseCoefficients:
             * source_params.eta
             * (22.363215261437862 + 156.08206945239374 * source_params.eta)
         )
-        # Difference between collocation points 5 and 4 (v5 - v4)
-        d54_MRD = (
+        # Difference between values on collocation points 4 and 3 (v4 - v3)
+        d43_MRD = (
             (
                 source_params.eta
                 * (
@@ -1628,11 +1727,11 @@ class PhaseCoefficients:
             * source_params.delta
             * source_params.eta_pow3
         )
-        self.MRD_colloc_values[4] = d54_MRD + v4_MRD
-        self.MRD_colloc_values[3] = v4_MRD
-        self.MRD_colloc_values[2] = d34_MRD + v4_MRD
-        self.MRD_colloc_values[1] = d24_MRD + v4_MRD
-        self.MRD_colloc_values[0] = d12_MRD + self.MRD_colloc_values[1]
+        self.MRD_colloc_values[4] = d43_MRD + v3_MRD
+        self.MRD_colloc_values[3] = v3_MRD
+        self.MRD_colloc_values[2] = d23_MRD + v3_MRD
+        self.MRD_colloc_values[1] = d13_MRD + v3_MRD
+        self.MRD_colloc_values[0] = d01_MRD + self.MRD_colloc_values[1]
 
         Ab_MRD = ti.Matrix(
             [
@@ -1698,13 +1797,16 @@ class PhaseCoefficients:
                 ],
             ]
         )
-        self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab_MRD)
+        self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = (
+            gauss_elimination(Ab_MRD) / source_params.eta
+        )
 
     @ti.func
     def _set_inspiral_coefficients(self, source_params: ti.template()):
         """104 model"""
-        # Value for v1 - v3
-        d13_ins = (
+        # Note we use 0 as the first index
+        # Value of v0 - v2
+        d02_ins = (
             (
                 -17294.000000000007
                 - 19943.076428555978 * source_params.eta
@@ -1739,8 +1841,8 @@ class PhaseCoefficients:
             * source_params.delta
             * source_params.eta
         )
-        # Value for v2 - v3
-        d23_ins = (
+        # Value of v1 - v2
+        d12_ins = (
             (
                 -7579.300000000004
                 - 120297.86185566607 * source_params.eta
@@ -1783,8 +1885,8 @@ class PhaseCoefficients:
             * source_params.delta
             * source_params.eta
         )
-        # Value for v3
-        v3_ins = (
+        # Value of v2
+        v2_ins = (
             (
                 15415.000000000007
                 + 873401.6255736464 * source_params.eta
@@ -1835,8 +1937,8 @@ class PhaseCoefficients:
                 )
             )
         )
-        # Value for v4 - v3
-        d43_ins = (
+        # Value for v3 - v2
+        d32_ins = (
             (
                 2439.000000000001
                 - 31133.52170083207 * source_params.eta
@@ -1864,10 +1966,10 @@ class PhaseCoefficients:
             * source_params.delta
             * source_params.eta
         )
-        self.ins_colloc_values[0] = d13_ins + v3_ins
-        self.ins_colloc_values[1] = d23_ins + v3_ins
-        self.ins_colloc_values[2] = v3_ins
-        self.ins_colloc_values[3] = d43_ins + v3_ins
+        self.ins_colloc_values[0] = d02_ins + v2_ins
+        self.ins_colloc_values[1] = d12_ins + v2_ins
+        self.ins_colloc_values[2] = v2_ins
+        self.ins_colloc_values[3] = d32_ins + v2_ins
 
         Ab_ins = ti.Matrix(
             [
@@ -1916,8 +2018,8 @@ class PhaseCoefficients:
         Require inspiral and merge-ringdown coefficients, can only be called after updating
         inspiral and merge-ringdown coefficients.
         """
-        # v2_int - v4_MRD
-        d_v2int_v4MRD = (
+        # v1_int - v3_MRD
+        d_v1int_v3MRD = (
             (
                 source_params.eta
                 * (
@@ -1963,8 +2065,8 @@ class PhaseCoefficients:
                 + 1693.326644293169 * source_params.eta_pow2 * source_params.S_tot_hat
             )
         )
-        # v3_int - v4_MRD.
-        d_v3int_v4MRD = (
+        # v2_int - v3_MRD.
+        d_v2int_v3MRD = (
             source_params.eta
             * (
                 -5.126358906504587
@@ -1998,8 +2100,8 @@ class PhaseCoefficients:
             * source_params.delta
             * source_params.eta_pow6
         )
-        # v4_int - v3_int.
-        d43_int = (
+        # v3_int - v2_int.
+        d32_int = (
             (
                 0.4248820426833804
                 - 906.746595921514 * source_params.eta
@@ -2047,8 +2149,8 @@ class PhaseCoefficients:
             * (-514.8494071830514 + 1493.3851099678195 * source_params.eta)
             * source_params.eta_pow3
         )
-        # v2_int_bar
-        v2_int_bar = (
+        # v1_int_bar
+        v1_int_bar = (
             (
                 -82.54500000000004
                 - 5.58197349185435e6 * source_params.eta
@@ -2102,22 +2204,24 @@ class PhaseCoefficients:
             )
         )
 
-        self.int_colloc_values[0] = _d_phase_inspiral_ansatz(
-            self.useful_powers_fjoin_int_ins, self, pn_coefficients
+        self.int_colloc_values[0] = self._inspiral_d_phase(
+            pn_coefficients, self._useful_powers.fjoin_int_ins
         )
         self.int_colloc_values[1] = (
-            0.75 * (d_v2int_v4MRD + self.MRD_colloc_values[3]) + 0.25 * v2_int_bar
+            0.75 * (d_v1int_v3MRD + self.MRD_colloc_values[3]) + 0.25 * v1_int_bar
         )
-        self.int_colloc_values[2] = d_v3int_v4MRD + self.MRD_colloc_values[3]
-        self.int_colloc_values[3] = d43_int + self.int_colloc_values[2]
-        # self.int_colloc_values[4] = _d_phase_merge_ringdown_ansatz(
-        #     self.useful_powers_fjoin_MRD_int, self, source_params
+        self.int_colloc_values[2] = d_v2int_v3MRD + self.MRD_colloc_values[3]
+        self.int_colloc_values[3] = d32_int + self.int_colloc_values[2]
+        # note the fmax_int is different with the fmin_MRD, it is more appropriate to
+        # use fjoin_MRD_int (fmax_int) to set the last int_colloc_values??
+        # self.int_colloc_values[4] = self._merge_ringdown_d_phase(
+        #     source_params, self._useful_powers.fjoin_MRD_int
         # )
         # Following lalsim, using MRD_colloc_values[0] (at f_phi_T) rather recalculating
-        # the value at f_phi_T + 0.5deltaR
+        # the value at f_phi_T + 0.5deltaR, it may be a potential bug??
         self.int_colloc_values[4] = self.MRD_colloc_values[0]
 
-        # scale using the factor of f_ring to enhance the numerical stability
+        # the factor of f_ring is used to enhance the numerical stability??
         int_colloc_points_scaled = self.int_colloc_points / source_params.f_ring
         Ab_int = ti.Matrix(
             [
@@ -2210,7 +2314,9 @@ class PhaseCoefficients:
             beta_2,
             beta_3,
             beta_4,
-        ) = gauss_elimination(Ab_int)
+        ) = (
+            gauss_elimination(Ab_int) / source_params.eta
+        )
         self.beta_0 = beta_0
         self.beta_1 = beta_1 * source_params.f_ring
         self.beta_2 = beta_2 * source_params.f_ring**2
@@ -2223,7 +2329,7 @@ class PhaseCoefficients:
     ):
         """
         Since the fmax_ins and fmin_MRD are not same with fmin_int and fmax_int, addition
-        connection coefficients are required to keep C1 and C2 continuous condition.
+        connection coefficients are required to keep C0 and C1 continuous condition.
         .. math::
         \begin{aligned}
             \phi_{\mathrm{ins}}(f_{\mathrm{join}}) &= \phi_{\mathrm{int}}(f_{\mathrm{join}}) + C_1 + C_2 f_{\mathrm{join}}, \\
@@ -2236,41 +2342,105 @@ class PhaseCoefficients:
         \end{aligned}
         The case for joint point of intermediate and merge-ringdown ranges is similar.
         """
-        # Connection coefficients added into intermediate ansatz
-        self.C2_int = _d_phase_inspiral_ansatz(
-            self.useful_powers_fjoin_int_ins, self, pn_coefficients
-        ) - _d_phase_intermediate_ansatz(
-            self.useful_powers_fjoin_int_ins, self, source_params
+        # Connection coefficients added into intermediate
+        self.C1_int = self._inspiral_d_phase(
+            pn_coefficients, self._useful_powers.fjoin_int_ins
+        ) - self._intermediate_d_phase(source_params, self._useful_powers.fjoin_int_ins)
+        self.C0_int = (
+            self._inspiral_phase(pn_coefficients, self._useful_powers.fjoin_int_ins)
+            - self._intermediate_phase(source_params, self._useful_powers.fjoin_int_ins)
+            - self.C1_int * self.fjoin_int_ins
         )
-        self.C1_int = (
-            _phase_inspiral_ansatz(
-                self.useful_powers_fjoin_int_ins, self, pn_coefficients
-            )
-            - _phase_intermediate_ansatz(
-                self.useful_powers_fjoin_int_ins, self, source_params
-            )
-            - self.C2_int * self.useful_powers_fjoin_int_ins.one
-        )
-        # Connection coefficients added into merge-ringdown ansatz
-        self.C2_MRD = (
-            _d_phase_intermediate_ansatz(
-                self.useful_powers_fjoin_MRD_int, self, source_params
-            )
-            + self.C2_int
-            - _d_phase_merge_ringdown_ansatz(
-                self.useful_powers_fjoin_MRD_int, self, source_params
-            )
-        )
+        # Connection coefficients added into merge-ringdown
         self.C1_MRD = (
-            _phase_intermediate_ansatz(
-                self.useful_powers_fjoin_MRD_int, self, source_params
-            )
+            self._intermediate_d_phase(source_params, self._useful_powers.fjoin_MRD_int)
             + self.C1_int
-            + self.C2_int * self.useful_powers_fjoin_MRD_int.one
-            - _phase_merge_ringdown_ansatz(
-                self.useful_powers_fjoin_MRD_int, self, source_params
+            - self._merge_ringdown_d_phase(
+                source_params, self._useful_powers.fjoin_MRD_int
             )
-            - self.C2_MRD * self.useful_powers_fjoin_MRD_int.one
+        )
+        self.C0_MRD = (
+            self._intermediate_phase(source_params, self._useful_powers.fjoin_MRD_int)
+            + self.C0_int
+            + self.C1_int * self.fjoin_MRD_int
+            - self._merge_ringdown_phase(
+                source_params, self._useful_powers.fjoin_MRD_int
+            )
+            - self.C1_MRD * self.fjoin_MRD_int
+        )
+
+    @ti.func
+    def _fit_of_time_at_fit_frequency(self, source_params: ti.template()) -> ti.f64:
+        """
+        The fit of dphi at the fit frequency, dphi(fring-fdamp). evaluated on the
+        calibration dataset
+        """
+        return (
+            3155.1635543201924
+            + 1257.9949740608242 * source_params.eta
+            - 32243.28428870599 * source_params.eta_pow2
+            + 347213.65466875216 * source_params.eta_pow3
+            - 1.9223851649491738e6 * source_params.eta_pow4
+            + 5.3035911346921865e6 * source_params.eta_pow5
+            - 5.789128656876938e6 * source_params.eta_pow6
+            + (
+                -24.181508118588667
+                + 115.49264174560281 * source_params.eta
+                - 380.19778216022763 * source_params.eta_pow2
+            )
+            * source_params.S_tot_hat
+            + (
+                24.72585609641552
+                - 328.3762360751952 * source_params.eta
+                + 725.6024119989094 * source_params.eta_pow2
+            )
+            * source_params.S_tot_hat_pow2
+            + (
+                23.404604124552
+                - 646.3410199799737 * source_params.eta
+                + 1941.8836639529036 * source_params.eta_pow2
+            )
+            * source_params.S_tot_hat_pow3
+            + (
+                -12.814828278938885
+                - 325.92980012408367 * source_params.eta
+                + 1320.102640190539 * source_params.eta_pow2
+            )
+            * source_params.S_tot_hat_pow4
+            - 148.17317525117338
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
+
+    @ti.func
+    def _set_time_and_phase_shift(
+        self, pn_coefficients: ti.template(), source_params: ti.template()
+    ):
+        # initializing an instance of UsefulPowers for later use
+        powers_of_Mf = UsefulPowers()
+
+        # time shift so that peak amplitude is near t=0
+        f_fit = source_params.f_ring - source_params.f_damp
+        powers_of_Mf.update(f_fit)
+        time_at_f_fit = self._compute_d_phase_core(
+            pn_coefficients, source_params, powers_of_Mf
+        )
+        self.time_shift = (
+            self._fit_of_time_at_fit_frequency(source_params)
+            - time_at_f_fit
+            - source_params.peak_time_diff
+        )
+
+        # phase shift to the reference_phase
+        powers_of_Mf.update(source_params.Mf_ref)
+        self.phase_shift = (
+            2.0 * source_params.phase_ref
+            + PI / 4
+            - (
+                self._compute_phase_core(pn_coefficients, source_params, powers_of_Mf)
+                + self.time_shift * source_params.Mf_ref
+            )
         )
 
     @ti.func
@@ -2294,7 +2464,7 @@ class PhaseCoefficients:
         powers_of_Mf: ti.template(),
     ) -> ti.f64:
         return (
-            pn_coefficients.d_PN_phase(powers_of_Mf)
+            pn_coefficients.PN_d_phase(powers_of_Mf)
             + self.sigma_1
             + self.sigma_2 * powers_of_Mf.third
             + self.sigma_3 * powers_of_Mf.two_thirds
@@ -2380,11 +2550,40 @@ class PhaseCoefficients:
         pn_coefficients: ti.template(),
         source_params: ti.template(),
     ):
+        # note the func need to be called in proper order
         self._set_all_colloc_points(source_params)
         self._set_merge_ringdown_coefficients(source_params)
         self._set_inspiral_coefficients(source_params)
         self._set_intermediate_coefficients(source_params, pn_coefficients)
         self._set_connection_coefficients(source_params, pn_coefficients)
+        self._set_time_and_phase_shift(pn_coefficients, source_params)
+
+    @ti.func
+    def _compute_phase_core(
+        self,
+        pn_coefficients: ti.template(),
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        """ """
+        phase = 0.0
+        # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
+        # and fmax_int as the transtion points (l. 1020 in LALSimIMRPhenomX_internals.c)
+        if powers_of_Mf.one < self.fjoin_int_ins:
+            phase = self._inspiral_phase(pn_coefficients, powers_of_Mf)
+        elif powers_of_Mf.one > self.fjoin_MRD_int:
+            phase = (
+                self._merge_ringdown_phase(source_params, powers_of_Mf)
+                + self.C0_MRD
+                + self.C1_MRD * powers_of_Mf.one
+            )
+        else:
+            phase = (
+                self._intermediate_phase(source_params, powers_of_Mf)
+                + self.C0_int
+                + self.C1_int * powers_of_Mf.one
+            )
+        return phase
 
     @ti.func
     def compute_phase(
@@ -2392,30 +2591,34 @@ class PhaseCoefficients:
         pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ):
-        """
-        Note that all phase ansatz are without 1/eta.
-        """
-        phase = 0.0
-        # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
-        # and fmax_int as the transtion points (l. 1020 in LALSimIMRPhenomX_internals.c)
-        if powers_of_Mf.one < self.useful_powers_fjoin_int_ins.one:
-            phase = self._inspiral_phase(pn_coefficients, powers_of_Mf)
-        elif (
-            powers_of_Mf.one > self.useful_powers_fjoin_MRD_int.one
-        ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
-            phase = (
-                self._merge_ringdown_phase(source_params, powers_of_Mf)
-                + self.C1_MRD
-                + self.C2_MRD * powers_of_Mf.one
+    ) -> ti.f64:
+        """ """
+        return (
+            self._compute_phase_core(pn_coefficients, source_params, powers_of_Mf)
+            + self.time_shift * powers_of_Mf.one
+            + self.phase_shift
+        )
+
+    @ti.func
+    def _compute_d_phase_core(
+        self,
+        pn_coefficients: ti.template(),
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        """ """
+        d_phase = 0.0
+        if powers_of_Mf.one < self.fjoin_int_ins:
+            d_phase = self._inspiral_d_phase(pn_coefficients, powers_of_Mf)
+        elif powers_of_Mf.one > self.fjoin_MRD_int:
+            d_phase = (
+                self._merge_ringdown_d_phase(source_params, powers_of_Mf) + self.C1_MRD
             )
         else:
-            phase = (
-                self._intermediate_phase(source_params, powers_of_Mf)
-                + self.C1_int
-                + self.C2_int * powers_of_Mf.one
+            d_phase = (
+                self._intermediate_d_phase(source_params, powers_of_Mf) + self.C1_int
             )
-        return phase / source_params.eta
+        return d_phase
 
     @ti.func
     def compute_d_phase(
@@ -2423,242 +2626,149 @@ class PhaseCoefficients:
         pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ):
-        """
-        note that all phase ansatz are without 1/eta
-        """
-        tf = 0.0
-        if powers_of_Mf.one < self.useful_powers_fjoin_int_ins.one:
-            tf = self._inspiral_d_phase(pn_coefficients, powers_of_Mf)
-        elif (
-            powers_of_Mf.one > self.useful_powers_fjoin_MRD_int.one
-        ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
-            tf = self._merge_ringdown_d_phase(source_params, powers_of_Mf) + self.C2_MRD
-        else:
-            tf = self._intermediate_d_phase(source_params, powers_of_Mf) + self.C2_int
-        return tf / source_params.eta
+    ) -> ti.f64:
 
-
-@ti.func
-def _compute_amplitude(
-    powers_of_Mf: ti.template(),
-    amplitude_coefficients: ti.template(),
-    pn_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    amplitude = 0.0
-    if powers_of_Mf.one < amplitude_coefficients.useful_powers_fjoin_int_ins.one:
-        amplitude = _amplitude_inspiral_ansatz(
-            powers_of_Mf, amplitude_coefficients, pn_coefficients
+        return (
+            self._compute_d_phase_core(pn_coefficients, source_params, powers_of_Mf)
+            + self.time_shift
         )
-    elif powers_of_Mf.one > amplitude_coefficients.useful_powers_fjoin_MRD_int.one:
-        amplitude = _amplitude_merge_ringdown_ansatz(
-            powers_of_Mf, amplitude_coefficients, source_params
-        )
-    else:
-        amplitude = _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients)
-    return amplitude * amplitude_coefficients.amp_0 / powers_of_Mf.seven_sixths
 
 
-@ti.func
-def _compute_phase(
-    powers_of_Mf: ti.template(),
-    phase_coefficients: ti.template(),
-    pn_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    """
-    Note that all phase ansatz are without 1/eta.
-    """
-    phase = 0.0
-    # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
-    # and fmax_int as the transtion points (l. 1020 in LALSimIMRPhenomX_internals.c)
-    if powers_of_Mf.one < phase_coefficients.useful_powers_fjoin_int_ins.one:
-        phase = _phase_inspiral_ansatz(
-            powers_of_Mf, phase_coefficients, pn_coefficients
-        )
-    elif (
-        powers_of_Mf.one > phase_coefficients.useful_powers_fjoin_MRD_int.one
-    ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
-        phase = (
-            _phase_merge_ringdown_ansatz(
-                powers_of_Mf, phase_coefficients, source_params
-            )
-            + phase_coefficients.C1_MRD
-            + phase_coefficients.C2_MRD * powers_of_Mf.one
-        )
-    else:
-        phase = (
-            _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients, source_params)
-            + phase_coefficients.C1_int
-            + phase_coefficients.C2_int * powers_of_Mf.one
-        )
-    return phase / source_params.eta
+# @ti.func
+# def _compute_amplitude(
+#     powers_of_Mf: ti.template(),
+#     amplitude_coefficients: ti.template(),
+#     pn_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     amplitude = 0.0
+#     if powers_of_Mf.one < amplitude_coefficients.useful_powers_fjoin_int_ins.one:
+#         amplitude = _amplitude_inspiral_ansatz(
+#             powers_of_Mf, amplitude_coefficients, pn_coefficients
+#         )
+#     elif powers_of_Mf.one > amplitude_coefficients.useful_powers_fjoin_MRD_int.one:
+#         amplitude = _amplitude_merge_ringdown_ansatz(
+#             powers_of_Mf, amplitude_coefficients, source_params
+#         )
+#     else:
+#         amplitude = _amplitude_intermediate_ansatz(powers_of_Mf, amplitude_coefficients)
+#     return amplitude * amplitude_coefficients.amp_0 / powers_of_Mf.seven_sixths
 
 
-@ti.func
-def _compute_tf(
-    powers_of_Mf: ti.template(),
-    phase_coefficients: ti.template(),
-    pn_coefficients: ti.template(),
-    source_params: ti.template(),
-):
-    """
-    note that all phase ansatz are without 1/eta
-    """
-    tf = 0.0
-    if powers_of_Mf.one < phase_coefficients.useful_powers_fjoin_int_ins.one:
-        tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_coefficients)
-    elif (
-        powers_of_Mf.one > phase_coefficients.useful_powers_fjoin_MRD_int.one
-    ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
-        tf = (
-            _d_phase_merge_ringdown_ansatz(
-                powers_of_Mf, phase_coefficients, source_params
-            )
-            + phase_coefficients.C2_MRD
-        )
-    else:
-        tf = (
-            _d_phase_intermediate_ansatz(
-                powers_of_Mf, phase_coefficients, source_params
-            )
-            + phase_coefficients.C2_int
-        )
-    return tf / source_params.eta
+# @ti.func
+# def _compute_phase(
+#     powers_of_Mf: ti.template(),
+#     phase_coefficients: ti.template(),
+#     pn_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     """
+#     Note that all phase ansatz are without 1/eta.
+#     """
+#     phase = 0.0
+#     # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
+#     # and fmax_int as the transtion points (l. 1020 in LALSimIMRPhenomX_internals.c)
+#     if powers_of_Mf.one < phase_coefficients.useful_powers_fjoin_int_ins.one:
+#         phase = _phase_inspiral_ansatz(
+#             powers_of_Mf, phase_coefficients, pn_coefficients
+#         )
+#     elif (
+#         powers_of_Mf.one > phase_coefficients.useful_powers_fjoin_MRD_int.one
+#     ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
+#         phase = (
+#             _phase_merge_ringdown_ansatz(
+#                 powers_of_Mf, phase_coefficients, source_params
+#             )
+#             + phase_coefficients.C0_MRD
+#             + phase_coefficients.C1_MRD * powers_of_Mf.one
+#         )
+#     else:
+#         phase = (
+#             _phase_intermediate_ansatz(powers_of_Mf, phase_coefficients, source_params)
+#             + phase_coefficients.C0_int
+#             + phase_coefficients.C1_int * powers_of_Mf.one
+#         )
+#     return phase / source_params.eta
 
 
-@ti.func
-def _get_polarization_from_amplitude_phase(
-    amplitude: ti.f64, phase: ti.f64, iota: ti.f64
-):
-    # TODO: using Ylm to compatible with high mode
-    cross_prefactor = tm.cos(iota)
-    plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
-    plus = -amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
-    cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_prefactor
-    plus *= plus_prefactor
-    return cross, plus
+# @ti.func
+# def _compute_tf(
+#     powers_of_Mf: ti.template(),
+#     phase_coefficients: ti.template(),
+#     pn_coefficients: ti.template(),
+#     source_params: ti.template(),
+# ):
+#     """
+#     note that all phase ansatz are without 1/eta
+#     """
+#     tf = 0.0
+#     if powers_of_Mf.one < phase_coefficients.useful_powers_fjoin_int_ins.one:
+#         tf = _d_phase_inspiral_ansatz(powers_of_Mf, phase_coefficients, pn_coefficients)
+#     elif (
+#         powers_of_Mf.one > phase_coefficients.useful_powers_fjoin_MRD_int.one
+#     ):  # here we only implement 105 fitting model where the fmax_int corresponds to the element of index 4.
+#         tf = (
+#             _d_phase_merge_ringdown_ansatz(
+#                 powers_of_Mf, phase_coefficients, source_params
+#             )
+#             + phase_coefficients.C1_MRD
+#         )
+#     else:
+#         tf = (
+#             _d_phase_intermediate_ansatz(
+#                 powers_of_Mf, phase_coefficients, source_params
+#             )
+#             + phase_coefficients.C1_int
+#         )
+#     return tf / source_params.eta
+
+
+# @ti.func
+# def _get_polarization_from_amplitude_phase(
+#     amplitude: ti.f64, phase: ti.f64, iota: ti.f64
+# ):
+#     # TODO: using Ylm to compatible with high mode
+#     cross_prefactor = tm.cos(iota)
+#     plus_prefactor = 0.5 * (1.0 + cross_prefactor**2)
+#     plus = -amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
+#     cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_prefactor
+#     plus *= plus_prefactor
+#     return cross, plus
 
 
 @ti.data_oriented
 class IMRPhenomXAS(BaseWaveform):
+    """
+    TODO:
+    - description of proper parameter range, like q<1000, chi<0.99 etc..
+
+    """
+
     def __init__(
         self,
-        frequencies: ti.ScalarField,
-        waveform_container: Optional[ti.StructField] = None,
-        reference_frequency: Optional[float] = None,
-        returned_form: str = "polarizations",
-        include_tf: bool = True,
-        parameter_sanity_check: bool = False,
+        frequencies,
+        reference_frequency=None,
+        returned_form="polarizations",
+        include_tf=True,
+        check_parameters=False,
     ) -> None:
-        """
-        TODO: parameter range, like q<1000, chi<0.99 etc..
-        Parameters
-        ==========
-        frequencies: ti.field of f64, note that frequencies may not uniform spaced
-        waveform_container: ti.Struct.field or None
-            {} or {}
-        returned_form: str
-            `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
-        parameter_sanity_check: bool
-
-        TODO:
-        check whether passed in `waveform_containter` consistent with `returned_form`
-
-        TODO:
-        add options for exactly same with lalsim or with modification.
-        """
-        self.frequencies = frequencies
-        if reference_frequency is None:
-            self.reference_frequency = self.frequencies[0]
-        elif reference_frequency <= 0.0:
-            raise ValueError(
-                f"you are set reference_frequency={reference_frequency}, which must be postive."
-            )
-        else:
-            self.reference_frequency = reference_frequency
-
-        # TODO: make the sanity checks do not depend on the taichi debug mode
-        self.parameter_sanity_check = parameter_sanity_check
-        if self.parameter_sanity_check:
-            warnings.warn(
-                "`parameter_sanity_check` is turn-on, make sure taichi is initialized with debug mode"
-            )
-        else:
-            warnings.warn(
-                "`parameter_sanity_check` is disable, make sure all parameters passed in are valid."
-            )
-
-        if waveform_container is not None:
-            if not (waveform_container.shape == frequencies.shape):
-                raise ValueError(
-                    "passed in `waveform_container` and `frequencies` have different shape"
-                )
-            self.waveform_container = waveform_container
-            ret_content = self.waveform_container.keys
-            if "tf" in ret_content:
-                include_tf = True
-                ret_content.remove("tf")
-            else:
-                include_tf = False
-            if all([item in ret_content for item in ["hplus", "hcross"]]):
-                returned_form = "polarizations"
-                [ret_content.remove(item) for item in ["hplus", "hcross"]]
-            elif all([item in ret_content for item in ["amplitude", "phase"]]):
-                returned_form = "amplitude_phase"
-                [ret_content.remove(item) for item in ["amplitude", "phase"]]
-            if len(ret_content) > 0:
-                raise ValueError(
-                    f"`waveform_container` contains additional unknown keys {ret_content}."
-                )
-            self.returned_form = returned_form
-            self.include_tf = include_tf
-            print(
-                f"Using `waveform_container` passed in, updating returned_form={self.returned_form}, include_tf={self.include_tf}"
-            )
-        else:
-            self._initialize_waveform_container(returned_form, include_tf)
-            self.returned_form = returned_form
-            self.include_tf = include_tf
-            print(
-                f"`waveform_container` is not given, initializing one with returned_form={returned_form}, include_tf={include_tf}"
-            )
-
-        # initializing data struct with 0, and instantiating fields for global accessing
+        super().__init__(
+            frequencies,
+            reference_frequency,
+            returned_form,
+            include_tf,
+            check_parameters,
+        )
+        # instantiating scalar fields for global accessing
         self.source_parameters = SourceParameters.field(shape=())
         self.phase_coefficients = PhaseCoefficients.field(shape=())
         self.amplitude_coefficients = AmplitudeCoefficients.field(shape=())
         self.pn_coefficients = PostNewtonianCoefficients.field(shape=())
 
-    def _initialize_waveform_container(
-        self, returned_form: str, include_tf: bool
-    ) -> None:
-        ret_content = {}
-        if returned_form == "polarizations":
-            ret_content.update({"hplus": ComplexNumber, "hcross": ComplexNumber})
-        elif returned_form == "amplitude_phase":
-            ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
-        else:
-            raise Exception(
-                f"{returned_form} is unknown. `returned_form` can only be one of `polarizations` and `amplitude_phase`"
-            )
-
-        if include_tf:
-            ret_content.update({"tf": ti.f64})
-
-        self.waveform_container = ti.Struct.field(
-            ret_content,
-            shape=self.frequencies.shape,
-        )
-        return None
-
-    def update_waveform(self, parameters: dict[str, float]):
+    def update_waveform(self, parameters: dict[str, float]) -> None:
         """
-        necessary preparation which need to be finished in python scope for waveform computation
-        (this function may be awkward, since no interpolation function in taichi-lang)
+        necessary preparation which need to be finished in python scope
         """
-        # TODO: passed-in parameter conversion
         self._update_waveform_kernel(
             parameters["mass_1"],
             parameters["mass_2"],
@@ -2667,8 +2777,26 @@ class IMRPhenomXAS(BaseWaveform):
             parameters["luminosity_distance"],
             parameters["inclination"],
             parameters["reference_phase"],
-            parameters["coalescence_time"],
+            self.reference_frequency,
         )
+
+    @ti.func
+    def _get_polarization_from_amplitude_phase(
+        self,
+        amplitude: ti.f64,
+        phase: ti.f64,
+    ) -> tuple[ComplexNumber, ComplexNumber]:
+        common = 0.25 * tm.sqrt(5.0 / PI)
+        cos_iota = tm.cos(self.source_parameters[None].iota)
+        h22 = amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
+
+        c_fac = cos_iota
+        p_fac = 0.5 * (1.0 + cos_iota**2)
+
+        cross = tm.cmul(ComplexNumber([0.0, 1.0]), common * c_fac * h22)
+        plus = -common * p_fac * h22
+
+        return cross, plus
 
     @ti.kernel
     def _update_waveform_kernel(
@@ -2680,11 +2808,9 @@ class IMRPhenomXAS(BaseWaveform):
         luminosity_distance: ti.f64,
         inclination: ti.f64,
         reference_phase: ti.f64,
-        coalescence_time: ti.f64,
+        reference_frequency: ti.f64,
     ):
-        # TODO: parameter_sanity_check
-        # if ti.static(self.parameter_sanity_check):
-        #     self._parameter_check()
+
         self.source_parameters[None].update_source_parameters(
             mass_1,
             mass_2,
@@ -2693,81 +2819,32 @@ class IMRPhenomXAS(BaseWaveform):
             luminosity_distance,
             inclination,
             reference_phase,
-            coalescence_time,
+            reference_frequency,
         )
-
         self.pn_coefficients[None].update_pn_coefficients(self.source_parameters[None])
-        self.amplitude_coefficients[None].compute_amplitude_coefficients(
-            self.source_parameters[None], self.pn_coefficients[None]
+        self.amplitude_coefficients[None].update_amplitude_coefficients(
+            self.pn_coefficients[None], self.source_parameters[None]
         )
-        self.phase_coefficients[None].compute_phase_coefficients(
-            self.source_parameters[None], self.pn_coefficients[None]
+        self.phase_coefficients[None].update_phase_coefficients(
+            self.pn_coefficients[None], self.source_parameters[None]
         )
-
-        powers_of_Mf = UsefulPowers()
-
-        # time shift to the coalescence_time (note different waveform model using
-        # different definition for coalescence time)
-        freq_fit = (
-            self.source_parameters[None].f_ring - self.source_parameters[None].f_damp
-        )
-        powers_of_Mf.update(freq_fit)
-        t_ffit = _compute_tf(
-            powers_of_Mf,
-            self.phase_coefficients[None],
-            self.pn_coefficients[None],
-            self.source_parameters[None],
-        )
-        # first shift peak time around t=0
-        t0 = (
-            _time_at_fit_frequency(self.source_parameters[None])
-            - t_ffit
-            - 2.0
-            * PI
-            * (500.0 + _time_shift_psi4_to_strain(self.source_parameters[None]))
-        )
-        # then shift to the passed-in coalescence time
-        time_shift = (
-            t0
-            - 2.0
-            * PI
-            * self.source_parameters[None].tc
-            / self.source_parameters[None].M_sec
-        )
-        # phase shift to the reference_phase (TODO: here we use different convention where the
-        # `reference_phase` directly denotes the waveform phase at the `reference_frequency`)
-        Mf_ref = self.source_parameters[None].M_sec * self.reference_frequency
-        powers_of_Mf.update(Mf_ref)
-        phase_shift = -(
-            _compute_phase(
-                powers_of_Mf,
-                self.phase_coefficients[None],
-                self.pn_coefficients[None],
-                self.source_parameters[None],
-            )
-            + time_shift * Mf_ref
-        )
-        phase_shift += 2.0 * self.source_parameters[None].phase_ref + PI / 4
-        # phase_shift += self.source_parameters[None].phase_ref
 
         # main loop for building the waveform, auto-parallelized.
+        powers_of_Mf = UsefulPowers()
         for idx in self.frequencies:
             Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
             if Mf < PHENOMX_HIGH_FREQUENCY_CUT:
                 powers_of_Mf.update(Mf)
-                amplitude = _compute_amplitude(
-                    powers_of_Mf,
-                    self.amplitude_coefficients[None],
+                amplitude = self.amplitude_coefficients[None].compute_amplitude(
                     self.pn_coefficients[None],
                     self.source_parameters[None],
-                )
-                phase = _compute_phase(
                     powers_of_Mf,
-                    self.phase_coefficients[None],
+                )
+                phase = self.phase_coefficients[None].compute_phase(
                     self.pn_coefficients[None],
                     self.source_parameters[None],
+                    powers_of_Mf,
                 )
-                phase += time_shift * Mf + phase_shift
 
                 if ti.static(self.returned_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = amplitude
@@ -2776,19 +2853,15 @@ class IMRPhenomXAS(BaseWaveform):
                     (
                         self.waveform_container[idx].hcross,
                         self.waveform_container[idx].hplus,
-                    ) = _get_polarization_from_amplitude_phase(
-                        amplitude, phase, self.source_parameters[None].iota
-                    )
+                    ) = self._get_polarization_from_amplitude_phase(amplitude, phase)
                 if ti.static(self.include_tf):
-                    tf = _compute_tf(
-                        powers_of_Mf,
-                        self.phase_coefficients[None],
+                    tf = self.phase_coefficients[None].compute_d_phase(
                         self.pn_coefficients[None],
                         self.source_parameters[None],
+                        powers_of_Mf,
                     )
-                    tf += time_shift
-                    tf *= self.source_parameters[None].M_sec / PI / 2
-                    self.waveform_container[idx].tf = -tf
+                    tf *= self.source_parameters[None].M_sec / PI / 2  # to second
+                    self.waveform_container[idx].tf = tf
             else:
                 if ti.static(self.returned_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = 0.0
@@ -2799,7 +2872,7 @@ class IMRPhenomXAS(BaseWaveform):
                 if ti.static(self.include_tf):
                     self.waveform_container[idx].tf = 0.0
 
-    @ti.func
-    def _parameter_check(self):
-        # TODO
+    def parameter_validity_check(self, parameters):
+        # TODO: check paramters in taichi scope for improving performance
+        # super().parameter_validity_check(parameters)
         pass

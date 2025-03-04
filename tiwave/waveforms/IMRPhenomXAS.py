@@ -461,7 +461,7 @@ class SourceParameters:
         self.f_damp_pow2 = self.f_damp * self.f_damp
         self.f_MECO = self._get_f_MECO()
         self.f_ISCO = self._get_f_ISCO()
-        self.peak_time_diff = -2.0 * PI * (500.0 + self._psi4_to_strain())
+        self.peak_time_diff = 2.0 * PI * (500.0 + self._psi4_to_strain())
 
     @ti.func
     def _psi4_to_strain(self) -> ti.f64:
@@ -2203,15 +2203,20 @@ class PhaseCoefficients:
                 + 515.9898508588834 * source_params.S_tot_hat
             )
         )
-
+        # Note different with lalsim, we have absorbed 1/eta into inspiral and
+        # merge-ringdown phase coefficients. Remember multiply it in int_colloc_values.
         self.int_colloc_values[0] = self._inspiral_d_phase(
             pn_coefficients, self._useful_powers.fjoin_int_ins
         )
         self.int_colloc_values[1] = (
             0.75 * (d_v1int_v3MRD + self.MRD_colloc_values[3]) + 0.25 * v1_int_bar
+        ) / source_params.eta
+        self.int_colloc_values[2] = (
+            d_v2int_v3MRD + self.MRD_colloc_values[3]
+        ) / source_params.eta
+        self.int_colloc_values[3] = (
+            d32_int / source_params.eta + self.int_colloc_values[2]
         )
-        self.int_colloc_values[2] = d_v2int_v3MRD + self.MRD_colloc_values[3]
-        self.int_colloc_values[3] = d32_int + self.int_colloc_values[2]
         # note the fmax_int is different with the fmin_MRD, it is more appropriate to
         # use fjoin_MRD_int (fmax_int) to set the last int_colloc_values??
         # self.int_colloc_values[4] = self._merge_ringdown_d_phase(
@@ -2219,7 +2224,7 @@ class PhaseCoefficients:
         # )
         # Following lalsim, using MRD_colloc_values[0] (at f_phi_T) rather recalculating
         # the value at f_phi_T + 0.5deltaR, it may be a potential bug??
-        self.int_colloc_values[4] = self.MRD_colloc_values[0]
+        self.int_colloc_values[4] = self.MRD_colloc_values[0] / source_params.eta
 
         # the factor of f_ring is used to enhance the numerical stability??
         int_colloc_points_scaled = self.int_colloc_points / source_params.f_ring
@@ -2314,9 +2319,7 @@ class PhaseCoefficients:
             beta_2,
             beta_3,
             beta_4,
-        ) = (
-            gauss_elimination(Ab_int) / source_params.eta
-        )
+        ) = gauss_elimination(Ab_int)
         self.beta_0 = beta_0
         self.beta_1 = beta_1 * source_params.f_ring
         self.beta_2 = beta_2 * source_params.f_ring**2

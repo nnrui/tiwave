@@ -2869,7 +2869,7 @@ class IMRPhenomXAS(BaseWaveform):
                 if ti.static(self.returned_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = 0.0
                     self.waveform_container[idx].phase = 0.0
-                if ti.static(self.returned_form == "polarization"):
+                if ti.static(self.returned_form == "polarizations"):
                     self.waveform_container[idx].hcross.fill(0.0)
                     self.waveform_container[idx].hplus.fill(0.0)
                 if ti.static(self.include_tf):

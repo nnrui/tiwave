@@ -45,22 +45,34 @@ ti.init(arch=ti.cpu, default_fp=ti.f64)
 
 from tiwave.waveforms import IMRPhenomXAS
 
-params_in = dict(total_mass=2590590.325070,
-                 mass_ratio=0.6560166,
-                 chi_1=-0.448101,
-                 chi_2=0.014488,
-                 luminosity_distance=800.0,
-                 inclination=2.123734,
-                 reference_phase=3.211444,
-                 reference_frequency=1e-5,
-                 coalescence_time=0.0,)
-minimum_frequency = 1e-5
-maximum_frequency = 0.1
+reference_frequency = 20.0
+minimum_frequency = 20.0
+maximum_frequency = 2048.0
+sampling_rate = 4096
+duration = 4.0
 
-wf = IMRPhenomXAS(freqs_ti, reference_frequency=params_in['reference_frequency'])
-wf.update_waveform(params_in)
+num_samples = int(duration * sampling_rate)
+full_freqs = np.fft.rfftfreq(num_samples, 1 / sampling_rate)
+freqs_mask = (full_freqs <= maximum_frequency) * (full_freqs >= minimum_frequency)
+freqs = full_freqs[freqs_mask]
+freqs_ti = ti.field(ti.f64, shape=freqs.shape)
+freqs_ti.from_numpy(freqs)
+
+params_in = dict(
+    mass_1=36.0,
+    mass_2=29.0,
+    chi_1=-0.4,
+    chi_2=0.02,
+    luminosity_distance=800.0,
+    inclination=0.4,
+    reference_phase=1.2,
+)
+
+xas_tiw = IMRPhenomXAS(freqs_ti, reference_frequency)
+xas_tiw.update_waveform(parameters)
+xas_tiw.waveform_container_numpy
 ```
-More examples and detail APIs can be found in the document ().
+More examples and detail APIs can be found in the [document]().
 
 
 ## Testing with lalsimulation

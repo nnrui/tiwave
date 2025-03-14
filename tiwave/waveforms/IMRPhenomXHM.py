@@ -1,14 +1,11 @@
 # TODO:
-# - spectial case of q=1
+# - special case of q=1
 # - all idx begin from 0
-# - computing power_of_Mf ahead of the main loop!!
 import warnings
-import os
 from typing import Optional
 
 import taichi as ti
 import taichi.math as tm
-import numpy as np
 
 from ..constants import *
 from ..utils import ComplexNumber, gauss_elimination, UsefulPowers, sub_struct_from
@@ -18,11 +15,9 @@ from .IMRPhenomXAS import IMRPhenomXAS
 from .IMRPhenomXAS import SourceParameters as SourceParametersMode22
 from .IMRPhenomXAS import PhaseCoefficients as PhaseCoefficientsMode22
 from .IMRPhenomXAS import AmplitudeCoefficients as AmplitudeCoefficientsMode22
-from .IMRPhenomXAS import _time_shift_psi4_to_strain
 
-# TODO: temp
-from .IMRPhenomXAS import _compute_phase, _compute_tf
 
+eta_EMR = 0.05  # Limit for extreme mass ratio
 
 useful_powers_pi = UsefulPowers()
 useful_powers_pi.update(PI)
@@ -32,7 +27,7 @@ useful_powers_2pi_over_3 = UsefulPowers()
 useful_powers_2pi_over_3.update(2.0 * PI / 3.0)
 useful_powers_pi_over_2 = UsefulPowers()
 useful_powers_pi_over_2.update(0.5 * PI)
-eta_EMR = 0.05
+
 QNM_frequencies_struct = ti.types.struct(
     f_ring=ti.f64,
     f_damp=ti.f64,
@@ -42,6 +37,7 @@ QNM_frequencies_struct = ti.types.struct(
 )
 
 
+# TODO: moving to AmplitudeCoefficients class
 @ti.func
 def _amp_ins_f_end_EMR(m: ti.f64, source_params: ti.template()) -> ti.f64:
     """The end frequency of inspiral amplitude for extreme mass ratio."""
@@ -136,7 +132,7 @@ class AmplitudeCoefficientsHighModesBase:
         pn_coefficients_HM: ti.template(),
         powers_of_Mf: ti.template(),
     ) -> ti.f64:
-        return pn_coefficients_HM.d_PN_amplitude(powers_of_Mf) + (
+        return pn_coefficients_HM.PN_d_amplitude(powers_of_Mf) + (
             +7.0 / 3.0 * self.rho_1 * powers_of_Mf.four_thirds
             + 8.0 / 3.0 * self.rho_2 * powers_of_Mf.five_thirds
             + 9.0 / 3.0 * self.rho_3 * powers_of_Mf.two
@@ -210,12 +206,11 @@ class PhaseCoefficientsHighModesBase:
     sigma_2: ti.f64
     sigma_3: ti.f64
     sigma_4: ti.f64
-    # only consider 4 pseudo-PN coefficients in the default 104 inspiral configuration of XAS model
+    # only 4 pseudo-PN coefficients in the default 104 inspiral configuration of XAS model
     Lambda_lm: ti.f64  # corrections for the complex PN amplitudes, eq 4.9
     ins_f_end: ti.f64
     ins_C0: ti.f64
     ins_C1: ti.f64
-
     # Intermediate
     c_0: ti.f64
     c_1: ti.f64
@@ -226,13 +221,11 @@ class PhaseCoefficientsHighModesBase:
     int_f_end: ti.f64
     int_colloc_points: ti.types.vector(6, ti.f64)
     int_colloc_values: ti.types.vector(6, ti.f64)
-
     # Merge-ringdown
     alpha_2: ti.f64
     alpha_L: ti.f64
     MRD_C0: ti.f64
     MRD_C1: ti.f64
-
     # constant for aligning each mode under the choice of tetrad convention
     delta_phi_lm: ti.f64
 
@@ -277,6 +270,28 @@ class PhaseCoefficientsHighModesBase:
         self._useful_powers.int_f_end.update(self.int_f_end)
 
     @ti.func
+    def _get_int_augmented_matrix_no_mixing(
+        self, QNM_freqs_lm: ti.template(), idx: ti.template()
+    ) -> ti.types.matrix(5, 6, ti.f64):
+        Ab = ti.Matrix([[0.0] * 6 for _ in range(5)])
+        for i in ti.static(range(5)):
+            row = [
+                1.0,
+                self.int_colloc_points[idx[i]] ** (-1),
+                self.int_colloc_points[idx[i]] ** (-2),
+                self.int_colloc_points[idx[i]] ** (-4),
+                QNM_freqs_lm.f_damp
+                / (
+                    QNM_freqs_lm.f_damp_pow2
+                    + (self.int_colloc_points[idx[i]] - QNM_freqs_lm.f_ring) ** 2
+                ),
+                self.int_colloc_values[idx[i]],
+            ]
+            for j in ti.static(range(6)):
+                Ab[i, j] = row[j]
+        return Ab
+
+    @ti.func
     def _set_ins_rescaling_coefficients(
         self,
         m: ti.f64,
@@ -299,7 +314,6 @@ class PhaseCoefficientsHighModesBase:
         for 33, 44 mode, w_lm = 2.0
         for 21 mode, w_lm = 1/3.0
         """
-        # TODO:1/eta ??
         # used for modes without significant mixing
         self.alpha_L = self._fit_mode22_alpha_L(source_params)
         self.alpha_2 = (
@@ -395,10 +409,72 @@ class PhaseCoefficientsHighModesBase:
         )
 
     @ti.func
-    def _set_delta_phi_lm(
-        self, source_params: ti.template(), phase_coefficients_22: ti.template()
+    def _set_connection_coefficients(
+        self,
+        QNM_freqs_lm: ti.template(),
+        pn_coefficients_lm: ti.template(),
     ):
-        pass
+        self.ins_C1 = self._intermediate_d_phase(
+            QNM_freqs_lm, self._useful_powers.ins_f_end
+        ) - self._inspiral_d_phase(pn_coefficients_lm, self._useful_powers.ins_f_end)
+        # Note we have dropped the constant of phi_5, ins_C0 is different with CINSP in
+        # lalsimulation. ins_C0 (tiwave) = CINSP (lalsim) - phi_5
+        self.ins_C0 = (
+            self._intermediate_phase(QNM_freqs_lm, self._useful_powers.ins_f_end)
+            - self._inspiral_phase(pn_coefficients_lm, self._useful_powers.ins_f_end)
+            - self.ins_C1 * self.ins_f_end
+        )
+
+        self.MRD_C1 = self._intermediate_d_phase(
+            QNM_freqs_lm, self._useful_powers.int_f_end
+        ) - self._merge_ringdown_d_phase(QNM_freqs_lm, self._useful_powers.int_f_end)
+        self.MRD_C0 = (
+            self._intermediate_phase(QNM_freqs_lm, self._useful_powers.int_f_end)
+            - self._merge_ringdown_phase(QNM_freqs_lm, self._useful_powers.int_f_end)
+            - self.MRD_C1 * self.int_f_end
+        )
+
+    @ti.func
+    def _set_delta_phi_lm(
+        self,
+        m: ti.f64,
+        f_MECO_lm: ti.f64,
+        pn_coefficients_22: ti.template(),
+        pn_coefficients_lm: ti.template(),
+        phase_coefficients_22: ti.template(),
+        source_params: ti.template(),
+    ):
+        """
+        Setting delta_phi_lm for aligning different modes according to Eq. 4.13, call after the parameters of continuous condition are updated.
+        """
+        f_align = 0.0
+        powers_of_falign = UsefulPowers()
+        f_align_22 = 0.0
+        powers_of_falign22 = UsefulPowers()
+        if source_params.eta > eta_EMR:
+            f_align = 0.6 * f_MECO_lm
+            f_align_22 = 0.6 * source_params.f_MECO
+        else:
+            f_align = f_MECO_lm
+            f_align_22 = source_params.f_MECO
+        powers_of_falign.update(f_align)
+        powers_of_falign22.update(f_align_22)
+
+        # note there is no time-shift term for high modes here.
+        delta_phi_lm = (
+            0.5
+            * m
+            * phase_coefficients_22.compute_phase(
+                pn_coefficients_22, source_params, powers_of_falign22
+            )
+            - 3.0 / 4.0 * PI * (1 - 0.5 * m)
+            - (
+                self._inspiral_phase(pn_coefficients_lm, powers_of_falign)
+                + self.ins_C1 * f_align
+                + self.ins_C0
+            )
+        )
+        self.delta_phi_lm = tm.mod(delta_phi_lm, 2.0 * PI)
 
     @ti.func
     def _inspiral_phase(
@@ -424,7 +500,7 @@ class PhaseCoefficientsHighModesBase:
         powers_of_Mf: ti.template(),
     ) -> ti.f64:
         return (
-            pn_coefficients_lm.d_PN_phase(powers_of_Mf)
+            pn_coefficients_lm.PN_d_phase(powers_of_Mf)
             + (
                 self.sigma_1
                 + self.sigma_2 * powers_of_Mf.third
@@ -469,7 +545,9 @@ class PhaseCoefficientsHighModesBase:
 
     @ti.func
     def _merge_ringdown_phase(
-        self, QNM_freqs_lm: ti.template(), powers_of_Mf: ti.template()
+        self,
+        QNM_freqs_lm: ti.template(),
+        powers_of_Mf: ti.template(),
     ) -> ti.f64:
         """for no mixing modes"""
         return (
@@ -480,7 +558,9 @@ class PhaseCoefficientsHighModesBase:
 
     @ti.func
     def _merge_ringdown_d_phase(
-        self, QNM_freqs_lm: ti.template(), powers_of_Mf: ti.template()
+        self,
+        QNM_freqs_lm: ti.template(),
+        powers_of_Mf: ti.template(),
     ) -> ti.f64:
         """for no mixing modes"""
         return (
@@ -490,36 +570,50 @@ class PhaseCoefficientsHighModesBase:
             / (QNM_freqs_lm.f_damp_pow2 + (powers_of_Mf.one - QNM_freqs_lm.f_ring) ** 2)
         )
 
-    # @ti.func
-    # def phase(
-    #     self,
-    #     pn_coefficients_lm: ti.template(),
-    #     source_params: ti.template(),
-    #     powers_of_Mf: ti.template(),
-    # ):
-    #     phase = 0.0
-    #     if powers_of_Mf.one < self.ins_f_end:
-    #         phase = (
-    #             self.inspiral_phase(pn_coefficients_lm, source_params)
-    #             + self.ins_C0
-    #             + self.int_C1 * powers_of_Mf.one
-    #         )
-    #     elif (
-    #         powers_of_Mf.one > self.int_f_end
-    #     ):
-    #         phase(
-    #             self.merge_ringdown_phase()
-    #             + +self.C0_MRD
-    #             + self.C1_MRD * powers_of_Mf.one
-    #         )
-    #     else:
-    #         phase = self.intermediate_phase()
+    @ti.func
+    def compute_phase(
+        self,
+        QNM_freqs_lm: ti.template(),
+        pn_coefficients_lm: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        # Note the time-shift for making the peak around t=0 has been incorporated in the construction of intermediate phase, here only the constants delta_phi_lm for aligning different modes are needed. And thus the continuous condition parameters needs to be added in the inspiral and merge-ringdown phase.
+        phase = 0.0
+        if powers_of_Mf.one < self.ins_f_end:
+            phase = (
+                self._inspiral_phase(pn_coefficients_lm, powers_of_Mf)
+                + self.ins_C0
+                + self.ins_C1 * powers_of_Mf.one
+            )
+        elif powers_of_Mf.one > self.int_f_end:
+            phase(
+                self._merge_ringdown_phase(QNM_freqs_lm, powers_of_Mf)
+                + self.MRD_C0
+                + self.MRD_C1 * powers_of_Mf.one
+            )
+        else:
+            phase = self._intermediate_phase(QNM_freqs_lm, powers_of_Mf)
+        return phase + self.delta_phi_lm
 
-    #     return phase / source_params.eta
-
-    # @ti.func
-    # def d_phase(self, powers_of_Mf: ti.template()):
-    #     pass
+    @ti.func
+    def compute_d_phase(
+        self,
+        QNM_freqs_lm: ti.template(),
+        pn_coefficients_lm: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        d_phase = 0.0
+        if powers_of_Mf.one < self.ins_f_end:
+            d_phase = (
+                self._inspiral_d_phase(pn_coefficients_lm, powers_of_Mf) + self.ins_C1
+            )
+        elif powers_of_Mf.one > self.int_f_end:
+            d_phase = (
+                self._merge_ringdown_d_phase(QNM_freqs_lm, powers_of_Mf) + self.MRD_C1
+            )
+        else:
+            d_phase = self._intermediate_d_phase(QNM_freqs_lm, powers_of_Mf)
+        return d_phase
 
 
 @sub_struct_from(SourceParametersMode22)
@@ -533,12 +627,6 @@ class SourceParametersHighModes:
     delta_chi_half: ti.f64
     delta_chi_half_pow2: ti.f64
 
-    # the common factor of amplitude of the dominant PN order
-    amp_common_factor: ti.f64
-    # scale factor of mass and distance
-    scale_factor: ti.f64
-    # the fit of the time-difference between peak of strain and psi4
-    dt_psi4_to_strain: ti.f64
     # QNM frequencies
     QNM_freqs_lm: ti.types.struct(
         **{
@@ -552,6 +640,7 @@ class SourceParametersHighModes:
     f_MECO_lm: ti.types.struct(
         **{"21": ti.f64, "33": ti.f64, "32": ti.f64, "44": ti.f64}
     )
+    # TODO: f_ISCO_lm used??
     f_ISCO_lm: ti.types.struct(
         **{"21": ti.f64, "33": ti.f64, "32": ti.f64, "44": ti.f64}
     )
@@ -566,7 +655,7 @@ class SourceParametersHighModes:
         luminosity_distance: ti.f64,
         inclination: ti.f64,
         reference_phase: ti.f64,
-        coalescence_time: ti.f64,
+        reference_frequency: ti.f64,
         high_modes: ti.template(),
     ):
         self._parent_update_source_parameters(
@@ -577,7 +666,7 @@ class SourceParametersHighModes:
             luminosity_distance,
             inclination,
             reference_phase,
-            coalescence_time,
+            reference_frequency,
         )
         self.eta_sqrt = tm.sqrt(self.eta)
         self.eta_pow7 = self.eta * self.eta_pow6
@@ -587,12 +676,6 @@ class SourceParametersHighModes:
         self.chi_2_pow2 = self.chi_2 * self.chi_2
         self.delta_chi_half = self.delta_chi * 0.5
         self.delta_chi_half_pow2 = self.delta_chi_half * self.delta_chi_half
-
-        self.amp_common_factor = (
-            0.25 * tm.sqrt(10.0 / 3.0 * self.eta) / useful_powers_pi.two_thirds
-        )
-        self.scale_factor = self.M**2 / self.dL_SI * MRSUN_SI * MTSUN_SI
-        self.dt_psi4_to_strain = -2.0 * PI * (500.0 + _time_shift_psi4_to_strain(self))
 
         if ti.static("21" in high_modes):
             self._set_QNM_frequencies_21()
@@ -4548,17 +4631,16 @@ class PhaseCoefficientsMode21:
         mode-mixing, using 5 out of 6 collocation nodes determined according to spin and mass ratio, and setting c_3 = 0.
         for situation with (eta < etaEMR) or (emm == ell and STotR >= 0.8) or (modeTag == 33 and STotR < 0), using collocation nodes: 0, 1, 3, 4, 5.
         for situation with (STotR >= 0.8) and (modeTag == 21), using collocation nodes: 0, 1, 2, 4, 5.
-        for remaining parameter space, using collocation nodes: 0, 1, 2, 3, 5
+        for remaining parameter space, using collocation nodes: 0, 1, 2, 3, 5.
         """
         self.c_3 = 0.0
 
-        self._update_int_colloc_value_0(source_params)
-        self._update_int_colloc_value_1(source_params)
-        self._update_int_colloc_value_2(source_params)
-        self._update_int_colloc_value_5(source_params)
+        self._set_int_colloc_value_0(source_params)
+        self._set_int_colloc_value_1(source_params)
+        self._set_int_colloc_value_2(source_params)
+        self._set_int_colloc_value_5(source_params)
 
         # special operation for 21 mode to avoide sharp transitions in high-spin cases
-        # TODO: 1/eta ??
         if source_params.S_tot_hat >= 0.8:
             ins_val_0 = phase_coefficients_22.compute_d_phase(
                 pn_coefficients_22, source_params, self._useful_powers.int_f0
@@ -4574,7 +4656,7 @@ class PhaseCoefficientsMode21:
             self.int_colloc_values[1] = self.int_colloc_values[2] + diff_12
             self.int_colloc_values[0] = self.int_colloc_values[1] + diff_01
 
-        # simplified the conditional structure in LALSimIMRPhenomXHM_internals.c l.2108 for modeTag=21
+        # simplified the conditional structure in LALSimIMRPhenomXHM_internals.c l.2108 for mode 21
         if source_params.eta < eta_EMR:  # using collocation nodes: 0, 1, 3, 4, 5
             self._set_intermediate_coefficients_01345(source_params)
         elif source_params.S_tot_hat >= 0.8:
@@ -4585,10 +4667,10 @@ class PhaseCoefficientsMode21:
     @ti.func
     def _set_intermediate_coefficients_01345(self, source_params: ti.template()):
         self.int_colloc_values[2] = 0.0
-        self._update_int_colloc_value_3(source_params)
-        self._update_int_colloc_value_4(source_params)
+        self._set_int_colloc_value_3(source_params)
+        self._set_int_colloc_value_4(source_params)
 
-        Ab = self._int_no_mixing_augmented_matrix(
+        Ab = self._get_int_augmented_matrix_no_mixing(
             source_params.QNM_freqs_lm["21"], [0, 1, 3, 4, 5]
         )
         self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab)
@@ -4596,48 +4678,26 @@ class PhaseCoefficientsMode21:
     @ti.func
     def _set_intermediate_coefficients_01245(self, source_params: ti.template()):
         self.int_colloc_values[3] = 0.0
-        self._update_int_colloc_value_4(source_params)
+        self._set_int_colloc_value_4(source_params)
 
-        Ab = self._int_no_mixing_augmented_matrix(
+        Ab = self._get_int_augmented_matrix_no_mixing(
             source_params.QNM_freqs_lm["21"], [0, 1, 2, 4, 5]
         )
         self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab)
 
     @ti.func
     def _set_intermediate_coefficients_01235(self, source_params: ti.template()):
-        self._update_int_colloc_value_3(source_params)
+        self._set_int_colloc_value_3(source_params)
         self.int_colloc_values[4] = 0.0
 
-        Ab = self._int_no_mixing_augmented_matrix(
+        Ab = self._get_int_augmented_matrix_no_mixing(
             source_params.QNM_freqs_lm["21"], [0, 1, 2, 3, 5]
         )
         self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab)
 
     @ti.func
-    def _int_no_mixing_augmented_matrix(
-        self, QNM_freqs_lm: ti.template(), idx: ti.template()
-    ) -> ti.types.matrix(5, 6, ti.f64):
-        Ab = ti.Matrix([[0.0] * 6 for _ in range(5)])
-        for i in ti.static(range(5)):
-            row = [
-                1.0,
-                self.int_colloc_points[idx[i]] ** (-1),
-                self.int_colloc_points[idx[i]] ** (-2),
-                self.int_colloc_points[idx[i]] ** (-4),
-                QNM_freqs_lm.f_damp
-                / (
-                    QNM_freqs_lm.f_damp_pow2
-                    + (self.int_colloc_points[idx[i]] - QNM_freqs_lm.f_ring) ** 2
-                ),
-                self.int_colloc_values[idx[i]],
-            ]
-            for j in ti.static(range(6)):
-                Ab[i, j] = row[j]
-        return Ab
-
-    @ti.func
-    def _update_int_colloc_value_0(self, source_params: ti.template()):
-        self.int_colloc_values[0] = source_params.dt_psi4_to_strain + (
+    def _set_int_colloc_value_0(self, source_params: ti.template()):
+        self.int_colloc_values[0] = -source_params.peak_time_diff + (
             4045.84
             + 7.63226 / source_params.eta
             - 1956.93 * source_params.eta
@@ -4683,8 +4743,8 @@ class PhaseCoefficientsMode21:
         )
 
     @ti.func
-    def _update_int_colloc_value_1(self, source_params: ti.template()):
-        self.int_colloc_values[1] = source_params.dt_psi4_to_strain + (
+    def _set_int_colloc_value_1(self, source_params: ti.template()):
+        self.int_colloc_values[1] = -source_params.peak_time_diff + (
             3509.09
             + 0.91868 / source_params.eta
             + 194.72 * source_params.eta
@@ -4734,8 +4794,8 @@ class PhaseCoefficientsMode21:
         )
 
     @ti.func
-    def _update_int_colloc_value_2(self, source_params: ti.template()):
-        self.int_colloc_values[2] = source_params.dt_psi4_to_strain + (
+    def _set_int_colloc_value_2(self, source_params: ti.template()):
+        self.int_colloc_values[2] = -source_params.peak_time_diff + (
             3241.68
             + 890.016 * source_params.eta
             - 28651.9 * source_params.eta_pow2
@@ -4758,8 +4818,8 @@ class PhaseCoefficientsMode21:
         )
 
     @ti.func
-    def _update_int_colloc_value_3(self, source_params: ti.template()):
-        self.int_colloc_values[3] = source_params.dt_psi4_to_strain + (
+    def _set_int_colloc_value_3(self, source_params: ti.template()):
+        self.int_colloc_values[3] = -source_params.peak_time_diff + (
             3160.88
             + 974.355 * source_params.eta
             - 28932.5 * source_params.eta_pow2
@@ -4786,8 +4846,8 @@ class PhaseCoefficientsMode21:
         )
 
     @ti.func
-    def _update_int_colloc_value_4(self, source_params: ti.template()):
-        self.int_colloc_values[4] = source_params.dt_psi4_to_strain + (
+    def _set_int_colloc_value_4(self, source_params: ti.template()):
+        self.int_colloc_values[4] = -source_params.peak_time_diff + (
             3102.36
             + 315.911 * source_params.eta
             - 1688.26 * source_params.eta_pow2
@@ -4811,8 +4871,8 @@ class PhaseCoefficientsMode21:
         )
 
     @ti.func
-    def _update_int_colloc_value_5(self, source_params: ti.template()):
-        self.int_colloc_values[5] = source_params.dt_psi4_to_strain + (
+    def _set_int_colloc_value_5(self, source_params: ti.template()):
+        self.int_colloc_values[5] = -source_params.peak_time_diff + (
             3089.18
             + 4.89194 * source_params.eta
             + 190.008 * source_params.eta_pow2
@@ -4843,8 +4903,8 @@ class PhaseCoefficientsMode21:
     def update_phase_coefficients(
         self,
         pn_coefficients_22: ti.template(),
-        phase_coefficients_22: ti.template(),
         pn_coefficients_21: ti.template(),
+        phase_coefficients_22: ti.template(),
         source_params: ti.template(),
     ):
         # intermediate
@@ -4853,6 +4913,8 @@ class PhaseCoefficientsMode21:
             source_params.QNM_freqs_lm["21"],
             source_params,
         )
+
+        # used for special operation for 21 mode to avoide sharp transitions in high-spin cases
         self._useful_powers.int_f0.update(self.int_colloc_points[0])
         self._useful_powers.int_f1.update(self.int_colloc_points[1])
         self._useful_powers.int_f2.update(self.int_colloc_points[2])
@@ -4871,384 +4933,359 @@ class PhaseCoefficientsMode21:
             1.0 / 3.0, source_params.QNM_freqs_lm["21"], source_params
         )
         # continuous conditions
-        self.ins_C1 = self._intermediate_d_phase(
-            source_params.QNM_freqs_lm["21"], self._useful_powers.ins_f_end
-        ) - self._inspiral_d_phase(pn_coefficients_21, self._useful_powers.ins_f_end)
-        # Note we have dropped the constant of phi_5, ins_C0 is different with CINSP in
-        # lalsimulation. ins_C0 (tiwave) = CINSP (lalsim) - phi_5
-        self.ins_C0 = (
-            self._intermediate_phase(
-                source_params.QNM_freqs_lm["21"], self._useful_powers.ins_f_end
-            )
-            - self._inspiral_phase(pn_coefficients_21, self._useful_powers.ins_f_end)
-            - self.ins_C1 * self.ins_f_end
+        self._set_connection_coefficients(
+            source_params.QNM_freqs_lm["21"], pn_coefficients_21
         )
-        self.MRD_C1 = self._intermediate_d_phase(
-            source_params.QNM_freqs_lm["21"], self._useful_powers.int_f_end
-        ) - self._merge_ringdown_d_phase(
-            source_params.QNM_freqs_lm["21"], self._useful_powers.int_f_end
-        )
-        self.MRD_C0 = (
-            self._intermediate_phase(
-                source_params.QNM_freqs_lm["21"], self._useful_powers.int_f_end
-            )
-            - self._merge_ringdown_phase(
-                source_params.QNM_freqs_lm["21"], self._useful_powers.int_f_end
-            )
-            - self.MRD_C1 * self.int_f_end
+        # the constant phase for aligning modes
+        self._set_delta_phi_lm(
+            1.0,
+            source_params.f_MECO_lm["21"],
+            pn_coefficients_22,
+            pn_coefficients_21,
+            phase_coefficients_22,
+            source_params,
         )
 
 
 @sub_struct_from(PhaseCoefficientsHighModesBase)
 class PhaseCoefficientsMode33:
 
-    # @ti.func
-    # def _set_colloc_points(self, source_params: ti.template()):
-    #     # Intermediate
-    #     ins_f_end = (
-    #         1.0
-    #         + 0.001
-    #         * (0.25 / source_params.eta - 1.0)
-    #         * source_params.f_MECO
-    #         * emm
-    #         * 0.5
-    #     )
-    #     int_f_end = source_params.f_ring_21
-    #     self.int_colloc_points[0] = ins_f_end
-    #     self.int_colloc_points[1] = (
-    #         tm.sqrt(3.0) * (ins_f_end - int_f_end) + 2.0 * (ins_f_end + int_f_end)
-    #     ) / 4.0
-    #     self.int_colloc_points[2] = (3.0 * ins_f_end + int_f_end) / 4.0
-    #     self.int_colloc_points[3] = (ins_f_end + int_f_end) / 2.0
-    #     self.int_colloc_points[4] = (ins_f_end + 3.0 * int_f_end) / 4.0
-    #     self.int_colloc_points[5] = (ins_f_end + 7.0 * int_f_end) / 8.0
-    #     self.int_colloc_points[6] = int_f_end
+    @ti.func
+    def _Lambda_33_PN(self) -> ti.f64:
+        return 2.0 / 3.0 * PI * (21.0 / 5.0 - 6.0 * tm.log(1.5))
 
-    # @ti.func
-    # def _set_inspiral_coefficients(self, source_params: ti.template()):
-    #     if source_params.eta > 0.01:
-    #         self.Lambda_PN = 2.0 / 3.0 * PI * (21.0 / 5.0 - 6.0 * tm.log(1.5))
-    #     else:
-    #         self.Lambda_PN = (
-    #             4.1138398568400705
-    #             + 9.772510519809892 * source_params.eta
-    #             - 103.92956504520747 * source_params.eta_pow2
-    #             + 242.3428625556764 * source_params.eta_pow3
-    #             + (
-    #                 (
-    #                     -0.13253553909611435
-    #                     + 26.644159828590055 * source_params.eta
-    #                     - 105.09339163109497 * source_params.eta_pow2
-    #                 )
-    #                 * source_params.S_tot_hat
-    #             )
-    #             / (1.0 + 0.11322426762297967 * source_params.S_tot_hat)
-    #             - 19.705359163581168
-    #             * source_params.delta_chi
-    #             * source_params.eta_pow2
-    #             * source_params.delta
-    #         )
+    @ti.func
+    def _Lambda_33_fit(self, source_params: ti.template()) -> ti.f64:
+        return (
+            4.1138398568400705
+            + 9.772510519809892 * source_params.eta
+            - 103.92956504520747 * source_params.eta_pow2
+            + 242.3428625556764 * source_params.eta_pow3
+            + (
+                (
+                    -0.13253553909611435
+                    + 26.644159828590055 * source_params.eta
+                    - 105.09339163109497 * source_params.eta_pow2
+                )
+                * source_params.S_tot_hat
+            )
+            / (1.0 + 0.11322426762297967 * source_params.S_tot_hat)
+            - 19.705359163581168
+            * source_params.delta_chi
+            * source_params.eta_pow2
+            * source_params.delta
+        )
 
-    # @ti.func
-    # def _set_merge_ringdown_coefficients(self, source_params: ti.template()):
-    #     pass
+    @ti.func
+    def _set_intermediate_coefficients(self, source_params: ti.template()):
+        """
+        Setting intermediate coefficients for mode 33.
+        For modes without significant mode-mixing, using 5 out of 6 collocation nodes determined according to spin and mass ratio, and setting c_3 = 0.
+        for situation with (eta < etaEMR) or (emm == ell and STotR >= 0.8) or (modeTag == 33 and STotR < 0), using collocation nodes: 0, 1, 3, 4, 5.
+        for situation with (STotR >= 0.8) and (modeTag == 21), using collocation nodes: 0, 1, 2, 4, 5.
+        for remaining parameter space, using collocation nodes: 0, 1, 2, 3, 5
+        """
+        self.c_3 = 0.0
 
-    # @ti.func
-    # def _set_intermediate_coefficients(self, source_params: ti.template()):
-    #     self.int_colloc_values[0] = source_params.dt_psi4_to_strain + (
-    #         4360.19
-    #         + 4.27128 / source_params.eta
-    #         - 8727.4 * source_params.eta
-    #         + 18485.9 * source_params.eta_pow2
-    #         + 371303.00000000006 * source_params.eta_pow3
-    #         - 3.22792e6 * source_params.eta_pow4
-    #         + 1.01799e7 * source_params.eta_pow5
-    #         - 1.15659e7 * source_params.eta_pow6
-    #         + (
-    #             (
-    #                 11.6635
-    #                 - 251.579 * source_params.eta
-    #                 - 3255.6400000000003 * source_params.eta_pow2
-    #                 + 19614.6 * source_params.eta_pow3
-    #                 - 34860.2 * source_params.eta_pow4
-    #             )
-    #             * source_params.S_tot_hat
-    #             + (
-    #                 14.8017
-    #                 + 204.025 * source_params.eta
-    #                 - 5421.92 * source_params.eta_pow2
-    #                 + 36587.3 * source_params.eta_pow3
-    #                 - 74299.5 * source_params.eta_pow4
-    #             )
-    #             * source_params.S_tot_hat_pow2
-    #         )
-    #         / source_params.eta
-    #         + source_params.eta
-    #         * (
-    #             223.65100000000004
-    #             * source_params.chi_1
-    #             * source_params.delta
-    #             * (3.9201300240106223 + 1.0 * source_params.eta)
-    #             - 223.65100000000004
-    #             * source_params.chi_2
-    #             * source_params.delta
-    #             * (3.9201300240106223 + 1.0 * source_params.eta)
-    #         )
-    #     )
-    #     self.int_colloc_values[1] = source_params.dt_psi4_to_strain + (
-    #         3797.06
-    #         + 0.786684 / source_params.eta
-    #         - 2397.09 * source_params.eta
-    #         - 25514.0 * source_params.eta_pow2
-    #         + 518314.99999999994 * source_params.eta_pow3
-    #         - 3.41708e6 * source_params.eta_pow4
-    #         + 1.01799e7 * source_params.eta_pow5
-    #         - 1.15659e7 * source_params.eta_pow6
-    #     )
-    #     +(
-    #         (
-    #             6.7812399999999995
-    #             + 39.4668 * source_params.eta
-    #             - 3520.37 * source_params.eta_pow2
-    #             + 19614.6 * source_params.eta_pow3
-    #             - 34860.2 * source_params.eta_pow4
-    #         )
-    #         * source_params.S_tot_hat
-    #         + (
-    #             4.80384
-    #             + 293.215 * source_params.eta
-    #             - 5914.61 * source_params.eta_pow2
-    #             + 36587.3 * source_params.eta_pow3
-    #             - 74299.5 * source_params.eta_pow4
-    #         )
-    #         * source_params.S_tot_hat_pow2
-    #     ) / source_params.eta
-    #     -223.65100000000004 * source_params.delta * source_params.eta * (
-    #         source_params.chi_1 * (-1.3095134830606614 - 1.0 * source_params.eta)
-    #         + source_params.chi_2 * (1.3095134830606614 + 1.0 * source_params.eta)
-    #     )
-    #     self.int_colloc_values[2] = source_params.dt_psi4_to_strain + (
-    #         3321.83
-    #         + 1796.03 * source_params.eta
-    #         - 52406.1 * source_params.eta_pow2
-    #         + 605028.0 * source_params.eta_pow3
-    #         - 3.52532e6 * source_params.eta_pow4
-    #         + 1.01799e7 * source_params.eta_pow5
-    #         - 1.15659e7 * source_params.eta_pow6
-    #         + (
-    #             223.601
-    #             - 3714.77 * source_params.eta
-    #             + 19614.6 * source_params.eta_pow2
-    #             - 34860.2 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat
-    #         + (
-    #             314.317
-    #             - 5906.46 * source_params.eta
-    #             + 36587.3 * source_params.eta_pow2
-    #             - 74299.5 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow2
-    #         + 223.651
-    #         * source_params.delta_chi
-    #         * source_params.delta
-    #         * source_params.eta_pow2
-    #     )
-    #     self.int_colloc_values[3] = source_params.dt_psi4_to_strain + (
-    #         3239.44
-    #         - 661.15 * source_params.eta
-    #         + 5139.79 * source_params.eta_pow2
-    #         + 3456.2 * source_params.eta_pow3
-    #         - 248477.0 * source_params.eta_pow4
-    #         + 1.17255e6 * source_params.eta_pow5
-    #         - 1.70363e6 * source_params.eta_pow6
-    #         + (
-    #             225.859
-    #             - 4150.09 * source_params.eta
-    #             + 24364.0 * source_params.eta_pow2
-    #             - 46537.3 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat
-    #         + (
-    #             35.2439
-    #             - 994.971 * source_params.eta
-    #             + 8953.98 * source_params.eta_pow2
-    #             - 23603.5 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow2
-    #         + (
-    #             -310.489
-    #             + 5946.15 * source_params.eta
-    #             - 35337.1 * source_params.eta_pow2
-    #             + 67102.4 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow3
-    #         + 30.484
-    #         * source_params.delta_chi
-    #         * source_params.delta
-    #         * source_params.eta_pow2
-    #     )
-    #     self.int_colloc_values[4] = source_params.dt_psi4_to_strain + (
-    #         3114.3
-    #         + 2143.06 * source_params.eta
-    #         - 49428.3 * source_params.eta_pow2
-    #         + 563997.0 * source_params.eta_pow3
-    #         - 3.35991e6 * source_params.eta_pow4
-    #         + 9.99745e6 * source_params.eta_pow5
-    #         - 1.17123e7 * source_params.eta_pow6
-    #         + (
-    #             190.051
-    #             - 3705.08 * source_params.eta
-    #             + 23046.2 * source_params.eta_pow2
-    #             - 46537.3 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat
-    #         + (
-    #             63.6615
-    #             - 1414.2 * source_params.eta
-    #             + 10166.1 * source_params.eta_pow2
-    #             - 23603.5 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow2
-    #         + (
-    #             -257.524
-    #             + 5179.97 * source_params.eta
-    #             - 33001.4 * source_params.eta_pow2
-    #             + 67102.4 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow3
-    #         + 54.9833
-    #         * source_params.delta_chi
-    #         * source_params.delta
-    #         * source_params.eta_pow2
-    #     )
-    #     self.int_colloc_values[5] = source_params.dt_psi4_to_strain + (
-    #         3111.46
-    #         + 384.121 * source_params.eta
-    #         - 13003.6 * source_params.eta_pow2
-    #         + 179537.0 * source_params.eta_pow3
-    #         - 1.19313e6 * source_params.eta_pow4
-    #         + 3.79886e6 * source_params.eta_pow5
-    #         - 4.64858e6 * source_params.eta_pow6
-    #         + (
-    #             182.864
-    #             - 3834.22 * source_params.eta
-    #             + 24532.9 * source_params.eta_pow2
-    #             - 50165.9 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat
-    #         + (
-    #             21.0158
-    #             - 746.957 * source_params.eta
-    #             + 6701.33 * source_params.eta_pow2
-    #             - 17842.3 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow2
-    #         + (
-    #             -292.855
-    #             + 5886.62 * source_params.eta
-    #             - 37382.4 * source_params.eta_pow2
-    #             + 75501.8 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow3
-    #         + 75.5162
-    #         * source_params.delta_chi
-    #         * source_params.delta
-    #         * source_params.eta_pow2
-    #     )
-    #     # special operation for 21 mode to avoide sharp transitions in high-spin cases
-    #     if source_params.S_tot_hat >= 0.8:
-    #         ins_val_0 = phase_coefficients_22.compute_dphase(
-    #             source_params, pn_coefficients, self.useful_powers.int_f0
-    #         )
-    #         ins_val_1 = phase_coefficients_22.compute_dphase(
-    #             source_params, pn_coefficients, self.useful_powers.int_f1
-    #         )
-    #         ins_val_2 = phase_coefficients_22.compute_dphase(
-    #             source_params, pn_coefficients, self.useful_powers.int_f2
-    #         )
-    #         diff_01 = ins_val_0 - ins_val_1
-    #         diff_12 = ins_val_1 - ins_val_2
-    #         self.int_colloc_values[1] = self.int_colloc_values[2] + diff_12
-    #         self.int_colloc_values[0] = self.int_colloc_values[1] + diff_01
-    #     # collocation points need to be chosen according to spin and mass ratio
+        self._set_int_colloc_value_0(source_params)
+        self._set_int_colloc_value_1(source_params)
+        self._set_int_colloc_value_5(source_params)
 
-    # def _set_intermediate_coefficients_case_1(self, source_params: ti.template()):
-    #     """
-    #     using collocation points: 0, 1, 3, 4, 5
-    #     for situation with (eta < etaEMR) or (emm == ell and STotR >= 0.8) or (modeTag == 33 and STotR < 0)
-    #     """
-    #     pass
+        # simplified the conditional structure in LALSimIMRPhenomXHM_internals.c l.2108 for mode 33
+        if (
+            (source_params.eta < eta_EMR)
+            or (source_params.S_tot_hat >= 0.8)
+            or (source_params.S_tot_hat < 0.0)
+        ):  # using collocation nodes: 0, 1, 3, 4, 5
+            self._set_intermediate_coefficients_01345(source_params)
+        else:  # using collocation nodes: 0, 1, 2, 3, 5
+            self._set_intermediate_coefficients_01235(source_params)
 
-    # def _set_intermediate_coefficients_case_2(self, source_params: ti.template()):
-    #     """
-    #     using collocation points: 0, 1, 2, 4, 5
-    #     for situation with (STotR >= 0.8) and (modeTag == 21)"""
-    #     pass
+    @ti.func
+    def _set_intermediate_coefficients_01345(self, source_params: ti.template()):
+        self.int_colloc_values[2] = 0.0
+        self._set_int_colloc_value_3(source_params)
+        self._set_int_colloc_value_4(source_params)
 
-    # def _set_intermediate_coefficients_case_3(self, source_params: ti.template()):
-    #     """
-    #     using collocation points: 0, 1, 2, 3, 5
-    #     remaining parameter space
-    #     """
-    #     pass
+        Ab = self._get_int_augmented_matrix_no_mixing(
+            source_params.QNM_freqs_lm["33"], [0, 1, 3, 4, 5]
+        )
+        self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab)
 
-    # def _set_intermediate_coefficients(self, source_params: ti.template()):
-    #     # simplify the conditional structure in LALSimIMRPhenomXHM_internals.c l.2108 for modeTag=33
-    #     if (
-    #         (source_params.eta < eta_EMR)
-    #         or (source_params.S_tot_hat >= 0.8)
-    #         or (source_params.S_tot_hat < 0.0)
-    #     ):
-    #         self._set_intermediate_coefficients_case_1(source_params)
-    #     else:
-    #         self._set_intermediate_coefficients_case_3(source_params)
+    @ti.func
+    def _set_intermediate_coefficients_01235(self, source_params: ti.template()):
+        self.int_colloc_values[4] = 0.0
+        self._set_int_colloc_value_2(source_params)
+        self._set_int_colloc_value_3(source_params)
 
-    # # // choose collocation points according to spin/mass ratio
-    # #     // current catalogue of simulations include some cases that create unphysical effects in the fits -> we need to use different subset of collocation points according to the parameters (we have to pick 5 out of 6 available fits)
-    # #     /* cpoints_indices is an array of integers labelling the collocation points chosen in each case, e.g.
-    # #      cpoints_indices={0,1,3,4,5} would mean that we are discarding the 3rd collocation points in the reconstructio */
+        Ab = self._get_int_augmented_matrix_no_mixing(
+            source_params.QNM_freqs_lm["33"], [0, 1, 2, 3, 5]
+        )
+        self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab)
 
-    # #     int cpoints_indices[nCollocationPts_inter];
-    # #     cpoints_indices[0]=0;
-    # #     cpoints_indices[1]=1;
-    # #     cpoints_indices[4]=5;
+    @ti.func
+    def _set_int_colloc_value_0(self, source_params: ti.template()):
+        self.int_colloc_values[0] = -source_params.peak_time_diff + (
+            4360.19
+            + 4.27128 / source_params.eta
+            - 8727.4 * source_params.eta
+            + 18485.9 * source_params.eta_pow2
+            + 371303.00000000006 * source_params.eta_pow3
+            - 3.22792e6 * source_params.eta_pow4
+            + 1.01799e7 * source_params.eta_pow5
+            - 1.15659e7 * source_params.eta_pow6
+            + (
+                (
+                    11.6635
+                    - 251.579 * source_params.eta
+                    - 3255.6400000000003 * source_params.eta_pow2
+                    + 19614.6 * source_params.eta_pow3
+                    - 34860.2 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat
+                + (
+                    14.8017
+                    + 204.025 * source_params.eta
+                    - 5421.92 * source_params.eta_pow2
+                    + 36587.3 * source_params.eta_pow3
+                    - 74299.5 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat_pow2
+            )
+            / source_params.eta
+            + source_params.eta
+            * (
+                223.65100000000004
+                * source_params.chi_1
+                * source_params.delta
+                * (3.9201300240106223 + 1.0 * source_params.eta)
+                - 223.65100000000004
+                * source_params.chi_2
+                * source_params.delta
+                * (3.9201300240106223 + 1.0 * source_params.eta)
+            )
+        )
 
-    # # if((pWF22->eta<pWFHM->etaEMR)||(emm==ell&&pWF22->STotR>=0.8)||(pWFHM->modeTag==33&&pWF22->STotR<0))
-    # # {
-    # #     cpoints_indices[2]=3;
-    # #     cpoints_indices[3]=4;
-    # # }
-    # # else if(pWF22->STotR>=0.8&&pWFHM->modeTag==21){
+    @ti.func
+    def _set_int_colloc_value_1(self, source_params: ti.template()):
+        self.int_colloc_values[1] = -source_params.peak_time_diff + (
+            (
+                3797.06
+                + 0.786684 / source_params.eta
+                - 2397.09 * source_params.eta
+                - 25514.0 * source_params.eta_pow2
+                + 518314.99999999994 * source_params.eta_pow3
+                - 3.41708e6 * source_params.eta_pow4
+                + 1.01799e7 * source_params.eta_pow5
+                - 1.15659e7 * source_params.eta_pow6
+            )
+            + (
+                (
+                    6.7812399999999995
+                    + 39.4668 * source_params.eta
+                    - 3520.37 * source_params.eta_pow2
+                    + 19614.6 * source_params.eta_pow3
+                    - 34860.2 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat
+                + (
+                    4.80384
+                    + 293.215 * source_params.eta
+                    - 5914.61 * source_params.eta_pow2
+                    + 36587.3 * source_params.eta_pow3
+                    - 74299.5 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat_pow2
+            )
+            / source_params.eta
+            - 223.65100000000004
+            * source_params.delta
+            * source_params.eta
+            * (
+                source_params.chi_1 * (-1.3095134830606614 - source_params.eta)
+                + source_params.chi_2 * (1.3095134830606614 + source_params.eta)
+            )
+        )
 
-    # #     cpoints_indices[2]=2;
-    # #     cpoints_indices[3]=4;
-    # # }
+    @ti.func
+    def _set_int_colloc_value_2(self, source_params: ti.template()):
+        self.int_colloc_values[2] = -source_params.peak_time_diff + (
+            3321.83
+            + 1796.03 * source_params.eta
+            - 52406.1 * source_params.eta_pow2
+            + 605028.0 * source_params.eta_pow3
+            - 3.52532e6 * source_params.eta_pow4
+            + 1.01799e7 * source_params.eta_pow5
+            - 1.15659e7 * source_params.eta_pow6
+            + (
+                223.601
+                - 3714.77 * source_params.eta
+                + 19614.6 * source_params.eta_pow2
+                - 34860.2 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat
+            + (
+                314.317
+                - 5906.46 * source_params.eta
+                + 36587.3 * source_params.eta_pow2
+                - 74299.5 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow2
+            + 223.651
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
 
-    # # else{
-    # #     cpoints_indices[2]=2;
-    # #     cpoints_indices[3]=3;
-    # # }
+    @ti.func
+    def _set_int_colloc_value_3(self, source_params: ti.template()):
+        self.int_colloc_values[3] = -source_params.peak_time_diff + (
+            3239.44
+            - 661.15 * source_params.eta
+            + 5139.79 * source_params.eta_pow2
+            + 3456.2 * source_params.eta_pow3
+            - 248477.0 * source_params.eta_pow4
+            + 1.17255e6 * source_params.eta_pow5
+            - 1.70363e6 * source_params.eta_pow6
+            + (
+                225.859
+                - 4150.09 * source_params.eta
+                + 24364.0 * source_params.eta_pow2
+                - 46537.3 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat
+            + (
+                35.2439
+                - 994.971 * source_params.eta
+                + 8953.98 * source_params.eta_pow2
+                - 23603.5 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow2
+            + (
+                -310.489
+                + 5946.15 * source_params.eta
+                - 35337.1 * source_params.eta_pow2
+                + 67102.4 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow3
+            + 30.484
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
+
+    @ti.func
+    def _set_int_colloc_value_4(self, source_params: ti.template()):
+        self.int_colloc_values[4] = -source_params.peak_time_diff + (
+            3114.3
+            + 2143.06 * source_params.eta
+            - 49428.3 * source_params.eta_pow2
+            + 563997.0 * source_params.eta_pow3
+            - 3.35991e6 * source_params.eta_pow4
+            + 9.99745e6 * source_params.eta_pow5
+            - 1.17123e7 * source_params.eta_pow6
+            + (
+                190.051
+                - 3705.08 * source_params.eta
+                + 23046.2 * source_params.eta_pow2
+                - 46537.3 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat
+            + (
+                63.6615
+                - 1414.2 * source_params.eta
+                + 10166.1 * source_params.eta_pow2
+                - 23603.5 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow2
+            + (
+                -257.524
+                + 5179.97 * source_params.eta
+                - 33001.4 * source_params.eta_pow2
+                + 67102.4 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow3
+            + 54.9833
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
+
+    @ti.func
+    def _set_int_colloc_value_5(self, source_params: ti.template()):
+        self.int_colloc_values[5] = -source_params.peak_time_diff + (
+            3111.46
+            + 384.121 * source_params.eta
+            - 13003.6 * source_params.eta_pow2
+            + 179537.0 * source_params.eta_pow3
+            - 1.19313e6 * source_params.eta_pow4
+            + 3.79886e6 * source_params.eta_pow5
+            - 4.64858e6 * source_params.eta_pow6
+            + (
+                182.864
+                - 3834.22 * source_params.eta
+                + 24532.9 * source_params.eta_pow2
+                - 50165.9 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat
+            + (
+                21.0158
+                - 746.957 * source_params.eta
+                + 6701.33 * source_params.eta_pow2
+                - 17842.3 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow2
+            + (
+                -292.855
+                + 5886.62 * source_params.eta
+                - 37382.4 * source_params.eta_pow2
+                + 75501.8 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow3
+            + 75.5162
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
 
     @ti.func
     def update_phase_coefficients(
         self,
+        pn_coefficients_22: ti.template(),
+        pn_coefficients_33: ti.template(),
         phase_coefficients_22: ti.template(),
         source_params: ti.template(),
     ):
+        # intermediate
+        self._set_colloc_points_no_mixing(
+            source_params.f_MECO_lm["33"],
+            source_params.QNM_freqs_lm["33"],
+            source_params,
+        )
+        self._set_intermediate_coefficients(source_params)
+        # inspiral
         self._set_ins_rescaling_coefficients(3.0, phase_coefficients_22)
-
-    # @ti.func
-    # def phase_inspiral_ansatz(self):
-    #     pass
-
-    # @ti.func
-    # def phase_intermediate_ansatz(self):
-    #     pass
-
-    # @ti.func
-    # def phase_merge_ringdown_ansatz(self):
-    #     pass
+        if source_params.eta > 0.01:
+            self.Lambda_lm = self._Lambda_33_PN()
+        else:
+            self.Lambda_lm = self._Lambda_33_fit(source_params)
+        # merge-ringdown
+        self._set_MRD_rescaling_coefficients(
+            2.0, source_params.QNM_freqs_lm["33"], source_params
+        )
+        # continuous conditions
+        self._set_connection_coefficients(
+            source_params.QNM_freqs_lm["33"], pn_coefficients_33
+        )
+        # the constant phase for aligning modes
+        self._set_delta_phi_lm(
+            3.0,
+            source_params.f_MECO_lm["33"],
+            pn_coefficients_22,
+            pn_coefficients_33,
+            phase_coefficients_22,
+            source_params,
+        )
 
 
 @sub_struct_from(PhaseCoefficientsHighModesBase)
@@ -5347,7 +5384,7 @@ class PhaseCoefficientsMode32:
 
     # @ti.func
     # def _set_intermediate_coefficients(self, source_params: ti.template()):
-    #     self.int_colloc_values[0] = source_params.dt_psi4_to_strain + (
+    #     self.int_colloc_values[0] = -source_params.peak_time_diff + (
     #         4414.11
     #         + 4.21564 / source_params.eta
     #         - 10687.8 * source_params.eta
@@ -5395,7 +5432,7 @@ class PhaseCoefficientsMode32:
     #             + source_params.chi_2 * (-6.227738120444028 + 1.0 * source_params.eta)
     #         )
     #     )
-    #     self.int_colloc_values[1] = source_params.dt_psi4_to_strain + (
+    #     self.int_colloc_values[1] = -source_params.peak_time_diff + (
     #         3980.7
     #         + 0.956703 / source_params.eta
     #         - 6202.38 * source_params.eta
@@ -5443,7 +5480,7 @@ class PhaseCoefficientsMode32:
     #             + source_params.chi_2 * (-2.5769789177580837 + 1.0 * source_params.eta)
     #         )
     #     )
-    #     self.int_colloc_values[2] = source_params.dt_psi4_to_strain + (
+    #     self.int_colloc_values[2] = -source_params.peak_time_diff + (
     #         3416.57
     #         + 2308.63 * source_params.eta
     #         - 84042.9 * source_params.eta_pow2
@@ -5479,7 +5516,7 @@ class PhaseCoefficientsMode32:
     #         * source_params.delta
     #         * source_params.eta_pow2
     #     )
-    #     self.int_colloc_values[3] = source_params.dt_psi4_to_strain + (
+    #     self.int_colloc_values[3] = -source_params.peak_time_diff + (
     #         3307.49
     #         - 476.909 * source_params.eta
     #         - 5980.37 * source_params.eta_pow2
@@ -5508,7 +5545,7 @@ class PhaseCoefficientsMode32:
     #         * source_params.delta
     #         * source_params.eta_pow2
     #     )
-    #     self.int_colloc_values[4] = source_params.dt_psi4_to_strain + (
+    #     self.int_colloc_values[4] = -source_params.peak_time_diff + (
     #         3259.03
     #         - 3967.58 * source_params.eta
     #         + 111203.0 * source_params.eta_pow2
@@ -5534,7 +5571,7 @@ class PhaseCoefficientsMode32:
     #         * source_params.delta
     #         * source_params.eta_pow2
     #     )
-    #     self.int_colloc_values[5] = source_params.dt_psi4_to_strain + (
+    #     self.int_colloc_values[5] = -source_params.peak_time_diff + (
     #         3259.03
     #         - 3967.58 * source_params.eta
     #         + 111203.0 * source_params.eta_pow2
@@ -5571,378 +5608,361 @@ class PhaseCoefficientsMode32:
 
 @sub_struct_from(PhaseCoefficientsHighModesBase)
 class PhaseCoefficientsMode44:
-    # # Inspiral
-    # Lambda_PN: ti.f64  # corrections for the complex PN amplitudes, eq 4.9
-    # C1_ins: ti.f64
-    # C2_ins: ti.f64
-    # # Intermediate
-    # c_0: ti.f64
-    # c_1: ti.f64
-    # c_2: ti.f64
-    # c_3: ti.f64
-    # c_4: ti.f64
-    # c_L: ti.f64
-    # int_colloc_points: ti.types.vector(6, ti.f64)
-    # int_colloc_values: ti.types.vector(6, ti.f64)
 
-    # # Merge-ringdown
-    # alpha_2: ti.f64
-    # alpha_L: ti.f64
+    @ti.func
+    def _Lambda_44_PN(self, source_params: ti.template()) -> ti.f64:
+        return (
+            45045.0
+            * PI
+            * (
+                336.0
+                - 1193.0 * source_params.eta
+                + 320.0 * (-1.0 + 3.0 * source_params.eta) * tm.log(2.0)
+            )
+            / (2.0 * (1801800.0 - 5405400.0 * source_params.eta))
+        )
 
-    # @ti.func
-    # def _set_colloc_points(self, source_params: ti.template()):
-    #     # Intermediate
-    #     ins_f_end = (
-    #         1.0
-    #         + 0.001
-    #         * (0.25 / source_params.eta - 1.0)
-    #         * source_params.f_MECO
-    #         * emm
-    #         * 0.5
-    #     )
-    #     int_f_end = source_params.f_ring_21
-    #     self.int_colloc_points[0] = ins_f_end
-    #     self.int_colloc_points[1] = (
-    #         tm.sqrt(3.0) * (ins_f_end - int_f_end) + 2.0 * (ins_f_end + int_f_end)
-    #     ) / 4.0
-    #     self.int_colloc_points[2] = (3.0 * ins_f_end + int_f_end) / 4.0
-    #     self.int_colloc_points[3] = (ins_f_end + int_f_end) / 2.0
-    #     self.int_colloc_points[4] = (ins_f_end + 3.0 * int_f_end) / 4.0
-    #     self.int_colloc_points[5] = (ins_f_end + 7.0 * int_f_end) / 8.0
-    #     self.int_colloc_points[6] = int_f_end
+    @ti.func
+    def _Lambda_44_fit(self, source_params: ti.template()) -> ti.f64:
+        return (
+            5.254484747463392
+            - 21.277760168559862 * source_params.eta
+            + 160.43721442910618 * source_params.eta_pow2
+            - 1162.954360723399 * source_params.eta_pow3
+            + 1685.5912722190276 * source_params.eta_pow4
+            - 1538.6661348106031 * source_params.eta_pow5
+            + (
+                0.007067861615983771
+                - 10.945895160727437 * source_params.eta
+                + 246.8787141453734 * source_params.eta_pow2
+                - 810.7773268493444 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat
+            + (
+                0.17447830920234977
+                + 4.530539154777984 * source_params.eta
+                - 176.4987316167203 * source_params.eta_pow2
+                + 621.6920322846844 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow2
+            - 8.384066369867833
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
 
-    # @ti.func
-    # def _set_inspiral_coefficients(self, source_params: ti.template()):
-    #     if source_params.eta > 0.01:
-    #         self.Lambda_PN = (
-    #             45045.0
-    #             * PI
-    #             * (
-    #                 336.0
-    #                 - 1193.0 * source_params.eta
-    #                 + 320.0 * (-1.0 + 3.0 * source_params.eta) * tm.log(2.0)
-    #             )
-    #             / (2.0 * (1801800.0 - 5405400.0 * source_params.eta))
-    #         )
+    @ti.func
+    def _set_intermediate_coefficients(self, source_params: ti.template()):
+        """
+        Setting intermediate coefficients for mode 44.
+        For modes without significant mode-mixing, using 5 out of 6 collocation nodes determined according to spin and mass ratio, and setting c_3 = 0.
+        for situation with (eta < etaEMR) or (emm == ell and STotR >= 0.8) or (modeTag == 33 and STotR < 0), using collocation nodes: 0, 1, 3, 4, 5.
+        for situation with (STotR >= 0.8) and (modeTag == 21), using collocation nodes: 0, 1, 2, 4, 5.
+        for remaining parameter space, using collocation nodes: 0, 1, 2, 3, 5
+        """
+        self.c_3 = 0.0
 
-    #     else:
-    #         self.Lambda_PN = (
-    #             5.254484747463392
-    #             - 21.277760168559862 * source_params.eta
-    #             + 160.43721442910618 * source_params.eta_pow2
-    #             - 1162.954360723399 * source_params.eta_pow3
-    #             + 1685.5912722190276 * source_params.eta_pow4
-    #             - 1538.6661348106031 * source_params.eta_pow5
-    #             + (
-    #                 0.007067861615983771
-    #                 - 10.945895160727437 * source_params.eta
-    #                 + 246.8787141453734 * source_params.eta_pow2
-    #                 - 810.7773268493444 * source_params.eta_pow3
-    #             )
-    #             * source_params.S_tot_hat
-    #             + (
-    #                 0.17447830920234977
-    #                 + 4.530539154777984 * source_params.eta
-    #                 - 176.4987316167203 * source_params.eta_pow2
-    #                 + 621.6920322846844 * source_params.eta_pow3
-    #             )
-    #             * source_params.S_tot_hat_pow2
-    #             - 8.384066369867833
-    #             * source_params.delta_chi
-    #             * source_params.delta
-    #             * source_params.eta_pow2
-    #         )
+        self._set_int_colloc_value_0(source_params)
+        self._set_int_colloc_value_1(source_params)
+        self._set_int_colloc_value_5(source_params)
 
-    # @ti.func
-    # def _set_merge_ringdown_coefficients(self, source_params: ti.template()):
-    #     pass
+        # simplified the conditional structure in LALSimIMRPhenomXHM_internals.c l.2108 for modeTag=33
+        if (source_params.eta < eta_EMR) or (
+            source_params.S_tot_hat >= 0.8
+        ):  # using collocation nodes: 0, 1, 3, 4, 5
+            self._set_intermediate_coefficients_01345(source_params)
+        else:  # using collocation nodes: 0, 1, 2, 3, 5
+            self._set_intermediate_coefficients_01235(source_params)
 
-    # @ti.func
-    # def _set_intermediate_coefficients(self, source_params: ti.template()):
-    #     self.int_colloc_values[0] = source_params.dt_psi4_to_strain + (
-    #         4349.66
-    #         + 4.34125 / source_params.eta
-    #         - 8202.33 * source_params.eta
-    #         + 5534.1 * source_params.eta_pow2
-    #         + 536500.0 * source_params.eta_pow3
-    #         - 4.33197e6 * source_params.eta_pow4
-    #         + 1.37792e7 * source_params.eta_pow5
-    #         - 1.60802e7 * source_params.eta_pow6
-    #         + (
-    #             (
-    #                 12.0704
-    #                 - 528.098 * source_params.eta
-    #                 + 1822.9100000000003 * source_params.eta_pow2
-    #                 - 9349.73 * source_params.eta_pow3
-    #                 + 17900.9 * source_params.eta_pow4
-    #             )
-    #             * source_params.S_tot_hat
-    #             + (
-    #                 10.4092
-    #                 + 253.334 * source_params.eta
-    #                 - 5452.04 * source_params.eta_pow2
-    #                 + 35416.6 * source_params.eta_pow3
-    #                 - 71523.0 * source_params.eta_pow4
-    #             )
-    #             * source_params.S_tot_hat_pow2
-    #             + source_params.eta
-    #             * (
-    #                 492.60300000000007
-    #                 - 9508.5 * source_params.eta
-    #                 + 57303.4 * source_params.eta_pow2
-    #                 - 109418.0 * source_params.eta_pow3
-    #             )
-    #             * source_params.S_tot_hat_pow3
-    #         )
-    #         / source_params.eta
-    #         - 262.143
-    #         * source_params.delta
-    #         * source_params.eta
-    #         * (
-    #             source_params.chi_1 * (-3.0782778864970646 - 1.0 * source_params.eta)
-    #             + source_params.chi_2 * (3.0782778864970646 + 1.0 * source_params.eta)
-    #         )
-    #     )
-    #     self.int_colloc_values[1] = source_params.dt_psi4_to_strain + (
-    #         3804.19
-    #         + 0.66144 / source_params.eta
-    #         - 2421.77 * source_params.eta
-    #         - 33475.8 * source_params.eta_pow2
-    #         + 665951.0 * source_params.eta_pow3
-    #         - 4.50145e6 * source_params.eta_pow4
-    #         + 1.37792e7 * source_params.eta_pow5
-    #         - 1.60802e7 * source_params.eta_pow6
-    #         + (
-    #             (
-    #                 5.83038
-    #                 - 172.047 * source_params.eta
-    #                 + 926.576 * source_params.eta_pow2
-    #                 - 7676.87 * source_params.eta_pow3
-    #                 + 17900.9 * source_params.eta_pow4
-    #             )
-    #             * source_params.S_tot_hat
-    #             + (
-    #                 6.17601
-    #                 + 253.334 * source_params.eta
-    #                 - 5672.02 * source_params.eta_pow2
-    #                 + 35722.1 * source_params.eta_pow3
-    #                 - 71523.0 * source_params.eta_pow4
-    #             )
-    #             * source_params.S_tot_hat_pow2
-    #             + source_params.eta
-    #             * (
-    #                 492.60300000000007
-    #                 - 9508.5 * source_params.eta
-    #                 + 57303.4 * source_params.eta_pow2
-    #                 - 109418.0 * source_params.eta_pow3
-    #             )
-    #             * source_params.S_tot_hat_pow3
-    #         )
-    #         / source_params.eta
-    #         - 262.143
-    #         * source_params.delta
-    #         * source_params.eta
-    #         * (
-    #             source_params.chi_1 * (-1.0543062374352932 - 1.0 * source_params.eta)
-    #             + source_params.chi_2 * (1.0543062374352932 + 1.0 * source_params.eta)
-    #         )
-    #     )
-    #     self.int_colloc_values[2] = source_params.dt_psi4_to_strain + (
-    #         3308.97
-    #         + 2353.58 * source_params.eta
-    #         - 66340.1 * source_params.eta_pow2
-    #         + 777272.0 * source_params.eta_pow3
-    #         - 4.64438e6 * source_params.eta_pow4
-    #         + 1.37792e7 * source_params.eta_pow5
-    #         - 1.60802e7 * source_params.eta_pow6
-    #         + (
-    #             -21.5697
-    #             + 926.576 * source_params.eta
-    #             - 7989.26 * source_params.eta_pow2
-    #             + 17900.9 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat
-    #         + (
-    #             353.539
-    #             - 6403.24 * source_params.eta
-    #             + 37599.5 * source_params.eta_pow2
-    #             - 71523.0 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow2
-    #         + (
-    #             492.603
-    #             - 9508.5 * source_params.eta
-    #             + 57303.4 * source_params.eta_pow2
-    #             - 109418.0 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow3
-    #         + 262.143
-    #         * source_params.delta_chi
-    #         * source_params.delta
-    #         * source_params.eta_pow2
-    #     )
-    #     self.int_colloc_values[3] = source_params.dt_psi4_to_strain + (
-    #         3245.63
-    #         - 928.56 * source_params.eta
-    #         + 8463.89 * source_params.eta_pow2
-    #         - 17422.6 * source_params.eta_pow3
-    #         - 165169.0 * source_params.eta_pow4
-    #         + 908279.0 * source_params.eta_pow5
-    #         - 1.31138e6 * source_params.eta_pow6
-    #         + (
-    #             32.506
-    #             - 590.293 * source_params.eta
-    #             + 3536.61 * source_params.eta_pow2
-    #             - 6758.52 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat
-    #         + (
-    #             -25.7716
-    #             + 738.141 * source_params.eta
-    #             - 4867.87 * source_params.eta_pow2
-    #             + 9129.45 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow2
-    #         + (
-    #             -15.7439
-    #             + 620.695 * source_params.eta
-    #             - 4679.24 * source_params.eta_pow2
-    #             + 9582.58 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow3
-    #         + 87.0832
-    #         * source_params.delta_chi
-    #         * source_params.delta
-    #         * source_params.eta_pow2
-    #     )
-    #     self.int_colloc_values[4] = source_params.dt_psi4_to_strain + (
-    #         3108.38
-    #         + 3722.46 * source_params.eta
-    #         - 119588.0 * source_params.eta_pow2
-    #         + 1.92148e6 * source_params.eta_pow3
-    #         - 1.69796e7 * source_params.eta_pow4
-    #         + 8.39194e7 * source_params.eta_pow5
-    #         - 2.17143e8 * source_params.eta_pow6
-    #         + 2.2829700000000003e8 * source_params.eta_pow7
-    #         + (118.319 - 529.854 * source_params.eta)
-    #         * source_params.eta
-    #         * source_params.S_tot_hat
-    #         + (21.0314 - 240.648 * source_params.eta + 516.333 * source_params.eta_pow2)
-    #         * source_params.S_tot_hat_pow2
-    #         + (20.3384 - 356.241 * source_params.eta + 999.417 * source_params.eta_pow2)
-    #         * source_params.S_tot_hat_pow3
-    #         + 97.1364
-    #         * source_params.delta_chi
-    #         * source_params.delta
-    #         * source_params.eta_pow2
-    #     )
-    #     self.int_colloc_values[5] = source_params.dt_psi4_to_strain + (
-    #         3096.03
-    #         + 986.752 * source_params.eta
-    #         - 20371.1 * source_params.eta_pow2
-    #         + 220332.0 * source_params.eta_pow3
-    #         - 1.31523e6 * source_params.eta_pow4
-    #         + 4.29193e6 * source_params.eta_pow5
-    #         - 6.01179e6 * source_params.eta_pow6
-    #         + (
-    #             -9.96292
-    #             - 118.526 * source_params.eta
-    #             + 2255.76 * source_params.eta_pow2
-    #             - 6758.52 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat
-    #         + (
-    #             -14.4869
-    #             + 370.039 * source_params.eta
-    #             - 3605.8 * source_params.eta_pow2
-    #             + 9129.45 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow2
-    #         + (
-    #             17.0209
-    #             + 70.1931 * source_params.eta
-    #             - 3070.08 * source_params.eta_pow2
-    #             + 9582.58 * source_params.eta_pow3
-    #         )
-    #         * source_params.S_tot_hat_pow3
-    #         + 23.0759
-    #         * source_params.delta_chi
-    #         * source_params.delta
-    #         * source_params.eta_pow2
-    #     )
+    @ti.func
+    def _set_intermediate_coefficients_01345(self, source_params: ti.template()):
+        self.int_colloc_values[2] = 0.0
+        self._set_int_colloc_value_3(source_params)
+        self._set_int_colloc_value_4(source_params)
 
-    # def _set_intermediate_coefficients_case_1(self, source_params: ti.template()):
-    #     """
-    #     using collocation points: 0, 1, 3, 4, 5
-    #     for situation with (eta < etaEMR) or (emm == ell and STotR >= 0.8) or (modeTag == 33 and STotR < 0)
-    #     """
-    #     pass
+        Ab = self._get_int_augmented_matrix_no_mixing(
+            source_params.QNM_freqs_lm["44"], [0, 1, 3, 4, 5]
+        )
+        self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab)
 
-    # def _set_intermediate_coefficients_case_2(self, source_params: ti.template()):
-    #     """
-    #     using collocation points: 0, 1, 2, 4, 5
-    #     for situation with (STotR >= 0.8) and (modeTag == 21)"""
-    #     pass
+    @ti.func
+    def _set_intermediate_coefficients_01235(self, source_params: ti.template()):
+        self.int_colloc_values[4] = 0.0
+        self._set_int_colloc_value_2(source_params)
+        self._set_int_colloc_value_3(source_params)
 
-    # def _set_intermediate_coefficients_case_3(self, source_params: ti.template()):
-    #     """
-    #     using collocation points: 0, 1, 2, 3, 5
-    #     remaining parameter space
-    #     """
-    #     pass
+        Ab = self._get_int_augmented_matrix_no_mixing(
+            source_params.QNM_freqs_lm["44"], [0, 1, 2, 3, 5]
+        )
+        self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = gauss_elimination(Ab)
 
-    # def _set_intermediate_coefficients(self, source_params: ti.template()):
-    #     # simplify the conditional structure in LALSimIMRPhenomXHM_internals.c l.2108 for modeTag=44
-    #     if (source_params.eta < eta_EMR) or (source_params.S_tot_hat >= 0.8):
-    #         self._set_intermediate_coefficients_case_1(source_params)
-    #     else:
-    #         self._set_intermediate_coefficients_case_3(source_params)
+    @ti.func
+    def _set_int_colloc_value_0(self, source_params: ti.template()):
+        self.int_colloc_values[0] = -source_params.peak_time_diff + (
+            4349.66
+            + 4.34125 / source_params.eta
+            - 8202.33 * source_params.eta
+            + 5534.1 * source_params.eta_pow2
+            + 536500.0 * source_params.eta_pow3
+            - 4.33197e6 * source_params.eta_pow4
+            + 1.37792e7 * source_params.eta_pow5
+            - 1.60802e7 * source_params.eta_pow6
+            + (
+                (
+                    12.0704
+                    - 528.098 * source_params.eta
+                    + 1822.9100000000003 * source_params.eta_pow2
+                    - 9349.73 * source_params.eta_pow3
+                    + 17900.9 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat
+                + (
+                    10.4092
+                    + 253.334 * source_params.eta
+                    - 5452.04 * source_params.eta_pow2
+                    + 35416.6 * source_params.eta_pow3
+                    - 71523.0 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat_pow2
+                + source_params.eta
+                * (
+                    492.60300000000007
+                    - 9508.5 * source_params.eta
+                    + 57303.4 * source_params.eta_pow2
+                    - 109418.0 * source_params.eta_pow3
+                )
+                * source_params.S_tot_hat_pow3
+            )
+            / source_params.eta
+            - 262.143
+            * source_params.delta
+            * source_params.eta
+            * (
+                source_params.chi_1 * (-3.0782778864970646 - 1.0 * source_params.eta)
+                + source_params.chi_2 * (3.0782778864970646 + 1.0 * source_params.eta)
+            )
+        )
 
-    # # // choose collocation points according to spin/mass ratio
-    # #     // current catalogue of simulations include some cases that create unphysical effects in the fits -> we need to use different subset of collocation points according to the parameters (we have to pick 5 out of 6 available fits)
-    # #     /* cpoints_indices is an array of integers labelling the collocation points chosen in each case, e.g.
-    # #      cpoints_indices={0,1,3,4,5} would mean that we are discarding the 3rd collocation points in the reconstructio */
+    @ti.func
+    def _set_int_colloc_value_1(self, source_params: ti.template()):
+        self.int_colloc_values[1] = -source_params.peak_time_diff + (
+            3804.19
+            + 0.66144 / source_params.eta
+            - 2421.77 * source_params.eta
+            - 33475.8 * source_params.eta_pow2
+            + 665951.0 * source_params.eta_pow3
+            - 4.50145e6 * source_params.eta_pow4
+            + 1.37792e7 * source_params.eta_pow5
+            - 1.60802e7 * source_params.eta_pow6
+            + (
+                (
+                    5.83038
+                    - 172.047 * source_params.eta
+                    + 926.576 * source_params.eta_pow2
+                    - 7676.87 * source_params.eta_pow3
+                    + 17900.9 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat
+                + (
+                    6.17601
+                    + 253.334 * source_params.eta
+                    - 5672.02 * source_params.eta_pow2
+                    + 35722.1 * source_params.eta_pow3
+                    - 71523.0 * source_params.eta_pow4
+                )
+                * source_params.S_tot_hat_pow2
+                + source_params.eta
+                * (
+                    492.60300000000007
+                    - 9508.5 * source_params.eta
+                    + 57303.4 * source_params.eta_pow2
+                    - 109418.0 * source_params.eta_pow3
+                )
+                * source_params.S_tot_hat_pow3
+            )
+            / source_params.eta
+            - 262.143
+            * source_params.delta
+            * source_params.eta
+            * (
+                source_params.chi_1 * (-1.0543062374352932 - 1.0 * source_params.eta)
+                + source_params.chi_2 * (1.0543062374352932 + 1.0 * source_params.eta)
+            )
+        )
 
-    # #     int cpoints_indices[nCollocationPts_inter];
-    # #     cpoints_indices[0]=0;
-    # #     cpoints_indices[1]=1;
-    # #     cpoints_indices[4]=5;
+    @ti.func
+    def _set_int_colloc_value_2(self, source_params: ti.template()):
+        self.int_colloc_values[2] = -source_params.peak_time_diff + (
+            3308.97
+            + 2353.58 * source_params.eta
+            - 66340.1 * source_params.eta_pow2
+            + 777272.0 * source_params.eta_pow3
+            - 4.64438e6 * source_params.eta_pow4
+            + 1.37792e7 * source_params.eta_pow5
+            - 1.60802e7 * source_params.eta_pow6
+            + (
+                -21.5697
+                + 926.576 * source_params.eta
+                - 7989.26 * source_params.eta_pow2
+                + 17900.9 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat
+            + (
+                353.539
+                - 6403.24 * source_params.eta
+                + 37599.5 * source_params.eta_pow2
+                - 71523.0 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow2
+            + (
+                492.603
+                - 9508.5 * source_params.eta
+                + 57303.4 * source_params.eta_pow2
+                - 109418.0 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow3
+            + 262.143
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
 
-    # # if((pWF22->eta<pWFHM->etaEMR)||(emm==ell&&pWF22->STotR>=0.8)||(pWFHM->modeTag==33&&pWF22->STotR<0))
-    # # {
-    # #     cpoints_indices[2]=3;
-    # #     cpoints_indices[3]=4;
-    # # }
-    # # else if(pWF22->STotR>=0.8&&pWFHM->modeTag==21){
+    @ti.func
+    def _set_int_colloc_value_3(self, source_params: ti.template()):
+        self.int_colloc_values[3] = -source_params.peak_time_diff + (
+            3245.63
+            - 928.56 * source_params.eta
+            + 8463.89 * source_params.eta_pow2
+            - 17422.6 * source_params.eta_pow3
+            - 165169.0 * source_params.eta_pow4
+            + 908279.0 * source_params.eta_pow5
+            - 1.31138e6 * source_params.eta_pow6
+            + (
+                32.506
+                - 590.293 * source_params.eta
+                + 3536.61 * source_params.eta_pow2
+                - 6758.52 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat
+            + (
+                -25.7716
+                + 738.141 * source_params.eta
+                - 4867.87 * source_params.eta_pow2
+                + 9129.45 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow2
+            + (
+                -15.7439
+                + 620.695 * source_params.eta
+                - 4679.24 * source_params.eta_pow2
+                + 9582.58 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow3
+            + 87.0832
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
 
-    # #     cpoints_indices[2]=2;
-    # #     cpoints_indices[3]=4;
-    # # }
+    @ti.func
+    def _set_int_colloc_value_4(self, source_params: ti.template()):
+        self.int_colloc_values[4] = -source_params.peak_time_diff + (
+            3108.38
+            + 3722.46 * source_params.eta
+            - 119588.0 * source_params.eta_pow2
+            + 1.92148e6 * source_params.eta_pow3
+            - 1.69796e7 * source_params.eta_pow4
+            + 8.39194e7 * source_params.eta_pow5
+            - 2.17143e8 * source_params.eta_pow6
+            + 2.2829700000000003e8 * source_params.eta_pow7
+            + (118.319 - 529.854 * source_params.eta)
+            * source_params.eta
+            * source_params.S_tot_hat
+            + (21.0314 - 240.648 * source_params.eta + 516.333 * source_params.eta_pow2)
+            * source_params.S_tot_hat_pow2
+            + (20.3384 - 356.241 * source_params.eta + 999.417 * source_params.eta_pow2)
+            * source_params.S_tot_hat_pow3
+            + 97.1364
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
 
-    # # else{
-    # #     cpoints_indices[2]=2;
-    # #     cpoints_indices[3]=3;
-    # # }
+    @ti.func
+    def _set_int_colloc_value_5(self, source_params: ti.template()):
+        self.int_colloc_values[5] = -source_params.peak_time_diff + (
+            3096.03
+            + 986.752 * source_params.eta
+            - 20371.1 * source_params.eta_pow2
+            + 220332.0 * source_params.eta_pow3
+            - 1.31523e6 * source_params.eta_pow4
+            + 4.29193e6 * source_params.eta_pow5
+            - 6.01179e6 * source_params.eta_pow6
+            + (
+                -9.96292
+                - 118.526 * source_params.eta
+                + 2255.76 * source_params.eta_pow2
+                - 6758.52 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat
+            + (
+                -14.4869
+                + 370.039 * source_params.eta
+                - 3605.8 * source_params.eta_pow2
+                + 9129.45 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow2
+            + (
+                17.0209
+                + 70.1931 * source_params.eta
+                - 3070.08 * source_params.eta_pow2
+                + 9582.58 * source_params.eta_pow3
+            )
+            * source_params.S_tot_hat_pow3
+            + 23.0759
+            * source_params.delta_chi
+            * source_params.delta
+            * source_params.eta_pow2
+        )
 
     @ti.func
     def update_phase_coefficients(
         self,
+        pn_coefficients_22: ti.template(),
+        pn_coefficients_44: ti.template(),
         phase_coefficients_22: ti.template(),
         source_params: ti.template(),
     ):
+        # intermediate
+        self._set_colloc_points_no_mixing(
+            source_params.f_MECO_lm["44"],
+            source_params.QNM_freqs_lm["44"],
+            source_params,
+        )
+        self._set_intermediate_coefficients(source_params)
+        # inspiral
         self._set_ins_rescaling_coefficients(4.0, phase_coefficients_22)
-
-    # @ti.func
-    # def phase_inspiral_ansatz(self):
-    #     pass
-
-    # @ti.func
-    # def phase_intermediate_ansatz(self):
-    #     pass
-
-    # @ti.func
-    # def phase_merge_ringdown_ansatz(self):
-    #     pass
+        if source_params.eta > 0.01:
+            self.Lambda_lm = self._Lambda_44_PN(source_params)
+        else:
+            self.Lambda_lm = self._Lambda_44_fit(source_params)
+        # merge-ringdown
+        self._set_MRD_rescaling_coefficients(
+            2.0, source_params.QNM_freqs_lm["44"], source_params
+        )
+        # continuous conditions
+        self._set_connection_coefficients(
+            source_params.QNM_freqs_lm["44"], pn_coefficients_44
+        )
+        # the constant phase for aligning modes
+        self._set_delta_phi_lm(
+            4.0,
+            source_params.f_MECO_lm["44"],
+            pn_coefficients_22,
+            pn_coefficients_44,
+            phase_coefficients_22,
+            source_params,
+        )
 
 
 @ti.data_oriented

@@ -826,7 +826,8 @@ class AmplitudeCoefficients:
                     4.0 * self.int_colloc_points[2] ** 3,
                     self.int_colloc_values[4],
                 ],
-            ]
+            ],
+            dt=ti.f64,
         )
         (
             self.alpha_0,
@@ -1471,7 +1472,8 @@ class PhaseCoefficients:
                     ),
                     self.MRD_colloc_values[4],
                 ],
-            ]
+            ],
+            dt=ti.f64,
         )
         self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = (
             gauss_elimination(Ab_MRD) / source_params.eta
@@ -1677,7 +1679,8 @@ class PhaseCoefficients:
                     self.ins_colloc_points[3],
                     self.ins_colloc_values[3],
                 ],
-            ]
+            ],
+            dt=ti.f64,
         )
         # absorbing common factor into the pseudo PN parameters
         # note the normalizing factor used in lalsim: dphase0=(5/128/pi^(5/3))
@@ -1688,7 +1691,7 @@ class PhaseCoefficients:
 
     @ti.func
     def _set_intermediate_coefficients(
-        self, source_params: ti.template(), pn_coefficients: ti.template()
+        self, pn_coefficients: ti.template(), source_params: ti.template()
     ):
         """
         Require inspiral and merge-ringdown coefficients, can only be called after updating
@@ -1986,7 +1989,8 @@ class PhaseCoefficients:
                         )
                     ),
                 ],
-            ]
+            ],
+            dt=ti.f64,
         )
 
         (
@@ -2004,7 +2008,7 @@ class PhaseCoefficients:
 
     @ti.func
     def _set_connection_coefficients(
-        self, source_params: ti.template(), pn_coefficients: ti.template()
+        self, pn_coefficients: ti.template(), source_params: ti.template()
     ):
         """
         Since the fmax_ins and fmin_MRD are not same with fmin_int and fmax_int, addition
@@ -2233,8 +2237,8 @@ class PhaseCoefficients:
         self._set_all_colloc_points(source_params)
         self._set_merge_ringdown_coefficients(source_params)
         self._set_inspiral_coefficients(source_params)
-        self._set_intermediate_coefficients(source_params, pn_coefficients)
-        self._set_connection_coefficients(source_params, pn_coefficients)
+        self._set_intermediate_coefficients(pn_coefficients, source_params)
+        self._set_connection_coefficients(pn_coefficients, source_params)
         self._set_time_and_phase_shift(pn_coefficients, source_params)
 
     @ti.func

@@ -29,8 +29,6 @@ class PostNewtonianCoefficients:
     phi_8: ti.f64
     phi_8l: ti.f64
     # amplitude coeffients
-    # TODO: using amp_global and dimension_factor and corporate with Ylm constant factor
-    amp_global: ti.f64
     A_0: ti.f64
     A_1: ti.f64
     A_2: ti.f64
@@ -197,8 +195,7 @@ class PostNewtonianCoefficients:
         )
         self.phi_8l = -self.phi_8
         # Amplitude
-        # (equatoins in PhenomD paper have some difference with PhenomX paper in A5 and A6, using equations in PhenomX paper here.)
-        self.amp_global = 1.0  # TODO
+        # (TODO: equatoins in PhenomD paper have some difference with PhenomX paper in A5 and A6, using equations in PhenomX paper here.)
         self.A_0 = 1.0
         self.A_1 = 0.0
         self.A_2 = (
@@ -279,7 +276,7 @@ class PostNewtonianCoefficients:
     @ti.func
     def PN_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
         """ """
-        return self.amp_global * (
+        return (
             self.A_0
             + self.A_1 * powers_of_Mf.third
             + self.A_2 * powers_of_Mf.two_thirds
@@ -292,7 +289,7 @@ class PostNewtonianCoefficients:
     @ti.func
     def PN_d_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
         """ """
-        return self.amp_global * (
+        return (
             1.0 / 3.0 * self.A_1 / powers_of_Mf.two_thirds
             + 2.0 / 3.0 * self.A_2 / powers_of_Mf.third
             + self.A_3

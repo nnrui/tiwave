@@ -1,3 +1,7 @@
+# TODO:
+# - improve amplitude merge-ringdown coefficients
+
+
 import taichi as ti
 import taichi.math as tm
 
@@ -8,7 +12,7 @@ from .base_waveform import BaseWaveform
 
 
 # Constants
-PHENOMX_HIGH_FREQUENCY_CUT = 0.3
+PHENOMXAS_HIGH_FREQUENCY_CUT = 0.3
 sqrt2 = tm.sqrt(2)
 useful_powers_pi = UsefulPowers()
 useful_powers_pi.update(PI)
@@ -2012,7 +2016,7 @@ class PhaseCoefficients:
     ):
         """
         Since the fmax_ins and fmin_MRD are not same with fmin_int and fmax_int, addition
-        connection coefficients are required to keep C0 and C1 continuous condition.
+        connection coefficients are required to keep C0 and C1 continuity condition.
         .. math::
         \begin{aligned}
             \phi_{\mathrm{ins}}(f_{\mathrm{join}}) &= \phi_{\mathrm{int}}(f_{\mathrm{join}}) + C_0 + C_1 f_{\mathrm{join}}, \\
@@ -2329,14 +2333,14 @@ class IMRPhenomXAS(BaseWaveform):
         self,
         frequencies,
         reference_frequency=None,
-        returned_form="polarizations",
+        return_form="polarizations",
         include_tf=True,
         check_parameters=False,
     ) -> None:
         super().__init__(
             frequencies,
             reference_frequency,
-            returned_form,
+            return_form,
             include_tf,
             check_parameters,
         )
@@ -2362,22 +2366,13 @@ class IMRPhenomXAS(BaseWaveform):
         )
 
     @ti.func
-    def _get_polarizations_from_amplitude_phase(
-        self,
-        amplitude: ti.f64,
-        phase: ti.f64,
-    ) -> tuple[ComplexNumber, ComplexNumber]:
-        common = 0.25 * tm.sqrt(5.0 / PI)
+    def _set_harmonic_factors(self, harmonic_factors: ti.template()):
+        common = 0.125 * tm.sqrt(5.0 / PI)
         cos_iota = tm.cos(self.source_parameters[None].iota)
-        h22 = amplitude * tm.cexp(ComplexNumber([0.0, 1.0] * phase))
-
-        c_fac = cos_iota
-        p_fac = 0.5 * (1.0 + cos_iota**2)
-
-        cross = tm.cmul(ComplexNumber([0.0, 1.0]), common * c_fac * h22)
-        plus = -common * p_fac * h22
-
-        return cross, plus
+        harmonic_factors.plus = (
+            -ComplexNumber([1.0, 0.0]) * common * (1.0 + cos_iota * cos_iota)
+        )
+        harmonic_factors.cross = ComplexNumber([0.0, 1.0]) * common * (2 * cos_iota)
 
     @ti.kernel
     def _update_waveform_kernel(
@@ -2410,11 +2405,17 @@ class IMRPhenomXAS(BaseWaveform):
             self.pn_coefficients[None], self.source_parameters[None]
         )
 
+        harm_fac = ti.Struct(
+            plus=ComplexNumber([0.0, 0.0]), cross=ComplexNumber([0.0, 0.0])
+        )
+        if ti.static(self.return_form == "polarizations"):
+            self._set_harmonic_factors(harm_fac)
+
         # main loop for building the waveform, auto-parallelized.
         powers_of_Mf = UsefulPowers()
         for idx in self.frequencies:
             Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
-            if Mf < PHENOMX_HIGH_FREQUENCY_CUT:
+            if Mf < PHENOMXAS_HIGH_FREQUENCY_CUT:
                 powers_of_Mf.update(Mf)
                 amplitude = self.amplitude_coefficients[None].compute_amplitude(
                     self.pn_coefficients[None],
@@ -2427,14 +2428,13 @@ class IMRPhenomXAS(BaseWaveform):
                     powers_of_Mf,
                 )
 
-                if ti.static(self.returned_form == "amplitude_phase"):
+                if ti.static(self.return_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = amplitude
                     self.waveform_container[idx].phase = phase
-                if ti.static(self.returned_form == "polarizations"):
-                    (
-                        self.waveform_container[idx].hcross,
-                        self.waveform_container[idx].hplus,
-                    ) = self._get_polarizations_from_amplitude_phase(amplitude, phase)
+                if ti.static(self.return_form == "polarizations"):
+                    h_22 = amplitude * tm.cexp(ComplexNumber([0.0, phase]))
+                    self.waveform_container[idx].plus = tm.cmul(harm_fac.plus, h_22)
+                    self.waveform_container[idx].cross = tm.cmul(harm_fac.cross, h_22)
                 if ti.static(self.include_tf):
                     tf = self.phase_coefficients[None].compute_d_phase(
                         self.pn_coefficients[None],
@@ -2444,12 +2444,12 @@ class IMRPhenomXAS(BaseWaveform):
                     tf *= self.source_parameters[None].M_sec / PI / 2  # to second
                     self.waveform_container[idx].tf = tf
             else:
-                if ti.static(self.returned_form == "amplitude_phase"):
+                if ti.static(self.return_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = 0.0
                     self.waveform_container[idx].phase = 0.0
-                if ti.static(self.returned_form == "polarizations"):
-                    self.waveform_container[idx].hcross.fill(0.0)
-                    self.waveform_container[idx].hplus.fill(0.0)
+                if ti.static(self.return_form == "polarizations"):
+                    self.waveform_container[idx].plus.fill(0.0)
+                    self.waveform_container[idx].cross.fill(0.0)
                 if ti.static(self.include_tf):
                     self.waveform_container[idx].tf = 0.0
 

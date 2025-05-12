@@ -5,17 +5,17 @@
 # - check unwrap operation in PhaseCoefficientsMode32._set_intermediate_coefficients
 # - fix high numerical error for intermediate phase of mode 32
 
-import warnings
 from typing import Optional
+import copy
 
 import taichi as ti
 import taichi.math as tm
 
 from ..constants import *
 from ..utils import ComplexNumber, gauss_elimination, UsefulPowers, sub_struct_from
-from .common import PostNewtonianCoefficients
+from .common import PostNewtonianCoefficients as PostNewtonianCoefficientsMode22
 from .base_waveform import BaseWaveform
-from .IMRPhenomXAS import IMRPhenomXAS
+from .IMRPhenomXAS import PHENOMXAS_HIGH_FREQUENCY_CUT
 from .IMRPhenomXAS import SourceParameters as SourceParametersMode22
 from .IMRPhenomXAS import PhaseCoefficients as PhaseCoefficientsMode22
 from .IMRPhenomXAS import AmplitudeCoefficients as AmplitudeCoefficientsMode22
@@ -40,7 +40,7 @@ QNM_frequencies_struct = ti.types.struct(
 )
 
 
-@sub_struct_from(PostNewtonianCoefficients)
+@sub_struct_from(PostNewtonianCoefficientsMode22)
 class PostNewtonianCoefficientsHighModesBase:
 
     # amplitude coeffients
@@ -454,7 +454,7 @@ class AmplitudeCoefficientsHighModesBase:
         ret = 0.0
         for i in ti.static(range(self.int_ansatz_coeffs.n)):
             ret += self.int_ansatz_coeffs[i] * fpower
-            fpower *= powers_of_Mf.ones
+            fpower *= powers_of_Mf.one
         return ret
 
     @ti.func
@@ -492,7 +492,6 @@ class AmplitudeCoefficientsHighModesBase:
         self,
         QNM_freqs_lm: ti.template(),
         pn_coefficients_lm: ti.template(),
-        source_params: ti.template(),
         powers_of_Mf: ti.template(),
     ) -> ti.f64:
         amplitude = 0.0
@@ -507,7 +506,7 @@ class AmplitudeCoefficientsHighModesBase:
         else:
             amplitude = self._intermediate_amplitude(powers_of_Mf)
 
-        return source_params.dimension_factor * amplitude
+        return amplitude
 
 
 @ti.dataclass
@@ -898,7 +897,7 @@ class PhaseCoefficientsHighModesBase:
                 + self.ins_C1 * powers_of_Mf.one
             )
         elif powers_of_Mf.one > self.int_f_end:
-            phase(
+            phase = (
                 self._merge_ringdown_phase(QNM_freqs_lm, powers_of_Mf)
                 + self.MRD_C0
                 + self.MRD_C1 * powers_of_Mf.one
@@ -1166,7 +1165,7 @@ class SourceParametersHighModes:
 
 
 @ti.dataclass
-class MergeRingdownMode32:
+class SpheroidalMergeRingdownMode32:
     # for amplitude ansatz of spheroidal
     amp_aux_coeffs: ti.types.vector(4, dtype=ti.f64)
     gamma_1: ti.f64  # in lalsim: RDCoefficient[0] * f_damp
@@ -1284,21 +1283,21 @@ class MergeRingdownMode32:
     ) -> ComplexNumber:
         amp = self._spheroidal_amplitude(QNM_freqs_32.f_ring, powers_of_Mf.one)
         phi = self._spheroidal_phase(QNM_freqs_32, powers_of_Mf)
-        return amp * tm.cexp(ComplexNumber([0.0, 1.0]) * phi)
+        return amp * tm.cexp(ComplexNumber([0.0, phi]))
 
     @ti.func
     def spherical_h32(
         self,
-        h22: ti.template(),
+        h_22: ti.template(),
         QNM_freqs_32: ti.template(),
         powers_of_Mf: ti.template(),
     ) -> ComplexNumber:
         """
-        The passed-in h22 has incorporated the common constant factor and f^(-7/6) factor,
+        The passed-in h_22 has incorporated the common constant factor and f^(-7/6) factor,
         but does not include the dimension factor.
         """
-        h32 = self._spheroidal_h32(QNM_freqs_32, powers_of_Mf)
-        return tm.cmul(self.a_322, h22) + tm.cmul(self.a_332, h32)
+        h_32 = self._spheroidal_h32(QNM_freqs_32, powers_of_Mf)
+        return tm.cmul(self.a_322, h_22) + tm.cmul(self.a_332, h_32)
 
     @ti.func
     def update_amplitude_coefficients(self, source_params: ti.template()):
@@ -3894,25 +3893,22 @@ class AmplitudeCoefficientsMode32:
     ]
 
     @ti.func
-    def _set_joint_frequencies(
-        self,
-        m: ti.f64,
-        f_MECO_lm: ti.f64,
-        source_params: ti.template(),
-    ):
+    def _set_joint_frequencies_mode_32(self, source_params: ti.template()):
         # joint between inspiral and intermediate
-        self.ins_f_end = self._get_ins_f_end(m, f_MECO_lm, source_params)
+        self.ins_f_end = self._get_ins_f_end(
+            2.0, source_params.f_MECO_lm["32"], source_params
+        )
         # joint between intermediate and merge-ringdown
         self.int_f_end = source_params.f_ring - 0.5 * source_params.f_damp
 
     @ti.func
     def _set_intermediate_coefficients(
         self,
-        pn_coefficients_22: ti.template(),
         pn_coefficients_32: ti.template(),
+        spheroidal_merge_ringdown_32: ti.template(),
+        pn_coefficients_22: ti.template(),
         amplitude_coefficients_22: ti.template(),
         phase_coefficients_22: ti.template(),
-        spheroidal_merge_ringdown_32: ti.template(),
         source_params: ti.template(),
     ):
         """
@@ -3943,10 +3939,10 @@ class AmplitudeCoefficientsMode32:
         int_colloc_values[4] = self._int_fit_v4(source_params)
         # right boundary
         int_colloc_values[5] = self._merge_ringdown_amplitude(
+            spheroidal_merge_ringdown_32,
             pn_coefficients_22,
             amplitude_coefficients_22,
             phase_coefficients_22,
-            spheroidal_merge_ringdown_32,
             source_params,
             powers_int_f5,
         )
@@ -3956,15 +3952,13 @@ class AmplitudeCoefficientsMode32:
         )
         # derivative at the right boundary
         int_colloc_values[7] = self._merge_ringdown_d_amplitude(
+            spheroidal_merge_ringdown_32,
             pn_coefficients_22,
             amplitude_coefficients_22,
             phase_coefficients_22,
-            spheroidal_merge_ringdown_32,
             source_params,
-            powers_int_f5,
+            powers_int_f5.one,
         )
-        print(int_colloc_points)
-        print(int_colloc_values)
 
         # set the augmented matrix
         Ab = ti.Matrix([[0.0] * 9 for _ in range(8)], dt=ti.f64)
@@ -4000,10 +3994,10 @@ class AmplitudeCoefficientsMode32:
     @ti.func
     def _merge_ringdown_amplitude(
         self,
+        spheroidal_merge_ringdown_32: ti.template(),
         pn_coefficients_22: ti.template(),
         amplitude_coefficients_22: ti.template(),
         phase_coefficients_22: ti.template(),
-        spheroidal_merge_ringdown_32: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
     ) -> ti.f64:
@@ -4017,36 +4011,21 @@ class AmplitudeCoefficientsMode32:
         phi_22 = phase_coefficients_22.compute_phase(
             pn_coefficients_22, source_params, powers_of_Mf
         )
-        h22 = amp_22 * tm.cexp(ComplexNumber([0.0, 1.0]) * phi_22)
-        return self._merge_ringdown_amplitude_core(
-            h22,
-            spheroidal_merge_ringdown_32,
-            source_params.QNM_freqs_lm["32"],
-            powers_of_Mf,
+        h_22 = amp_22 * tm.cexp(ComplexNumber([0.0, phi_22]))
+        h_32 = spheroidal_merge_ringdown_32.spherical_h32(
+            h_22, source_params.QNM_freqs_lm["32"], powers_of_Mf
         )
-
-    @ti.func
-    def _merge_ringdown_amplitude_core(
-        self,
-        h22: ti.template(),
-        spheroidal_merge_ringdown_32: ti.template(),
-        QNM_freqs_32: ti.template(),
-        powers_of_Mf: ti.template(),
-    ) -> ti.f64:
-        h32 = spheroidal_merge_ringdown_32.spherical_h32(
-            h22, QNM_freqs_32, powers_of_Mf
-        )
-        return tm.length(h32)
+        return tm.length(h_32)
 
     @ti.func
     def _merge_ringdown_d_amplitude(
         self,
+        spheroidal_merge_ringdown_32: ti.template(),
         pn_coefficients_22: ti.template(),
         amplitude_coefficients_22: ti.template(),
         phase_coefficients_22: ti.template(),
-        spheroidal_merge_ringdown_32: ti.template(),
         source_params: ti.template(),
-        powers_of_Mf: ti.template(),
+        Mf: ti.template(),
     ) -> ti.f64:
 
         powers_Mf_left2 = UsefulPowers()
@@ -4055,40 +4034,40 @@ class AmplitudeCoefficientsMode32:
         powers_Mf_right2 = UsefulPowers()
 
         step = 1e-9
-        powers_Mf_left2.update(powers_of_Mf.one - 2.0 * step)
-        powers_Mf_left.update(powers_of_Mf.one - step)
-        powers_Mf_right.update(powers_of_Mf.one + step)
-        powers_Mf_right2.update(powers_of_Mf.one + 2.0 * step)
+        powers_Mf_left2.update(Mf - 2.0 * step)
+        powers_Mf_left.update(Mf - step)
+        powers_Mf_right.update(Mf + step)
+        powers_Mf_right2.update(Mf + 2.0 * step)
 
         amp_left2 = self._merge_ringdown_amplitude(
+            spheroidal_merge_ringdown_32,
             pn_coefficients_22,
             amplitude_coefficients_22,
             phase_coefficients_22,
-            spheroidal_merge_ringdown_32,
             source_params,
             powers_Mf_left2,
         )
         amp_left = self._merge_ringdown_amplitude(
+            spheroidal_merge_ringdown_32,
             pn_coefficients_22,
             amplitude_coefficients_22,
             phase_coefficients_22,
-            spheroidal_merge_ringdown_32,
             source_params,
             powers_Mf_left,
         )
         amp_right = self._merge_ringdown_amplitude(
+            spheroidal_merge_ringdown_32,
             pn_coefficients_22,
             amplitude_coefficients_22,
             phase_coefficients_22,
-            spheroidal_merge_ringdown_32,
             source_params,
             powers_Mf_right,
         )
         amp_right2 = self._merge_ringdown_amplitude(
+            spheroidal_merge_ringdown_32,
             pn_coefficients_22,
             amplitude_coefficients_22,
             phase_coefficients_22,
-            spheroidal_merge_ringdown_32,
             source_params,
             powers_Mf_right2,
         )
@@ -4523,30 +4502,49 @@ class AmplitudeCoefficientsMode32:
     @ti.func
     def update_amplitude_coefficients(
         self,
-        pn_coefficients_22: ti.template(),
         pn_coefficients_32: ti.template(),
-        amplitude_coefficients_22,
-        phase_coefficients_22,
         spheroidal_merge_ringdown_32: ti.template(),
+        pn_coefficients_22: ti.template(),
+        amplitude_coefficients_22: ti.template(),
+        phase_coefficients_22: ti.template(),
         source_params: ti.template(),
     ):
         self.common_factor = tm.sqrt(
             2.0 * source_params.eta / 3.0 / useful_powers_pi.third
         )
-        self._set_joint_frequencies(
-            2.0,
-            source_params.f_MECO_lm["32"],
-            source_params,
-        )
+        self._set_joint_frequencies_mode_32(source_params)
         self._set_inspiral_coefficients(pn_coefficients_32, source_params)
         self._set_intermediate_coefficients(
-            pn_coefficients_22,
             pn_coefficients_32,
+            spheroidal_merge_ringdown_32,
+            pn_coefficients_22,
             amplitude_coefficients_22,
             phase_coefficients_22,
-            spheroidal_merge_ringdown_32,
             source_params,
         )
+
+    @ti.func
+    def compute_amplitude(
+        self,
+        h_22: ti.template(),
+        pn_coefficients_32: ti.template(),
+        spheroidal_merge_ringdown_32: ti.template(),
+        QNM_freqs_32: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        amplitude = 0.0
+
+        if powers_of_Mf.one < self.ins_f_end:
+            amplitude = self._inspiral_amplitude(pn_coefficients_32, powers_of_Mf)
+        elif powers_of_Mf.one > self.int_f_end:
+            h_32 = spheroidal_merge_ringdown_32.spherical_h32(
+                h_22, QNM_freqs_32, powers_of_Mf
+            )
+            amplitude = tm.length(h_32)
+        else:
+            amplitude = self._intermediate_amplitude(powers_of_Mf)
+
+        return amplitude
 
 
 @sub_struct_from(AmplitudeCoefficientsHighModesBase)
@@ -6030,10 +6028,10 @@ class PhaseCoefficientsMode32:
     @ti.func
     def _set_intermediate_coefficients(
         self,
+        spheroidal_merge_ringdown_32: ti.template(),
         pn_coefficients_22: ti.template(),
         amplitude_coefficients_22: ti.template(),
         phase_coefficients_22: ti.template(),
-        spheroidal_merge_ringdown_32: ti.template(),
         source_params: ti.template(),
     ):
         """
@@ -6050,21 +6048,12 @@ class PhaseCoefficientsMode32:
         for i in ti.static(range(3)):
             fi = self.int_f_end + (i - 1) * step
             powers_fi.update(fi)
-            amp_22 = (
-                amplitude_coefficients_22._merge_ringdown_amplitude(
-                    source_params, powers_fi
-                )
-                / powers_fi.seven_sixths
-                * amplitude_coefficients_22.common_factor
-            )
-            phi_22 = phase_coefficients_22.compute_phase(
-                pn_coefficients_22, source_params, powers_fi
-            )
-            h22 = amp_22 * tm.cexp(ComplexNumber([0.0, 1.0]) * phi_22)
             phi_i = self._merge_ringdown_phase(
-                h22,
                 spheroidal_merge_ringdown_32,
-                source_params.QNM_freqs_lm["32"],
+                pn_coefficients_22,
+                amplitude_coefficients_22,
+                phase_coefficients_22,
+                source_params,
                 powers_fi,
             )
             # make sure that all the three points belong to the same branch
@@ -6369,34 +6358,89 @@ class PhaseCoefficientsMode32:
     @ti.func
     def _merge_ringdown_phase(
         self,
-        h22: ti.template(),
         spheroidal_merge_ringdown_32: ti.template(),
-        QNM_freqs_32: ti.template(),
+        pn_coefficients_22: ti.template(),
+        amplitude_coefficients_22: ti.template(),
+        phase_coefficients_22: ti.template(),
+        source_params: ti.template(),
         powers_of_Mf: ti.template(),
     ) -> ti.f64:
-        h32 = spheroidal_merge_ringdown_32.spherical_h32(
-            h22, QNM_freqs_32, powers_of_Mf
+        amp_22 = (
+            amplitude_coefficients_22._merge_ringdown_amplitude(
+                source_params, powers_of_Mf
+            )
+            / powers_of_Mf.seven_sixths
+            * amplitude_coefficients_22.common_factor
         )
-        return tm.atan2(h32[1], h32[0])  # [-pi, pi]
+        phi_22 = phase_coefficients_22.compute_phase(
+            pn_coefficients_22, source_params, powers_of_Mf
+        )
+        h_22 = amp_22 * tm.cexp(ComplexNumber([0.0, phi_22]))
+        h_32 = spheroidal_merge_ringdown_32.spherical_h32(
+            h_22, source_params.QNM_freqs_lm["32"], powers_of_Mf
+        )
+        return tm.atan2(h_32[1], h_32[0])  # [-pi, pi]
+
+    @ti.func
+    def _merge_ringdown_d_phase(
+        self,
+        spheroidal_merge_ringdown_32: ti.template(),
+        pn_coefficients_22: ti.template(),
+        amplitude_coefficients_22: ti.template(),
+        phase_coefficients_22: ti.template(),
+        source_params: ti.template(),
+        Mf: ti.template(),
+    ) -> ti.f64:
+        step = 1e-7
+        powers_Mf_left = UsefulPowers()
+        powers_Mf_left.update(Mf - step)
+        powers_Mf_right = UsefulPowers()
+        powers_Mf_right.update(Mf + step)
+
+        phi_left = self._merge_ringdown_phase(
+            spheroidal_merge_ringdown_32,
+            pn_coefficients_22,
+            amplitude_coefficients_22,
+            phase_coefficients_22,
+            source_params,
+            powers_Mf_left,
+        )
+        phi_right = self._merge_ringdown_phase(
+            spheroidal_merge_ringdown_32,
+            pn_coefficients_22,
+            amplitude_coefficients_22,
+            phase_coefficients_22,
+            source_params,
+            powers_Mf_right,
+        )
+        # make sure that all the three points belong to the same branch
+        # TODO is this really work?? if three phi across 0, blow operation cannot make them in the same branch
+        # consider using function like np.unwrap??
+        if phi_left > 0.0:
+            phi_left -= 2.0 * PI
+        if phi_right > 0.0:
+            phi_right -= 2.0 * PI
+
+        return 0.5 * (phi_right - phi_left) / step
 
     @ti.func
     def update_phase_coefficients(
         self,
-        pn_coefficients_22: ti.template(),
         pn_coefficients_32: ti.template(),
+        spheroidal_merge_ringdown_32: ti.template(),
+        pn_coefficients_22: ti.template(),
         amplitude_coefficients_22: ti.template(),
         phase_coefficients_22: ti.template(),
-        spheroidal_merge_ringdown_32: ti.template(),
         source_params: ti.template(),
     ):
         self._set_joint_frequencies_mode_32(source_params)
         # intermediate
         self._set_int_colloc_points_mode_32(source_params)
         self._set_intermediate_coefficients(
+            spheroidal_merge_ringdown_32,
             pn_coefficients_22,
             amplitude_coefficients_22,
             phase_coefficients_22,
-            spheroidal_merge_ringdown_32,
             source_params,
         )
         # inspiral
@@ -6418,6 +6462,70 @@ class PhaseCoefficientsMode32:
             phase_coefficients_22,
             source_params,
         )
+
+    @ti.func
+    def compute_phase(
+        self,
+        h_22: ti.template(),
+        pn_coefficients_32: ti.template(),
+        spheroidal_merge_ringdown_32: ti.template(),
+        QNM_freqs_32: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        # Note the time-shift for making the peak around t=0 has been incorporated in the construction of intermediate phase, here only the constants delta_phi_lm for aligning different modes are needed. And thus the continuity condition parameters needs to be added in the inspiral and merge-ringdown phase.
+        phase = 0.0
+        if powers_of_Mf.one < self.ins_f_end:
+            phase = (
+                self._inspiral_phase(pn_coefficients_32, powers_of_Mf)
+                + self.ins_C0
+                + self.ins_C1 * powers_of_Mf.one
+            )
+        elif powers_of_Mf.one > self.int_f_end:
+            h_32 = spheroidal_merge_ringdown_32.spherical_h32(
+                h_22, QNM_freqs_32, powers_of_Mf
+            )
+            phase = (
+                tm.atan2(h_32[1], h_32[0])  # [-pi, pi]
+                + self.MRD_C0
+                + self.MRD_C1 * powers_of_Mf.one
+            )
+        else:
+            phase = self._intermediate_phase(QNM_freqs_32, powers_of_Mf)
+        return phase + self.delta_phi_lm
+
+    @ti.func
+    def compute_d_phase(
+        self,
+        pn_coefficients_32: ti.template(),
+        spheroidal_merge_ringdown_32: ti.template(),
+        pn_coefficients_22: ti.template(),
+        amplitude_coefficients_22: ti.template(),
+        phase_coefficients_22: ti.template(),
+        source_params: ti.template(),
+        powers_of_Mf: ti.template(),
+    ) -> ti.f64:
+        d_phase = 0.0
+        if powers_of_Mf.one < self.ins_f_end:
+            d_phase = (
+                self._inspiral_d_phase(pn_coefficients_32, powers_of_Mf) + self.ins_C1
+            )
+        elif powers_of_Mf.one > self.int_f_end:
+            d_phase = (
+                self._merge_ringdown_d_phase(
+                    spheroidal_merge_ringdown_32,
+                    pn_coefficients_22,
+                    amplitude_coefficients_22,
+                    phase_coefficients_22,
+                    source_params,
+                    powers_of_Mf.one,
+                )
+                + self.MRD_C1
+            )
+        else:
+            d_phase = self._intermediate_d_phase(
+                source_params.QNM_freqs_lm["32"], powers_of_Mf
+            )
+        return d_phase
 
 
 @sub_struct_from(PhaseCoefficientsHighModesBase)
@@ -6780,63 +6888,137 @@ class PhaseCoefficientsMode44:
         )
 
 
+pn_coefficients_struct = {
+    "22": PostNewtonianCoefficientsMode22,
+    "21": PostNewtonianCoefficientsMode21,
+    "33": PostNewtonianCoefficientsMode33,
+    "32": PostNewtonianCoefficientsMode32,
+    "44": PostNewtonianCoefficientsMode44,
+}
+amplitude_coefficients_struct = {
+    "22": AmplitudeCoefficientsMode22,
+    "21": AmplitudeCoefficientsMode21,
+    "33": AmplitudeCoefficientsMode33,
+    "32": AmplitudeCoefficientsMode32,
+    "44": AmplitudeCoefficientsMode44,
+}
+phase_coefficients_struct = {
+    "22": PhaseCoefficientsMode22,
+    "21": PhaseCoefficientsMode21,
+    "33": PhaseCoefficientsMode33,
+    "32": PhaseCoefficientsMode32,
+    "44": PhaseCoefficientsMode44,
+}
+
+
 @ti.data_oriented
 class IMRPhenomXHM(BaseWaveform):
     """
-    only default configuration is implemented, except the multibanding threshold which is not implemented now.
+    only default configuration is implemented, except the multibanding threshold which is not supported now.
 
-    The referenced lalsutie version is the commit 9a106f0966b3683a25fbd7d5b22a6d7bea98b4b3
+    The referenced lalsutie version is the commit 9a106f0
 
-    The waveform computed here corresponds to the waveform given by lalsimulation with the configuration of
-    /* IMRPhenomXHM Parameters */
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMReleaseVersion, INT4, "PhenomXHMReleaseVersion", 122022)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMInspiralPhaseVersion, INT4, "InsPhaseHMVersion", 122019)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMIntermediatePhaseVersion, INT4, "IntPhaseHMVersion", 122019)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMRingdownPhaseVersion, INT4, "RDPhaseHMVersion", 122019)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMInspiralAmpVersion, INT4, "InsAmpHMVersion", 3)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMIntermediateAmpVersion, INT4, "IntAmpHMVersion", 2)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMRingdownAmpVersion, INT4, "RDAmpHMVersion", 0)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMInspiralAmpFitsVersion, INT4, "InsAmpFitsVersion", 122018)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMIntermediateAmpFitsVersion, INT4, "IntAmpFitsVersion", 122018)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMRingdownAmpFitsVersion, INT4, "RDAmpFitsVersion", 122018)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMInspiralAmpFreqsVersion, INT4, "InsAmpFreqsVersion", 122018)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMIntermediateAmpFreqsVersion, INT4, "IntAmpFreqsVersion", 122018)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMRingdownAmpFreqsVersion, INT4, "RDAmpFreqsVersion", 122018)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMPhaseRef21, REAL8, "PhaseRef21", 0.)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMThresholdMband, REAL8, "ThresholdMband", 0.001)
-    DEFINE_ISDEFAULT_FUNC(PhenomXHMAmpInterpolMB, INT4, "AmpInterpol", 1)
-    DEFINE_ISDEFAULT_FUNC(DOmega220, REAL8, "domega220", 0)
-    DEFINE_ISDEFAULT_FUNC(DTau220, REAL8, "dtau220", 0)
-    DEFINE_ISDEFAULT_FUNC(DOmega210, REAL8, "domega210", 0)
-    DEFINE_ISDEFAULT_FUNC(DTau210, REAL8, "dtau210", 0)
-    DEFINE_ISDEFAULT_FUNC(DOmega330, REAL8, "domega330", 0)
-    DEFINE_ISDEFAULT_FUNC(DTau330, REAL8, "dtau330", 0)
-    DEFINE_ISDEFAULT_FUNC(DOmega440, REAL8, "domega440", 0)
-    DEFINE_ISDEFAULT_FUNC(DTau440, REAL8, "dtau440", 0)
-    DEFINE_ISDEFAULT_FUNC(DOmega550, REAL8, "domega550", 0)
-    DEFINE_ISDEFAULT_FUNC(DTau550, REAL8, "dtau550", 0)
+    We use AOS for the memory layout of waveform container, low performance if convert it to np.array
+
+    TODO: performance enhancement for np.array output
     """
 
     def __init__(
         self,
         frequencies: ti.ScalarField,
-        waveform_container: Optional[ti.StructField] = None,
         reference_frequency: Optional[float] = None,
-        returned_form: str = "polarizations",
+        return_form: str = "polarizations",
         include_tf: bool = True,
-        modes: list[str] = ["22", "21", "33", "32", "44"],
+        high_modes: tuple[str] = ("21", "33", "32", "44"),
         combine_modes: bool = False,
-        parameter_check: bool = False,
+        check_parameters: bool = False,
     ) -> None:
         """ """
+        # TODO: throw warning if including 32 modes and require phase or tf
+        self.high_modes = tuple(high_modes)
+        self.combine_modes = bool(combine_modes)
+        super().__init__(
+            frequencies,
+            reference_frequency,
+            return_form,
+            include_tf,
+            check_parameters,
+        )
+
+        self.source_parameters = SourceParametersHighModes.field(shape=())
+        self.pn_coefficients = ti.Struct.field(
+            {mode: pn_coefficients_struct[mode] for mode in ("22", *self.high_modes)},
+            shape=(),
+        )
+        self.amplitude_coefficients = ti.Struct.field(
+            {
+                mode: amplitude_coefficients_struct[mode]
+                for mode in ("22", *self.high_modes)
+            },
+            shape=(),
+        )
+        self.phase_coefficients = ti.Struct.field(
+            {
+                mode: phase_coefficients_struct[mode]
+                for mode in ("22", *self.high_modes)
+            },
+            shape=(),
+        )
+
+        if "32" in self.high_modes:
+            self._spheroidal_MRD_32 = SpheroidalMergeRingdownMode32.field(shape=())
+        else:
+            self._spheroidal_MRD_32 = None
+
+        if self.return_form == "polarizations":
+            self._harmonic_factors = ti.Struct.field(
+                {
+                    mode: ti.types.struct(plus=ComplexNumber, cross=ComplexNumber)
+                    for mode in ("22", *self.high_modes)
+                },
+                shape=(),
+            )
+        else:
+            self._harmonic_factors = None
+
+        return None
+
+    def _initialize_waveform_container(self) -> None:
+        ret_content = {}
+        if self.return_form == "amplitude_phase":
+            ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
+        elif self.return_form == "polarizations":
+            ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
+        else:
+            raise Exception(
+                f"{self.return_form} is unknown. `return_form` can only be one of `polarizations` and `amplitude_phase`"
+            )
+        if self.include_tf:
+            ret_content.update({"tf": ti.f64})
+        ret_struct = ti.types.struct(**ret_content)
+
+        # containing 22 mode at least
+        modes_content = dict.fromkeys(("22", *self.high_modes), ret_struct)
+        # if combined modes is required, only polarizations are given
+        if self.combine_modes:
+            modes_content["combined"] = ti.types.struct(
+                plus=ComplexNumber,
+                cross=ComplexNumber,
+            )
+
+        # Using a AoS layout here, put the loop for modes into the inner layer
+        self.waveform_container = ti.Struct.field(
+            modes_content, shape=self.frequencies.shape, layout=ti.Layout.AOS
+        )
+
+        return None
 
     def update_waveform(self, parameters: dict[str, float]):
         """
         necessary preparation which need to be finished in python scope for waveform computation
-        (this function may be awkward, since no interpolation function in taichi-lang)
         """
         # TODO: passed-in parameter conversion
-        self._update_waveform_kernel(
+        self._update_waveform_common(
             parameters["mass_1"],
             parameters["mass_2"],
             parameters["chi_1"],
@@ -6844,11 +7026,17 @@ class IMRPhenomXHM(BaseWaveform):
             parameters["luminosity_distance"],
             parameters["inclination"],
             parameters["reference_phase"],
-            parameters["coalescence_time"],
         )
+        if (
+            parameters["mass_1"] == parameters["mass_2"]
+            and parameters["chi_1"] == parameters["chi_2"]
+        ):
+            self._update_waveform_symmetry_binary()
+        else:
+            self._update_waveform_general_binary()
 
     @ti.kernel
-    def _update_waveform_kernel(
+    def _update_waveform_common(
         self,
         mass_1: ti.f64,
         mass_2: ti.f64,
@@ -6857,14 +7045,377 @@ class IMRPhenomXHM(BaseWaveform):
         luminosity_distance: ti.f64,
         inclination: ti.f64,
         reference_phase: ti.f64,
-        coalescence_time: ti.f64,
     ):
-        # # zero for odd modes (21, 33) with equal black holes
-        # if (mass_1 == mass_2) and (chi_1 == chi_2):
-        #     return 0.0
+        self.source_parameters[None].update_source_parameters(
+            mass_1,
+            mass_2,
+            chi_1,
+            chi_2,
+            luminosity_distance,
+            inclination,
+            reference_phase,
+            self.reference_frequency,
+            self.high_modes,
+        )
+
+        self.pn_coefficients[None]["22"].update_pn_coefficients(
+            self.source_parameters[None]
+        )
+        self.amplitude_coefficients[None]["22"].update_amplitude_coefficients(
+            self.pn_coefficients[None]["22"],
+            self.source_parameters[None],
+        )
+        self.phase_coefficients[None]["22"].update_phase_coefficients(
+            self.pn_coefficients[None]["22"],
+            self.source_parameters[None],
+        )
+
+        if ti.static(self.return_form == "polarizations"):
+            self._set_harmonic_factors()
+
+    @ti.kernel
+    def _update_waveform_symmetry_binary(self):
+        """
+        similar to _update_waveform_symmetry_binary(), but skip odd modes (21, 33) for
+        equal black holes.
+        """
         pass
 
+    @ti.kernel
+    def _update_waveform_general_binary(self):
+        # update ansatz coefficients
+        for mode in ti.static(self.high_modes):
+            self.pn_coefficients[None][mode].update_pn_coefficients(
+                self.pn_coefficients[None]["22"],
+                self.source_parameters[None],
+            )
+            if ti.static(mode == "32"):
+                self._spheroidal_MRD_32[None].update_all_coefficients(
+                    self.pn_coefficients[None]["22"],
+                    self.phase_coefficients[None]["22"],
+                    self.source_parameters[None],
+                )
+                self.phase_coefficients[None]["32"].update_phase_coefficients(
+                    self.pn_coefficients[None]["32"],
+                    self._spheroidal_MRD_32[None],
+                    self.pn_coefficients[None]["22"],
+                    self.amplitude_coefficients[None]["22"],
+                    self.phase_coefficients[None]["22"],
+                    self.source_parameters[None],
+                )
+                self.amplitude_coefficients[None]["32"].update_amplitude_coefficients(
+                    self.pn_coefficients[None]["32"],
+                    self._spheroidal_MRD_32[None],
+                    self.pn_coefficients[None]["22"],
+                    self.amplitude_coefficients[None]["22"],
+                    self.phase_coefficients[None]["22"],
+                    self.source_parameters[None],
+                )
+            else:
+                self.phase_coefficients[None][mode].update_phase_coefficients(
+                    self.pn_coefficients[None]["22"],
+                    self.pn_coefficients[None][mode],
+                    self.phase_coefficients[None]["22"],
+                    self.source_parameters[None],
+                )
+                self.amplitude_coefficients[None][mode].update_amplitude_coefficients(
+                    self.pn_coefficients[None][mode],
+                    self.source_parameters[None],
+                )
+
+        # The end of the waveform is defined as 0.3. while if the effective spin is very
+        # high, the ringdown of 44 mode is almost cut out at 0.3, so increasing to 0.33.
+        f_max = 0.0
+        if self.source_parameters[None].chi_eff > 0.99:
+            f_max = 0.33
+        else:
+            f_max = PHENOMXAS_HIGH_FREQUENCY_CUT
+
+        # main loop for building the waveform, auto-parallelized.
+        powers_of_Mf = UsefulPowers()
+        for idx in self.waveform_container:
+            Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
+            if Mf < f_max:
+                powers_of_Mf.update(Mf)
+                # compute mode 22
+                amp_22 = self.amplitude_coefficients[None]["22"].compute_amplitude(
+                    self.pn_coefficients[None]["22"],
+                    self.source_parameters[None],
+                    powers_of_Mf,
+                )
+                phi_22 = self.phase_coefficients[None]["22"].compute_phase(
+                    self.pn_coefficients[None]["22"],
+                    self.source_parameters[None],
+                    powers_of_Mf,
+                )
+                # h22 without dimension_factor
+                h22_dimless = amp_22 * tm.cexp(ComplexNumber([0.0, phi_22]))
+                if ti.static(self.return_form == "amplitude_phase"):
+                    self.waveform_container[idx]["22"]["amplitude"] = (
+                        self.source_parameters[None].dimension_factor * amp_22
+                    )
+                    self.waveform_container[idx]["22"]["phase"] = phi_22
+                if ti.static(self.return_form == "polarizations"):
+                    h_22 = self.source_parameters[None].dimension_factor * h22_dimless
+                    self.waveform_container[idx]["22"]["plus"] = tm.cmul(
+                        self._harmonic_factors[None]["22"].plus, h_22
+                    )
+                    self.waveform_container[idx]["22"]["cross"] = tm.cmul(
+                        self._harmonic_factors[None]["22"].cross, h_22
+                    )
+                if ti.static(self.include_tf):
+                    tf_22 = self.phase_coefficients[None]["22"].compute_d_phase(
+                        self.pn_coefficients[None]["22"],
+                        self.source_parameters[None],
+                        powers_of_Mf,
+                    )
+                    tf_22 *= self.source_parameters[None].M_sec / PI / 2  # to second
+                    self.waveform_container[idx]["22"]["tf"] = tf_22
+                # compute high modes
+                for mode in ti.static(self.high_modes):
+                    if ti.static(mode == "32"):
+                        # For merge-ringdown of mode 32, polarizations can be directly
+                        # obtained, but note that the int_f_end of amplitude and phase
+                        # are different for EMR with negative spin. In such case, amplitude
+                        # and phase have to be computed.
+                        if (
+                            self.phase_coefficients[None]["32"].int_f_end
+                            == self.amplitude_coefficients[None]["32"].int_f_end
+                        ) and (Mf > self.phase_coefficients[None]["32"].int_f_end):
+                            h_32 = self._spheroidal_MRD_32[None].spherical_h32(
+                                h22_dimless,
+                                self.source_parameters[None]["QNM_freqs_lm"]["32"],
+                                powers_of_Mf,
+                            )
+                            delta_phi = (
+                                self.phase_coefficients[None]["32"]["delta_phi_lm"]
+                                + self.phase_coefficients[None]["32"]["MRD_C0"]
+                                + self.phase_coefficients[None]["32"]["MRD_C1"] * Mf
+                            )
+                            h_32 = tm.cmul(
+                                tm.cexp(ComplexNumber([0.0, delta_phi])), h_32
+                            )
+                            h_32 *= self.source_parameters[None].dimension_factor
+                            if ti.static(self.return_form == "amplitude_phase"):
+                                amp_32 = tm.length(h_32)
+                                phi_32 = tm.atan2(h_32[1], h_32[0])
+                                self.waveform_container[idx]["32"]["amplitude"] = amp_32
+                                self.waveform_container[idx]["32"]["phase"] = phi_32
+                            if ti.static(self.return_form == "polarizations"):
+                                self.waveform_container[idx]["32"]["plus"] = tm.cmul(
+                                    self._harmonic_factors[None]["32"].plus, h_32
+                                )
+                                self.waveform_container[idx]["32"]["cross"] = tm.cmul(
+                                    self._harmonic_factors[None]["32"].cross, h_32
+                                )
+                        else:
+                            amp_32 = self.amplitude_coefficients[None][
+                                "32"
+                            ].compute_amplitude(
+                                h22_dimless,
+                                self.pn_coefficients[None]["32"],
+                                self._spheroidal_MRD_32[None],
+                                self.source_parameters[None],
+                                powers_of_Mf,
+                            )
+                            amp_32 *= self.source_parameters[None].dimension_factor
+                            phi_32 = self.phase_coefficients[None]["32"].compute_phase(
+                                h22_dimless,
+                                self.pn_coefficients[None]["32"],
+                                self._spheroidal_MRD_32[None],
+                                self.source_parameters[None]["QNM_freqs_lm"]["32"],
+                                powers_of_Mf,
+                            )
+                            if ti.static(self.return_form == "amplitude_phase"):
+                                self.waveform_container[idx]["32"]["amplitude"] = amp_32
+                                self.waveform_container[idx]["32"]["phase"] = phi_32
+                            if ti.static(self.return_form == "polarizations"):
+                                h_32 = amp_32 * tm.cexp(ComplexNumber([0.0, phi_32]))
+                                self.waveform_container[idx]["32"]["plus"] = tm.cmul(
+                                    self._harmonic_factors[None]["32"].plus, h_32
+                                )
+                                self.waveform_container[idx]["32"]["cross"] = tm.cmul(
+                                    self._harmonic_factors[None]["32"].cross, h_32
+                                )
+                        if ti.static(self.include_tf):
+                            tf_32 = self.phase_coefficients[None][mode].compute_d_phase(
+                                self.pn_coefficients[None]["32"],
+                                self._spheroidal_MRD_32[None],
+                                self.pn_coefficients[None]["22"],
+                                self.amplitude_coefficients[None]["22"],
+                                self.phase_coefficients[None]["22"],
+                                self.source_parameters[None],
+                                powers_of_Mf,
+                            )
+                            tf_32 *= (
+                                self.source_parameters[None].M_sec / PI / 2
+                            )  # to second
+                            self.waveform_container[idx]["32"]["tf"] = tf_32
+
+                    else:
+                        amp_lm = self.amplitude_coefficients[None][
+                            mode
+                        ].compute_amplitude(
+                            self.source_parameters[None]["QNM_freqs_lm"][mode],
+                            self.pn_coefficients[None][mode],
+                            powers_of_Mf,
+                        )
+                        amp_lm *= self.source_parameters[None].dimension_factor
+                        phi_lm = self.phase_coefficients[None][mode].compute_phase(
+                            self.source_parameters[None]["QNM_freqs_lm"][mode],
+                            self.pn_coefficients[None][mode],
+                            powers_of_Mf,
+                        )
+                        if ti.static(self.return_form == "amplitude_phase"):
+                            self.waveform_container[idx][mode]["amplitude"] = amp_lm
+                            self.waveform_container[idx][mode]["phase"] = phi_lm
+                        if ti.static(self.return_form == "polarizations"):
+                            h_lm = amp_lm * tm.cexp(ComplexNumber([0.0, phi_lm]))
+                            self.waveform_container[idx][mode]["plus"] = tm.cmul(
+                                self._harmonic_factors[None][mode].plus, h_lm
+                            )
+                            self.waveform_container[idx][mode]["cross"] = tm.cmul(
+                                self._harmonic_factors[None][mode].cross, h_lm
+                            )
+                        if ti.static(self.include_tf):
+                            tf_lm = self.phase_coefficients[None][mode].compute_d_phase(
+                                self.source_parameters[None]["QNM_freqs_lm"][mode],
+                                self.pn_coefficients[None][mode],
+                                powers_of_Mf,
+                            )
+                            tf_lm *= (
+                                self.source_parameters[None].M_sec / PI / 2
+                            )  # to second
+                            self.waveform_container[idx][mode]["tf"] = tf_lm
+                # combine all modes if required
+                if ti.static(self.combine_modes):
+                    combined_hp = ComplexNumber([0.0, 0.0])
+                    combined_hc = ComplexNumber([0.0, 0.0])
+                    if ti.static(self.return_form == "polarizations"):
+                        for mode in ti.static(("22",) + self.high_modes):
+                            combined_hp += self.waveform_container[idx][mode]["plus"]
+                            combined_hc += self.waveform_container[idx][mode]["cross"]
+                    if ti.static(self.return_form == "amplitude_phase"):
+                        for mode in ti.static(("22",) + self.high_modes):
+                            amp_lm = self.waveform_container[idx][mode]["amplitude"]
+                            phi_lm = self.waveform_container[idx][mode]["phase"]
+                            h_lm = amp_lm * tm.cexp(ComplexNumber([0.0, phi_lm]))
+                            combined_hp += tm.cmul(
+                                self._harmonic_factors[None][mode].plus, h_lm
+                            )
+                            combined_hc += tm.cmul(
+                                self._harmonic_factors[None][mode].cross, h_lm
+                            )
+                    self.waveform_container[idx]["combined"]["plus"] = combined_hp
+                    self.waveform_container[idx]["combined"]["cross"] = combined_hc
+
+            else:
+                for mode in ti.static(("22",) + self.high_modes):
+                    if ti.static(self.return_form == "amplitude_phase"):
+                        self.waveform_container[idx][mode]["amplitude"] = 0.0
+                        self.waveform_container[idx][mode]["phase"] = 0.0
+                    if ti.static(self.return_form == "polarizations"):
+                        self.waveform_container[idx][mode]["plus"].fill(0.0)
+                        self.waveform_container[idx][mode]["cross"].fill(0.0)
+                    if ti.static(self.include_tf):
+                        self.waveform_container[idx][mode]["tf"] = 0.0
+                # for combined if required
+                if ti.static(self.combine_modes):
+                    self.waveform_container[idx]["combined"]["plus"].fill(0.0)
+                    self.waveform_container[idx]["combined"]["cross"].fill(0.0)
+
     @ti.func
-    def _parameter_check(self):
+    def _set_harmonic_factors(self):
+        """
+        incorporate both m and -m mode
+        arxiv: 0709.0093
+        """
+        cos_iota = tm.cos(self.source_parameters[None].iota)
+        sin_iota = tm.sin(self.source_parameters[None].iota)
+        cos_iota_pow2 = cos_iota * cos_iota
+        sin_iota_pow2 = sin_iota * sin_iota
+        # 22 mode
+        common = 0.125 * tm.sqrt(5.0 / PI)
+        self._harmonic_factors[None]["22"].plus = (
+            -ComplexNumber([1.0, 0.0]) * common * (1.0 + cos_iota_pow2)
+        )
+        self._harmonic_factors[None]["22"].cross = (
+            ComplexNumber([0.0, 1.0]) * common * (2.0 * cos_iota)
+        )
+        # high mode
+        if ti.static("21" in self.high_modes):
+            common = 0.25 * tm.sqrt(5.0 / PI)
+            self._harmonic_factors[None]["21"].plus = (
+                -ComplexNumber([0.0, 1.0]) * common * sin_iota
+            )
+            self._harmonic_factors[None]["21"].cross = (
+                -ComplexNumber([1.0, 0.0]) * common * sin_iota * cos_iota
+            )
+        if ti.static("33" in self.high_modes):
+            common = 0.25 * tm.sqrt(21.0 / (2 * PI))
+            self._harmonic_factors[None]["33"].plus = (
+                ComplexNumber([0.0, 1.0])
+                * common
+                * 0.5
+                * (1.0 + cos_iota_pow2)
+                * sin_iota
+            )
+            self._harmonic_factors[None]["33"].cross = (
+                ComplexNumber([1.0, 0.0]) * common * cos_iota * sin_iota
+            )
+            # including (-1)^l for h_l-m
+            self._harmonic_factors[None]["33"].plus *= -1.0
+            self._harmonic_factors[None]["33"].cross *= -1.0
+        if ti.static("32" in self.high_modes):
+            common = 0.25 * tm.sqrt(7.0 / PI)
+            self._harmonic_factors[None]["32"].plus = (
+                ComplexNumber([1.0, 0.0]) * common * (1.0 - 2.0 * sin_iota_pow2)
+            )
+            self._harmonic_factors[None]["32"].cross = (
+                -ComplexNumber([0.0, 1.0])
+                * common
+                * (1.0 - 1.5 * sin_iota_pow2)
+                * cos_iota
+            )
+            # including (-1)^l for h_l-m
+            self._harmonic_factors[None]["32"].plus *= -1.0
+            self._harmonic_factors[None]["32"].cross *= -1.0
+        if ti.static("44" in self.high_modes):
+            common = 3.0 / 8.0 * tm.sqrt(7.0 / PI)
+            self._harmonic_factors[None]["44"].plus = (
+                ComplexNumber([1.0, 0.0])
+                * common
+                * 0.5
+                * sin_iota_pow2
+                * (1 + cos_iota_pow2)
+            )
+            self._harmonic_factors[None]["44"].cross = (
+                -ComplexNumber([0.0, 1.0]) * common * sin_iota_pow2 * cos_iota
+            )
+
+    @property
+    def waveform_container_numpy(self):
+        """low performance"""
+        wf_array = self.waveform_container.to_numpy()
+        ret = copy.deepcopy(wf_array)
+        if self.return_form == "polarizations":
+            for mode in ("22", *self.high_modes):
+                ret[mode] = {
+                    "plus": wf_array[mode]["plus"][:, 0]
+                    + 1j * wf_array[mode]["plus"][:, 1],
+                    "cross": wf_array[mode]["cross"][:, 0]
+                    + 1j * wf_array[mode]["cross"][:, 1],
+                }
+        if self.combine_modes:
+            ret["combined"] = {
+                "plus": wf_array["combined"]["plus"][:, 0]
+                + 1j * wf_array["combined"]["plus"][:, 1],
+                "cross": wf_array["combined"]["cross"][:, 0]
+                + 1j * wf_array["combined"]["cross"][:, 1],
+            }
+        return ret
+
+    @ti.func
+    def _check_parameters(self):
         # TODO
         pass

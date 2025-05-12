@@ -14,7 +14,7 @@ from .base_waveform import BaseWaveform
 
 """
 TODO:
-check _get_polarization_from_amplitude_phase, add spherical harmonic
+check _get_polarizations_from_amplitude_phase, add spherical harmonic
 1. source parameter check, (m1>m2, q<1, q<18, using warning and error rather assert); 
 4. using one matrix to compute all phenomenology coefficients
 5. add loop config for waveform_kernel
@@ -1070,7 +1070,7 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_coefficients, f_ring, f_dam
 
 
 @ti.func
-def _get_polarization_from_amplitude_phase(amplitude, phase, iota):
+def _get_polarizations_from_amplitude_phase(amplitude, phase, iota):
     cross_coefficient = tm.cos(iota)
     plus_coefficient = 0.5 * (1.0 + cross_coefficient**2)
     plus = amplitude * tm.cexp(ComplexNumber([0.0, -1.0] * phase))
@@ -1086,7 +1086,7 @@ class IMRPhenomD(BaseWaveform):
         frequencies: ti.ScalarField,
         waveform_container: Optional[ti.StructField] = None,
         reference_frequency: Optional[float] = None,
-        returned_form: str = "polarizations",
+        return_form: str = "polarizations",
         include_tf: bool = True,
         parameter_sanity_check: bool = False,
     ) -> None:
@@ -1096,7 +1096,7 @@ class IMRPhenomD(BaseWaveform):
         frequencies: ti.field of f64, note that frequencies may not uniform spaced
         waveform_container: ti.Struct.field or None
             {} or {}
-        returned_form: str
+        return_form: str
             `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
         parameter_sanity_check: bool
 
@@ -1105,7 +1105,7 @@ class IMRPhenomD(BaseWaveform):
         array, the A channel without the coefficient which is determined by the TDI generation.
 
         TODO:
-        check whether passed in `waveform_containter` consistent with `returned_form`
+        check whether passed in `waveform_containter` consistent with `return_form`
         """
         self.frequencies = frequencies
         if reference_frequency is None:
@@ -1140,27 +1140,27 @@ class IMRPhenomD(BaseWaveform):
                 ret_content.remove("tf")
             else:
                 include_tf = False
-            if all([item in ret_content for item in ["hplus", "hcross"]]):
-                returned_form = "polarizations"
-                [ret_content.remove(item) for item in ["hplus", "hcross"]]
+            if all([item in ret_content for item in ["plus", "cross"]]):
+                return_form = "polarizations"
+                [ret_content.remove(item) for item in ["plus", "cross"]]
             elif all([item in ret_content for item in ["amplitude", "phase"]]):
-                returned_form = "amplitude_phase"
+                return_form = "amplitude_phase"
                 [ret_content.remove(item) for item in ["amplitude", "phase"]]
             if len(ret_content) > 0:
                 raise ValueError(
                     f"`waveform_container` contains additional unknown keys {ret_content}."
                 )
-            self.returned_form = returned_form
+            self.return_form = return_form
             self.include_tf = include_tf
             print(
-                f"Using `waveform_container` passed in, updating returned_form={self.returned_form}, include_tf={self.include_tf}"
+                f"Using `waveform_container` passed in, updating return_form={self.return_form}, include_tf={self.include_tf}"
             )
         else:
-            self._initialize_waveform_container(returned_form, include_tf)
-            self.returned_form = returned_form
+            self._initialize_waveform_container(return_form, include_tf)
+            self.return_form = return_form
             self.include_tf = include_tf
             print(
-                f"`waveform_container` is not given, initializing one with returned_form={returned_form}, include_tf={include_tf}"
+                f"`waveform_container` is not given, initializing one with return_form={return_form}, include_tf={include_tf}"
             )
 
         # initializing data struct with 0, and instantiating fields for global accessing
@@ -1170,16 +1170,16 @@ class IMRPhenomD(BaseWaveform):
         self.pn_coefficients = PostNewtonianCoefficients.field(shape=())
 
     def _initialize_waveform_container(
-        self, returned_form: str, include_tf: bool
+        self, return_form: str, include_tf: bool
     ) -> None:
         ret_content = {}
-        if returned_form == "polarizations":
-            ret_content.update({"hplus": ComplexNumber, "hcross": ComplexNumber})
-        elif returned_form == "amplitude_phase":
+        if return_form == "polarizations":
+            ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
+        elif return_form == "amplitude_phase":
             ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
         else:
             raise Exception(
-                f"{returned_form} is unknown. `returned_form` can only be one of `polarizations` and `amplitude_phase`"
+                f"{return_form} is unknown. `return_form` can only be one of `polarizations` and `amplitude_phase`"
             )
 
         if include_tf:
@@ -1274,14 +1274,14 @@ class IMRPhenomD(BaseWaveform):
                 )
                 phase -= time_shift * (Mf - Mf_ref) + phase_shift
                 # remember multiple amp0 and shift phase and 1/eta
-                if ti.static(self.returned_form == "amplitude_phase"):
+                if ti.static(self.return_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = amplitude
                     self.waveform_container[idx].phase = phase
-                if ti.static(self.returned_form == "polarizations"):
+                if ti.static(self.return_form == "polarizations"):
                     (
-                        self.waveform_container[idx].hcross,
-                        self.waveform_container[idx].hplus,
-                    ) = _get_polarization_from_amplitude_phase(
+                        self.waveform_container[idx].cross,
+                        self.waveform_container[idx].plus,
+                    ) = _get_polarizations_from_amplitude_phase(
                         amplitude, phase, self.source_parameters[None].iota
                     )
                 if ti.static(self.include_tf):
@@ -1297,12 +1297,12 @@ class IMRPhenomD(BaseWaveform):
                     tf *= self.source_parameters[None].M_sec / PI / 2
                     self.waveform_container[idx].tf = tf
             else:
-                if ti.static(self.returned_form == "amplitude_phase"):
+                if ti.static(self.return_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = 0.0
                     self.waveform_container[idx].phase = 0.0
-                if ti.static(self.returned_form == "polarizations"):
-                    self.waveform_container[idx].hcross.fill(0.0)
-                    self.waveform_container[idx].hplus.fill(0.0)
+                if ti.static(self.return_form == "polarizations"):
+                    self.waveform_container[idx].cross.fill(0.0)
+                    self.waveform_container[idx].plus.fill(0.0)
                 if ti.static(self.include_tf):
                     self.waveform_container[idx].tf = 0.0
 
@@ -1328,20 +1328,20 @@ class IMRPhenomD(BaseWaveform):
 
     def numpy_array_of_waveform_container(self):
         ret = {}
-        if self.returned_form == "polarizations":
-            hcross_array = (
-                self.waveform_container.hcross.to_numpy()
+        if self.return_form == "polarizations":
+            cross_array = (
+                self.waveform_container.cross.to_numpy()
                 .view(dtype=np.complex128)
                 .reshape((self.frequencies.shape))
             )
-            hplus_array = (
-                self.waveform_container.hplus.to_numpy()
+            plus_array = (
+                self.waveform_container.plus.to_numpy()
                 .view(dtype=np.complex128)
                 .reshape((self.frequencies.shape))
             )
-            ret["hcross"] = hcross_array
-            ret["hplus"] = hplus_array
-        elif self.returned_form == "amplitude_phase":
+            ret["cross"] = cross_array
+            ret["plus"] = plus_array
+        elif self.return_form == "amplitude_phase":
             amp_array = self.waveform_container.amplitude.to_numpy()
             phase_array = self.waveform_container.phase.to_numpy()
             ret["amplitude"] = amp_array

@@ -15,7 +15,7 @@ class BaseWaveform(ABC):
         self,
         frequencies: ti.ScalarField,
         reference_frequency: Optional[float] = None,
-        returned_form: str = "polarizations",
+        return_form: str = "polarizations",
         include_tf: bool = True,
         check_parameters: bool = False,
     ) -> None:
@@ -23,7 +23,7 @@ class BaseWaveform(ABC):
         Parameters
         ==========
         frequencies: ti.field of f64, frequencies maybe not uniform spaced
-        returned_form: str
+        return_form: str
             `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
         include_tf: bool = True,
             whether including tf in return
@@ -46,29 +46,27 @@ class BaseWaveform(ABC):
                 "check_parameters is disable, make sure all parameters passed in are valid."
             )
 
-        self.returned_form = returned_form
+        self.return_form = return_form
         self.include_tf = include_tf
-        self._initialize_waveform_container(returned_form, include_tf)
+        self._initialize_waveform_container()
 
         self.source_parameters = None
         self.phase_coefficients = None
         self.amplitude_coefficients = None
         self.pn_coefficients = None
 
-    def _initialize_waveform_container(
-        self, returned_form: str, include_tf: bool
-    ) -> None:
+    def _initialize_waveform_container(self) -> None:
         ret_content = {}
-        if returned_form == "polarizations":
-            ret_content.update({"hplus": ComplexNumber, "hcross": ComplexNumber})
-        elif returned_form == "amplitude_phase":
+        if self.return_form == "polarizations":
+            ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
+        elif self.return_form == "amplitude_phase":
             ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
         else:
             raise Exception(
-                f"{returned_form} is unknown. `returned_form` can only be one of `polarizations` and `amplitude_phase`"
+                f"{self.return_form} is unknown. `return_form` can only be one of `polarizations` and `amplitude_phase`"
             )
 
-        if include_tf:
+        if self.include_tf:
             ret_content.update({"tf": ti.f64})
 
         self.waveform_container = ti.Struct.field(
@@ -84,11 +82,9 @@ class BaseWaveform(ABC):
     @property
     def waveform_container_numpy(self):
         wf_array = self.waveform_container.to_numpy()
-        if self.returned_form == "polarizations":
-            wf_array["hcross"] = (
-                wf_array["hcross"][:, 0] + 1j * wf_array["hcross"][:, 1]
-            )
-            wf_array["hplus"] = wf_array["hplus"][:, 0] + 1j * wf_array["hplus"][:, 1]
+        if self.return_form == "polarizations":
+            wf_array["cross"] = wf_array["cross"][:, 0] + 1j * wf_array["cross"][:, 1]
+            wf_array["plus"] = wf_array["plus"][:, 0] + 1j * wf_array["plus"][:, 1]
         return wf_array
 
     def parameter_validity_check(self, parameters):

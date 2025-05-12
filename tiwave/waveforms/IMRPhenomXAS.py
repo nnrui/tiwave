@@ -1103,7 +1103,7 @@ class AmplitudeCoefficients:
         else:
             # Note the intermediate coefficients used in lalsimulation have absorbed the factor of f^(-7/6)
             amplitude = self._intermediate_amplitude(powers_of_Mf)
-        return source_params.dimension_factor * self.common_factor * amplitude
+        return self.common_factor * amplitude
 
 
 @ti.dataclass
@@ -2422,6 +2422,7 @@ class IMRPhenomXAS(BaseWaveform):
                     self.source_parameters[None],
                     powers_of_Mf,
                 )
+                amplitude *= self.source_parameters[None].dimension_factor
                 phase = self.phase_coefficients[None].compute_phase(
                     self.pn_coefficients[None],
                     self.source_parameters[None],

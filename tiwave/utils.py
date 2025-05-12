@@ -16,7 +16,9 @@ def sub_struct_from(parent):
     Since inheritance is not supported in ti.dataclass currently, we use this func as
     a decorator to copy members and bind methods of existing dataclass to current dataclass.
     Only supporting inheritance of just one generation.
-    TODO: a usage example
+    TODO:
+    - a usage example
+    - staticmethod
     """
     # parent_members = copy.deepcopy(parent.members)
     # parent_methods = copy.deepcopy(parent.methods)
@@ -129,7 +131,7 @@ def gauss_elimination(Ab: ti.template()) -> ti.template():
 
 
 def initialize_waveform_container_from_frequencies_array(
-    frequencies, returned_form="polarization", include_tf=True
+    frequencies, return_form="polarization", include_tf=True
 ):
     """
     Parparing waveform_container of ti.field from frequencies of np.array
@@ -141,12 +143,12 @@ def initialize_waveform_container_from_frequencies_array(
     Returns:
     ========
         frequency_field: ti.field
-        waveform_container: ti.Struct.field({'hplus': ComplexNumber, 'hcross': ComplexNumber, 'tf': ti.f64})
+        waveform_container: ti.Struct.field({'plus': ComplexNumber, 'cross': ComplexNumber, 'tf': ti.f64})
     """
     ret_content = {}
-    if returned_form == "polarizations":
-        ret_content.update({"hplus": ComplexNumber, "hcross": ComplexNumber})
-    elif returned_form == "amplitude_phase":
+    if return_form == "polarizations":
+        ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
+    elif return_form == "amplitude_phase":
         ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
     if include_tf:
         ret_content.update({"tf": ti.f64})

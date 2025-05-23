@@ -7,6 +7,7 @@
 
 from typing import Optional
 import copy
+import warnings
 
 import taichi as ti
 import taichi.math as tm
@@ -22,6 +23,7 @@ from .IMRPhenomXAS import AmplitudeCoefficients as AmplitudeCoefficientsMode22
 
 
 eta_EMR = 0.05  # Limit for extreme mass ratio
+FALSE_ZERO = 1.0e-15
 
 useful_powers_pi = UsefulPowers()
 useful_powers_pi.update(PI)
@@ -367,6 +369,7 @@ class AmplitudeCoefficientsHighModesBase:
             int_colloc_points[5] - QNM_freqs_lm.f_ring
         )  # always have int_f_end < MRE_f_falloff
         # derivative at the left boundary
+        # here we use the analystic derivative, which could lead difference of O(1e-5) in int_ansatz_coeffs
         int_colloc_values[6] = self._inspiral_d_amplitude(
             pn_coefficients_lm, powers_int_f0
         )
@@ -505,6 +508,9 @@ class AmplitudeCoefficientsHighModesBase:
             amplitude = self._merge_ringdown_amplitude_Lorentzian(f_minus_fring)
         else:
             amplitude = self._intermediate_amplitude(powers_of_Mf)
+
+        if amplitude < 0.0:
+            amplitude = FALSE_ZERO
 
         return amplitude
 
@@ -5210,14 +5216,6 @@ class AmplitudeCoefficientsMode44:
 @sub_struct_from(PhaseCoefficientsHighModesBase)
 class PhaseCoefficientsMode21:
 
-    _useful_powers: ti.types.struct(
-        int_f0=UsefulPowers,
-        int_f1=UsefulPowers,
-        int_f2=UsefulPowers,
-        ins_f_end=UsefulPowers,
-        int_f_end=UsefulPowers,
-    )
-
     @ti.func
     def _Lambda_21_PN(self) -> ti.f64:
         return 2.0 * PI * (0.5 + 2.0 * tm.log(2.0))
@@ -5289,17 +5287,26 @@ class PhaseCoefficientsMode21:
 
         # special operation for 21 mode to avoide sharp transitions in high-spin cases
         if source_params.S_tot_hat >= 0.8:
-            int_22_v0 = phase_coefficients_22.compute_d_phase(
-                pn_coefficients_22, source_params, self._useful_powers.int_f0
-            )
-            int_22_v1 = phase_coefficients_22.compute_d_phase(
-                pn_coefficients_22, source_params, self._useful_powers.int_f1
-            )
-            int_22_v2 = phase_coefficients_22.compute_d_phase(
-                pn_coefficients_22, source_params, self._useful_powers.int_f2
-            )
-            diff_01 = int_22_v0 - int_22_v1
-            diff_12 = int_22_v1 - int_22_v2
+            powers_22_fi = UsefulPowers()
+            int_22_vals = ti.Vector([0.0] * 3, dt=ti.f64)
+            for i in ti.static(range(3)):
+                powers_22_fi.update(2.0 * self._int_colloc_points[i])
+                int_22_vals[i] = phase_coefficients_22._compute_d_phase_core(
+                    pn_coefficients_22, source_params, powers_22_fi
+                )
+                # In lalsim (l.2080 LALSimIMRPhenomXHM_internals.c), when calling IMRPhenomX_dPhase_22
+                # the coefficients are not set. To stay consistent with lalsim, here need
+                # to substract the connection coefficients.
+                # TODO: this may be a potential bug? comparing with NRSur waveforms if
+                # including connection coefficients
+                if powers_22_fi.one < phase_coefficients_22.fjoin_int_ins:
+                    pass
+                elif powers_22_fi.one > phase_coefficients_22.fjoin_MRD_int:
+                    int_22_vals[i] -= phase_coefficients_22.C1_MRD
+                else:
+                    int_22_vals[i] -= phase_coefficients_22.C1_int
+            diff_01 = int_22_vals[0] - int_22_vals[1]
+            diff_12 = int_22_vals[1] - int_22_vals[2]
             self._int_colloc_values[1] = self._int_colloc_values[2] + diff_12
             self._int_colloc_values[0] = self._int_colloc_values[1] + diff_01
 
@@ -5561,10 +5568,6 @@ class PhaseCoefficientsMode21:
         self._set_int_colloc_points_no_mixing(
             source_params.QNM_freqs_lm["21"].f_ring, source_params.eta
         )
-        # used for special operation for 21 mode to avoide sharp transitions in high-spin cases
-        self._useful_powers.int_f0.update(self._int_colloc_points[0])
-        self._useful_powers.int_f1.update(self._int_colloc_points[1])
-        self._useful_powers.int_f2.update(self._int_colloc_points[2])
         self._set_intermediate_coefficients(
             pn_coefficients_22, phase_coefficients_22, source_params
         )
@@ -5589,6 +5592,42 @@ class PhaseCoefficientsMode21:
             phase_coefficients_22,
             source_params,
         )
+        # account for the sign changes in the amplitude of mode 21 (see l.2400 in LALSimIMRPhenomXHM_internals.c)
+        f_check = 0.008
+        amp_check = (
+            (
+                -16.0
+                * source_params.delta
+                * source_params.eta
+                * f_check
+                * tm.pow(PI, 3.0 / 2.0)
+                / (3.0 * tm.sqrt(5.0))
+            )
+            + (
+                4.0
+                * tm.pow(2.0, 1.0 / 3.0)
+                * (
+                    source_params.delta_chi
+                    + source_params.delta * (source_params.chi_1 + source_params.chi_2)
+                )
+                * source_params.eta
+                * tm.pow(f_check, 4.0 / 3.0)
+                * tm.pow(PI, 11.0 / 6.0)
+                / tm.sqrt(5.0)
+            )
+            + (
+                2.0
+                * pow(2.0, 2.0 / 3.0)
+                * source_params.eta
+                * (306.0 - 360.0 * source_params.eta)
+                * source_params.delta
+                * pow(f_check, 5.0 / 3.0)
+                * pow(PI, 13.0 / 6.0)
+                / (189.0 * tm.sqrt(5.0))
+            )
+        )
+        if amp_check > 0:
+            self.delta_phi_lm += PI
 
 
 @sub_struct_from(PhaseCoefficientsHighModesBase)
@@ -6131,7 +6170,27 @@ class PhaseCoefficientsMode32:
         self,
         QNM_freqs_32: ti.template(),
         pn_coefficients_32: ti.template(),
+        source_params: ti.template(),
     ):
+        # if the mass ratio is not extreme, dphi at int_f_end has been used to set
+        # intermediate coefficients, the C1 continuity condition has been satisfied.
+        # While in the case of extreme mass ratio, the fit value is used. The factor
+        # gluing intermediate and ringdown region is added into c_0.
+        # (see l.2303 in LALSimIMRPhenomXHM_internals.c)
+        # TODO: check whether the connection factors should be added into intermediate range or merge-ringdown range ??
+        # for spheroidal MRD of 32 mode, phi and dphi of have been aligned with 22 mode, more proper adding connection factors into intermediate range ??
+        self.MRD_C1 = 0.0
+        if source_params.eta < eta_EMR:
+            glue_factor = self._int_dphi_fend - self._intermediate_d_phase(
+                QNM_freqs_32, self._useful_powers.int_f_end
+            )
+            self.c_0 += glue_factor
+        self.MRD_C0 = (
+            self._intermediate_phase(QNM_freqs_32, self._useful_powers.int_f_end)
+            - self._int_phi_fend
+            - self.MRD_C1 * self.int_f_end
+        )
+
         self.ins_C1 = self._intermediate_d_phase(
             QNM_freqs_32, self._useful_powers.ins_f_end
         ) - self._inspiral_d_phase(pn_coefficients_32, self._useful_powers.ins_f_end)
@@ -6141,16 +6200,6 @@ class PhaseCoefficientsMode32:
             self._intermediate_phase(QNM_freqs_32, self._useful_powers.ins_f_end)
             - self._inspiral_phase(pn_coefficients_32, self._useful_powers.ins_f_end)
             - self.ins_C1 * self.ins_f_end
-        )
-
-        self.MRD_C1 = (
-            self._intermediate_d_phase(QNM_freqs_32, self._useful_powers.int_f_end)
-            - self._int_dphi_fend
-        )
-        self.MRD_C0 = (
-            self._intermediate_phase(QNM_freqs_32, self._useful_powers.int_f_end)
-            - self._int_phi_fend
-            - self.MRD_C1 * self.int_f_end
         )
 
     @ti.func
@@ -6451,7 +6500,7 @@ class PhaseCoefficientsMode32:
             self.Lambda_lm = self._Lambda_32_fit(source_params)
         # continuity conditions
         self._set_connection_coefficients(
-            source_params.QNM_freqs_lm["32"], pn_coefficients_32
+            source_params.QNM_freqs_lm["32"], pn_coefficients_32, source_params
         )
         # the constant phase for aligning modes
         self._set_delta_phi_lm(
@@ -6932,6 +6981,8 @@ class IMRPhenomXHM(BaseWaveform):
         high_modes: tuple[str] = ("21", "33", "32", "44"),
         combine_modes: bool = False,
         check_parameters: bool = False,
+        mode_major: bool = True, # TODO, mode_major or frequency_major
+        container_layout: str = 'AOS', # TODO, AOS or SOA
     ) -> None:
         """ """
         # TODO: throw warning if including 32 modes and require phase or tf
@@ -6981,6 +7032,25 @@ class IMRPhenomXHM(BaseWaveform):
         else:
             self._harmonic_factors = None
 
+        if "32" in self.high_modes:
+            warnings.warn(
+                "Mode 32 has relatively large numerical errors with lalsim, especially "
+                "for high spin and extreme mass ratio. See examples/checking_waveforms.ipynb "
+                "for more details. Please make sure these errors are acceptable in your " 
+                "cases before using."
+            )
+            if self.include_tf:
+                warnings.warn(
+                    "`tf` is required for mode 32, since the derivative of phase for "
+                    "merge-ringdown of mode 32 is obtained through numerical difference, "
+                    "if may not reliable for some cases."
+                )
+            if self.return_form == "amplitude_phase":
+                warnings.warn(
+                    "`amplitude_phase` is chosen as the return form. For mode 32, the "
+                    "phase of merge-ringdown range is get by atan2(), which may not continuous."
+                )
+        
         return None
 
     def _initialize_waveform_container(self) -> None:
@@ -7215,7 +7285,7 @@ class IMRPhenomXHM(BaseWaveform):
                                 h22_dimless,
                                 self.pn_coefficients[None]["32"],
                                 self._spheroidal_MRD_32[None],
-                                self.source_parameters[None],
+                                self.source_parameters[None]["QNM_freqs_lm"]["32"],
                                 powers_of_Mf,
                             )
                             amp_32 *= self.source_parameters[None].dimension_factor

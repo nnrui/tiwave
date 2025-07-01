@@ -957,7 +957,7 @@ class SourceParametersHighModes:
     f_MECO_lm: ti.types.struct(
         **{"21": ti.f64, "33": ti.f64, "32": ti.f64, "44": ti.f64}
     )
-    # TODO: f_ISCO_lm used??
+    # TODO: f_ISCO_lm are not used??
     f_ISCO_lm: ti.types.struct(
         **{"21": ti.f64, "33": ti.f64, "32": ti.f64, "44": ti.f64}
     )
@@ -6981,8 +6981,8 @@ class IMRPhenomXHM(BaseWaveform):
         high_modes: tuple[str] = ("21", "33", "32", "44"),
         combine_modes: bool = False,
         check_parameters: bool = False,
-        mode_major: bool = True, # TODO, mode_major or frequency_major
-        container_layout: str = 'AOS', # TODO, AOS or SOA
+        mode_major: bool = True,  # mode major or frequency major in waveform_container
+        container_layout: str = "AOS",  # TODO, AOS or SOA
     ) -> None:
         """ """
         # TODO: throw warning if including 32 modes and require phase or tf
@@ -7036,7 +7036,7 @@ class IMRPhenomXHM(BaseWaveform):
             warnings.warn(
                 "Mode 32 has relatively large numerical errors with lalsim, especially "
                 "for high spin and extreme mass ratio. See examples/checking_waveforms.ipynb "
-                "for more details. Please make sure these errors are acceptable in your " 
+                "for more details. Please make sure these errors are acceptable in your "
                 "cases before using."
             )
             if self.include_tf:
@@ -7050,7 +7050,7 @@ class IMRPhenomXHM(BaseWaveform):
                     "`amplitude_phase` is chosen as the return form. For mode 32, the "
                     "phase of merge-ringdown range is get by atan2(), which may not continuous."
                 )
-        
+
         return None
 
     def _initialize_waveform_container(self) -> None:

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tiwave"
+authors = [
+    {name = "Rui Niu", email = "nrui@mail.ustc.edu.cn"},
+]
+description = "GW waveforms with taichi-lang."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha", 
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Astronomy",
+]
+dependencies = [
+    "taichi != 1.7.1", 
+    "numpy",
+]
+keywords = ["gravitational-wave", "taichi-lang"]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "scipy",
+    "matplotlib",
+    "bilby",
+    "lalsuite",
+    "pytest",
+    "pytest-cov",
+    "black",
+    "mypy",
+    "sphinx",
+]
+
+[project.urls]
+Documentation = "https://github.com/niuiniuin/tiwave"
+Repository = "https://github.com/niuiniuin/tiwave"
+
+[tool.setuptools.packages.find]
+where = ["tiwave"]
+
+[tool.setuptools.package-data]
+"tiwave.waveforms.data" = [
+    "QNMData_a.txt",
+    "QNMData_fdamp.txt",
+    "QNMData_fring.txt",
+]

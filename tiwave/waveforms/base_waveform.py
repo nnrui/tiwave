@@ -5,6 +5,7 @@ import warnings
 
 import taichi as ti
 import numpy as np
+from numpy.typing import NDArray
 
 from ..utils import ComplexNumber
 
@@ -13,7 +14,7 @@ class BaseWaveform(ABC):
 
     def __init__(
         self,
-        frequencies: ti.ScalarField,
+        frequencies: ti.ScalarField | NDArray[np.float64],
         reference_frequency: Optional[float] = None,
         return_form: str = "polarizations",
         include_tf: bool = True,
@@ -33,8 +34,16 @@ class BaseWaveform(ABC):
         TODO:
         - move parameter validity checks into taichi scope to improve performance
         """
+        if isinstance(frequencies, ti.ScalarField):
+            self.frequencies = frequencies
+        elif isinstance(frequencies, np.ndarray):
+            self.frequencies = ti.field(ti.f64, shape=frequencies.shape)
+            self.frequencies.from_numpy(frequencies)
+        else:
+            raise TypeError(
+                f"the input frequencies must be np.ndarray or ti.ScalarField, but got {type(frequencies)}."
+            )
 
-        self.frequencies = frequencies
         if reference_frequency is None:
             self.reference_frequency = self.frequencies[0]
         else:

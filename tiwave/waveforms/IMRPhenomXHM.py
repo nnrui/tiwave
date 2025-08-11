@@ -4,6 +4,7 @@
 # - only store coefficients used for wavefrom construction
 # - check unwrap operation in PhaseCoefficientsMode32._set_intermediate_coefficients
 # - fix high numerical error for intermediate phase of mode 32
+# - including all modes, cancel supporting of specifying modes
 
 from typing import Optional
 import copy
@@ -7091,8 +7092,8 @@ class IMRPhenomXHM(BaseWaveform):
         self._update_waveform_common(
             parameters["mass_1"],
             parameters["mass_2"],
-            parameters["chi_1"],
-            parameters["chi_2"],
+            parameters["chi1_z"],
+            parameters["chi2_z"],
             parameters["luminosity_distance"],
             parameters["inclination"],
             parameters["reference_phase"],

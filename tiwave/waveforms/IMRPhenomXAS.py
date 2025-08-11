@@ -2357,8 +2357,8 @@ class IMRPhenomXAS(BaseWaveform):
         self._update_waveform_kernel(
             parameters["mass_1"],
             parameters["mass_2"],
-            parameters["chi_1"],
-            parameters["chi_2"],
+            parameters["chi1_z"],
+            parameters["chi2_z"],
             parameters["luminosity_distance"],
             parameters["inclination"],
             parameters["reference_phase"],

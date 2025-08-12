@@ -1117,7 +1117,36 @@ class PrecessionCoefficientsMSA:
 
 
 class IMRPhenomXPHM(BaseWaveform):
-    pass
+
+    def __init__(
+        self,
+        frequencies,
+        reference_frequency=None,
+        return_form="polarizations",
+        include_tf=True,
+        check_parameters=False,
+    ):
+        super().__init__(
+            frequencies, reference_frequency, return_form, include_tf, check_parameters
+        )
+
+    def update_waveform(self, parameters):
+        pass
+
+    def update_waveform_kernel_NNLO(
+        self,
+    ):
+        pass
+
+    def update_waveform_kernel_MSA(
+        self,
+    ):
+        pass
+
+    def update_waveform_kernel_try_MSA_fallback_NNLO(
+        self,
+    ):
+        pass
 
 
 @ti.data_oriented
@@ -1281,13 +1310,13 @@ class IMRPhenomXP(BaseWaveform):
                     self.waveform_container[idx].plus = tm.cmul(twist_fac_p, h22_align)
                     self.waveform_container[idx].cross = tm.cmul(twist_fac_c, h22_align)
                 if ti.static(self.include_tf):
-                    tf = self.phase_coefficients[None].compute_d_phase(
+                    dphi = self.phase_coefficients[None].compute_d_phase(
                         self.pn_coefficients[None],
                         self.source_parameters[None],
                         powers_of_Mf,
                     )
-                    tf *= self.source_parameters[None].M_sec / PI / 2  # to second
-                    self.waveform_container[idx].tf = tf
+                    dphi *= self.source_parameters[None].M_sec / PI / 2  # to second
+                    self.waveform_container[idx].tf = -dphi
             else:
                 if ti.static(self.return_form == "amplitude_phase_eulerangles"):
                     self.waveform_container[idx].amplitude = 0.0

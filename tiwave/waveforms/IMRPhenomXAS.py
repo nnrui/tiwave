@@ -2437,13 +2437,13 @@ class IMRPhenomXAS(BaseWaveform):
                     self.waveform_container[idx].plus = tm.cmul(harm_fac.plus, h_22)
                     self.waveform_container[idx].cross = tm.cmul(harm_fac.cross, h_22)
                 if ti.static(self.include_tf):
-                    tf = self.phase_coefficients[None].compute_d_phase(
+                    dphi = self.phase_coefficients[None].compute_d_phase(
                         self.pn_coefficients[None],
                         self.source_parameters[None],
                         powers_of_Mf,
                     )
-                    tf *= self.source_parameters[None].M_sec / PI / 2  # to second
-                    self.waveform_container[idx].tf = tf
+                    dphi *= self.source_parameters[None].M_sec / PI / 2  # to second
+                    self.waveform_container[idx].tf = -dphi
             else:
                 if ti.static(self.return_form == "amplitude_phase"):
                     self.waveform_container[idx].amplitude = 0.0

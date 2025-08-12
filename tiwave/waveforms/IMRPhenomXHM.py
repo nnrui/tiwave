@@ -7235,13 +7235,13 @@ class IMRPhenomXHM(BaseWaveform):
                         self._harmonic_factors[None]["22"].cross, h_22
                     )
                 if ti.static(self.include_tf):
-                    tf_22 = self.phase_coefficients[None]["22"].compute_d_phase(
+                    dphi_22 = self.phase_coefficients[None]["22"].compute_d_phase(
                         self.pn_coefficients[None]["22"],
                         self.source_parameters[None],
                         powers_of_Mf,
                     )
-                    tf_22 *= self.source_parameters[None].M_sec / PI / 2  # to second
-                    self.waveform_container[idx]["22"]["tf"] = tf_22
+                    dphi_22 *= self.source_parameters[None].M_sec / PI / 2  # to second
+                    self.waveform_container[idx]["22"]["tf"] = -dphi_22
                 # compute high modes
                 for mode in ti.static(self.high_modes):
                     if ti.static(mode == "32"):
@@ -7309,7 +7309,9 @@ class IMRPhenomXHM(BaseWaveform):
                                     self._harmonic_factors[None]["32"].cross, h_32
                                 )
                         if ti.static(self.include_tf):
-                            tf_32 = self.phase_coefficients[None][mode].compute_d_phase(
+                            dphi_32 = self.phase_coefficients[None][
+                                mode
+                            ].compute_d_phase(
                                 self.pn_coefficients[None]["32"],
                                 self._spheroidal_MRD_32[None],
                                 self.pn_coefficients[None]["22"],
@@ -7318,10 +7320,10 @@ class IMRPhenomXHM(BaseWaveform):
                                 self.source_parameters[None],
                                 powers_of_Mf,
                             )
-                            tf_32 *= (
+                            dphi_32 *= (
                                 self.source_parameters[None].M_sec / PI / 2
                             )  # to second
-                            self.waveform_container[idx]["32"]["tf"] = tf_32
+                            self.waveform_container[idx]["32"]["tf"] = -dphi_32
 
                     else:
                         amp_lm = self.amplitude_coefficients[None][
@@ -7349,15 +7351,17 @@ class IMRPhenomXHM(BaseWaveform):
                                 self._harmonic_factors[None][mode].cross, h_lm
                             )
                         if ti.static(self.include_tf):
-                            tf_lm = self.phase_coefficients[None][mode].compute_d_phase(
+                            dphi_lm = self.phase_coefficients[None][
+                                mode
+                            ].compute_d_phase(
                                 self.source_parameters[None]["QNM_freqs_lm"][mode],
                                 self.pn_coefficients[None][mode],
                                 powers_of_Mf,
                             )
-                            tf_lm *= (
+                            dphi_lm *= (
                                 self.source_parameters[None].M_sec / PI / 2
                             )  # to second
-                            self.waveform_container[idx][mode]["tf"] = tf_lm
+                            self.waveform_container[idx][mode]["tf"] = -dphi_lm
                 # combine all modes if required
                 if ti.static(self.combine_modes):
                     combined_hp = ComplexNumber([0.0, 0.0])

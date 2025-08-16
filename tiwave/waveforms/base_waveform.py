@@ -1,6 +1,6 @@
 # TODO: move to common
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Callable
 import warnings
 
 import taichi as ti
@@ -15,10 +15,11 @@ class BaseWaveform(ABC):
     def __init__(
         self,
         frequencies: ti.ScalarField | NDArray[np.float64],
-        reference_frequency: Optional[float] = None,
+        reference_frequency: float | None = None,
         return_form: str = "polarizations",
         include_tf: bool = True,
         check_parameters: bool = False,
+        parameter_conversion: Callable | None = None,
     ) -> None:
         """
         Parameters
@@ -55,6 +56,11 @@ class BaseWaveform(ABC):
                 "check_parameters is disable, make sure all parameters passed in are valid."
             )
 
+        if parameter_conversion is None:
+            self.parameter_conversion = self._default_parameter_conversion
+        else:
+            self.parameter_conversion = parameter_conversion
+
         self.return_form = return_form
         self.include_tf = include_tf
         self._initialize_waveform_container()
@@ -63,6 +69,9 @@ class BaseWaveform(ABC):
         self.phase_coefficients = None
         self.amplitude_coefficients = None
         self.pn_coefficients = None
+
+    def _default_parameter_conversion(self, input_params: dict[str, float]):
+        return input_params
 
     def _initialize_waveform_container(self) -> None:
         ret_content = {}

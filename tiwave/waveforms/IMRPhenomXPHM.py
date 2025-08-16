@@ -1,5 +1,9 @@
+from typing import Callable
+
 import taichi as ti
 import taichi.math as tm
+import numpy as np
+from numpy.typing import NDArray
 
 from ..constants import *
 from ..utils import UsefulPowers, ComplexNumber, sub_struct_from
@@ -1154,12 +1158,13 @@ class IMRPhenomXP(BaseWaveform):
 
     def __init__(
         self,
-        frequencies,
-        reference_frequency=None,
-        return_form="polarizations",  # "amplitude_phase_eulerangles" or "polarizations"
-        include_tf=True,
-        check_parameters=False,
-        precession_model="try_MSA_fallback_NNLO",  # one of "NNLO", "MSA", "try_MSA_fallback_NNLO"
+        frequencies: ti.ScalarField | NDArray[np.float64],
+        reference_frequency: float | None = None,
+        return_form: str = "polarizations",  # "amplitude_phase_eulerangles" or "polarizations"
+        include_tf: bool = True,
+        check_parameters: bool = False,
+        parameter_conversion: Callable | None = None,
+        precession_model: str = "try_MSA_fallback_NNLO",  # one of "NNLO", "MSA", "try_MSA_fallback_NNLO"
     ):
         super().__init__(
             frequencies,
@@ -1167,6 +1172,7 @@ class IMRPhenomXP(BaseWaveform):
             return_form,
             include_tf,
             check_parameters,
+            parameter_conversion,
         )
 
         self.phase_coefficients = PhaseCoefficients.field(shape=())
@@ -1222,19 +1228,20 @@ class IMRPhenomXP(BaseWaveform):
         )
         return None
 
-    def update_waveform(self, parameters: dict[str, float]) -> None:
+    def update_waveform(self, input_params: dict[str, float]) -> None:
+        params = self.parameter_conversion(input_params)
         self._update_waveform_kernel(
-            parameters["mass_1"],
-            parameters["mass_2"],
-            parameters["chi1_x"],
-            parameters["chi1_y"],
-            parameters["chi1_z"],
-            parameters["chi2_x"],
-            parameters["chi2_y"],
-            parameters["chi2_z"],
-            parameters["luminosity_distance"],
-            parameters["inclination"],
-            parameters["reference_phase"],
+            params["mass_1"],
+            params["mass_2"],
+            params["chi1_x"],
+            params["chi1_y"],
+            params["chi1_z"],
+            params["chi2_x"],
+            params["chi2_y"],
+            params["chi2_z"],
+            params["luminosity_distance"],
+            params["inclination"],
+            params["reference_phase"],
             self.reference_frequency,
         )
 

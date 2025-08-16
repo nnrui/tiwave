@@ -5,13 +5,14 @@
 # - check unwrap operation in PhaseCoefficientsMode32._set_intermediate_coefficients
 # - fix high numerical error for intermediate phase of mode 32
 # - including all modes, cancel supporting of specifying modes
-
-from typing import Optional
+from typing import Callable
 import copy
 import warnings
 
 import taichi as ti
 import taichi.math as tm
+import numpy as np
+from numpy.typing import NDArray
 
 from ..constants import *
 from ..utils import ComplexNumber, gauss_elimination, UsefulPowers, sub_struct_from
@@ -6975,13 +6976,14 @@ class IMRPhenomXHM(BaseWaveform):
 
     def __init__(
         self,
-        frequencies: ti.ScalarField,
-        reference_frequency: Optional[float] = None,
+        frequencies: ti.ScalarField | NDArray[np.float64],
+        reference_frequency: float | None,
         return_form: str = "polarizations",
         include_tf: bool = True,
         high_modes: tuple[str] = ("21", "33", "32", "44"),
         combine_modes: bool = False,
         check_parameters: bool = False,
+        parameter_conversion: Callable | None = None,
         mode_major: bool = True,  # mode major or frequency major in waveform_container
         container_layout: str = "AOS",  # TODO, AOS or SOA
     ) -> None:
@@ -6995,6 +6997,7 @@ class IMRPhenomXHM(BaseWaveform):
             return_form,
             include_tf,
             check_parameters,
+            parameter_conversion,
         )
 
         self.source_parameters = SourceParametersHighModes.field(shape=())
@@ -7084,24 +7087,22 @@ class IMRPhenomXHM(BaseWaveform):
 
         return None
 
-    def update_waveform(self, parameters: dict[str, float]):
+    def update_waveform(self, input_params: dict[str, float]):
         """
         necessary preparation which need to be finished in python scope for waveform computation
         """
         # TODO: passed-in parameter conversion
+        params = self.parameter_conversion(input_params)
         self._update_waveform_common(
-            parameters["mass_1"],
-            parameters["mass_2"],
-            parameters["chi1_z"],
-            parameters["chi2_z"],
-            parameters["luminosity_distance"],
-            parameters["inclination"],
-            parameters["reference_phase"],
+            params["mass_1"],
+            params["mass_2"],
+            params["chi1_z"],
+            params["chi2_z"],
+            params["luminosity_distance"],
+            params["inclination"],
+            params["reference_phase"],
         )
-        if (
-            parameters["mass_1"] == parameters["mass_2"]
-            and parameters["chi_1"] == parameters["chi_2"]
-        ):
+        if params["mass_1"] == params["mass_2"] and params["chi_1"] == params["chi_2"]:
             self._update_waveform_symmetry_binary()
         else:
             self._update_waveform_general_binary()

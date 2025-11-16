@@ -7,7 +7,7 @@ import taichi as ti
 import numpy as np
 from numpy.typing import NDArray
 
-from ..utils import ComplexNumber
+from ..utils import ti_complex
 
 
 class BaseWaveform(ABC):
@@ -38,7 +38,7 @@ class BaseWaveform(ABC):
         if isinstance(frequencies, ti.ScalarField):
             self.frequencies = frequencies
         elif isinstance(frequencies, np.ndarray):
-            self.frequencies = ti.field(ti.f64, shape=frequencies.shape)
+            self.frequencies = ti.field(float, shape=frequencies.shape)
             self.frequencies.from_numpy(frequencies)
         else:
             raise TypeError(
@@ -76,16 +76,16 @@ class BaseWaveform(ABC):
     def _initialize_waveform_container(self) -> None:
         ret_content = {}
         if self.return_form == "polarizations":
-            ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
+            ret_content.update({"plus": ti_complex, "cross": ti_complex})
         elif self.return_form == "amplitude_phase":
-            ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
+            ret_content.update({"amplitude": float, "phase": float})
         else:
             raise Exception(
                 f"{self.return_form} is unknown. `return_form` can only be one of `polarizations` and `amplitude_phase`"
             )
 
         if self.include_tf:
-            ret_content.update({"tf": ti.f64})
+            ret_content.update({"tf": float})
 
         self.waveform_container = ti.Struct.field(
             ret_content,

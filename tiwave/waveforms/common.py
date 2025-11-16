@@ -16,26 +16,26 @@ class PostNewtonianCoefficients:
     """ """
 
     # phase coefficients
-    phi_0: ti.f64
-    phi_1: ti.f64
-    phi_2: ti.f64
-    phi_3: ti.f64
-    phi_4: ti.f64
+    phi_0: float
+    phi_1: float
+    phi_2: float
+    phi_3: float
+    phi_4: float
     # the constant term of phi_5 and phi_5l*log(pi) is dropped
-    phi_5l: ti.f64
-    phi_6: ti.f64
-    phi_6l: ti.f64
-    phi_7: ti.f64
-    phi_8: ti.f64
-    phi_8l: ti.f64
+    phi_5l: float
+    phi_6: float
+    phi_6l: float
+    phi_7: float
+    phi_8: float
+    phi_8l: float
     # amplitude coeffients
-    A_0: ti.f64
-    A_1: ti.f64
-    A_2: ti.f64
-    A_3: ti.f64
-    A_4: ti.f64
-    A_5: ti.f64
-    A_6: ti.f64
+    A_0: float
+    A_1: float
+    A_2: float
+    A_3: float
+    A_4: float
+    A_5: float
+    A_6: float
 
     @ti.func
     def update_pn_coefficients(self, source_params: ti.template()):
@@ -274,7 +274,7 @@ class PostNewtonianCoefficients:
         ) * useful_powers_pi.two
 
     @ti.func
-    def PN_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def PN_amplitude(self, powers_of_Mf: ti.template()) -> float:
         """ """
         return (
             self.A_0
@@ -287,7 +287,7 @@ class PostNewtonianCoefficients:
         )
 
     @ti.func
-    def PN_d_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def PN_d_amplitude(self, powers_of_Mf: ti.template()) -> float:
         """ """
         return (
             1.0 / 3.0 * self.A_1 / powers_of_Mf.two_thirds
@@ -299,7 +299,7 @@ class PostNewtonianCoefficients:
         )
 
     @ti.func
-    def PN_phase(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def PN_phase(self, powers_of_Mf: ti.template()) -> float:
         """ """
         return (
             self.phi_0 / powers_of_Mf.five_thirds
@@ -319,7 +319,7 @@ class PostNewtonianCoefficients:
         )
 
     @ti.func
-    def PN_d_phase(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def PN_d_phase(self, powers_of_Mf: ti.template()) -> float:
         """ """
         return (
             -5.0 / 3.0 * self.phi_0 / powers_of_Mf.eight_thirds

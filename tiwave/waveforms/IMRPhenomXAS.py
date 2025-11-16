@@ -8,7 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..constants import *
-from ..utils import ComplexNumber, gauss_elimination, UsefulPowers
+from ..utils import ti_complex, gauss_elimination, UsefulPowers
 from .common import PostNewtonianCoefficients
 from .base_waveform import BaseWaveform
 
@@ -24,73 +24,73 @@ useful_powers_pi.update(PI)
 class SourceParameters:
     # TODO: doc detail defination and unit!
     # passed-in parameters
-    m_1: ti.f64  # mass of primary (solar mass)
-    m_2: ti.f64  # mass of secondary m_1 > m_2
-    chi_1: ti.f64
-    chi_2: ti.f64
-    dL_Mpc: ti.f64  # luminosity distance (Mpc)
-    iota: ti.f64
-    phase_ref: ti.f64
+    m_1: float  # mass of primary (solar mass)
+    m_2: float  # mass of secondary m_1 > m_2
+    chi_1: float
+    chi_2: float
+    dL_Mpc: float  # luminosity distance (Mpc)
+    iota: float
+    phase_ref: float
     # derived parameters
-    M: ti.f64  # total mass
-    m1_dimless: ti.f64
-    m2_dimless: ti.f64
-    dL_SI: ti.f64  # luminosity distance in meter
-    M_sec: ti.f64  # total mass in second
-    Mf_ref: ti.f64  # dimensionless reference frequency
-    dimension_factor: ti.f64  # dimension factor of mass and distance in amplitude
-    eta: ti.f64  # symmetric_mass_ratio
-    eta_pow2: ti.f64  # eta^2
-    eta_pow3: ti.f64
-    eta_pow4: ti.f64
-    eta_pow5: ti.f64
-    eta_pow6: ti.f64
-    delta: ti.f64  # (m_1-m_2)/M
-    delta_chi: ti.f64  # chi_1 - chi_2
-    delta_chi_pow2: ti.f64
-    chi_s: ti.f64  # (chi_1 + chi_2)/2
-    chi_s_pow2: ti.f64
-    chi_s_pow3: ti.f64
-    chi_a: ti.f64  # (chi_1 - chi_2)/2
-    chi_a_pow2: ti.f64
-    chi_a_pow3: ti.f64
-    chi_eff: ti.f64
-    chi_PN_hat: ti.f64  # Eq. 4.17 in arXiv:2001.11412
-    chi_PN_hat_pow2: ti.f64
-    chi_PN_hat_pow3: ti.f64
-    chi_PN_hat_pow4: ti.f64
-    S_tot_hat: ti.f64  # Eq. 4.18
-    S_tot_hat_pow2: ti.f64
-    S_tot_hat_pow3: ti.f64
-    S_tot_hat_pow4: ti.f64
-    S_tot_hat_pow5: ti.f64
+    M: float  # total mass
+    m1_dimless: float
+    m2_dimless: float
+    dL_SI: float  # luminosity distance in meter
+    M_sec: float  # total mass in second
+    Mf_ref: float  # dimensionless reference frequency
+    dimension_factor: float  # dimension factor of mass and distance in amplitude
+    eta: float  # symmetric_mass_ratio
+    eta_pow2: float  # eta^2
+    eta_pow3: float
+    eta_pow4: float
+    eta_pow5: float
+    eta_pow6: float
+    delta: float  # (m_1-m_2)/M
+    delta_chi: float  # chi_1 - chi_2
+    delta_chi_pow2: float
+    chi_s: float  # (chi_1 + chi_2)/2
+    chi_s_pow2: float
+    chi_s_pow3: float
+    chi_a: float  # (chi_1 - chi_2)/2
+    chi_a_pow2: float
+    chi_a_pow3: float
+    chi_eff: float
+    chi_PN_hat: float  # Eq. 4.17 in arXiv:2001.11412
+    chi_PN_hat_pow2: float
+    chi_PN_hat_pow3: float
+    chi_PN_hat_pow4: float
+    S_tot_hat: float  # Eq. 4.18
+    S_tot_hat_pow2: float
+    S_tot_hat_pow3: float
+    S_tot_hat_pow4: float
+    S_tot_hat_pow5: float
     # fitting parameters
-    final_mass: ti.f64
-    final_spin: ti.f64
-    final_spin_pow2: ti.f64
-    final_spin_pow3: ti.f64
-    final_spin_pow4: ti.f64
-    final_spin_pow5: ti.f64
-    final_spin_pow6: ti.f64
-    final_spin_pow7: ti.f64
-    f_ring: ti.f64
-    f_damp: ti.f64
-    f_damp_pow2: ti.f64
-    f_MECO: ti.f64
-    f_ISCO: ti.f64
-    peak_time_diff: ti.f64
+    final_mass: float
+    final_spin: float
+    final_spin_pow2: float
+    final_spin_pow3: float
+    final_spin_pow4: float
+    final_spin_pow5: float
+    final_spin_pow6: float
+    final_spin_pow7: float
+    f_ring: float
+    f_damp: float
+    f_damp_pow2: float
+    f_MECO: float
+    f_ISCO: float
+    peak_time_diff: float
 
     @ti.func
     def update_source_parameters(
         self,
-        mass_1: ti.f64,
-        mass_2: ti.f64,
-        chi_1: ti.f64,
-        chi_2: ti.f64,
-        luminosity_distance: ti.f64,
-        inclination: ti.f64,
-        reference_phase: ti.f64,
-        reference_frequency: ti.f64,
+        mass_1: float,
+        mass_2: float,
+        chi_1: float,
+        chi_2: float,
+        luminosity_distance: float,
+        inclination: float,
+        reference_phase: float,
+        reference_frequency: float,
     ):
         """
         TODO: doc parameters definition and units,
@@ -166,7 +166,7 @@ class SourceParameters:
         self.peak_time_diff = 2.0 * PI * (500.0 + self._psi4_to_strain())
 
     @ti.func
-    def _psi4_to_strain(self) -> ti.f64:
+    def _psi4_to_strain(self) -> float:
         """
         The fit of the time internal between peak of strain and psi4.
         """
@@ -204,7 +204,7 @@ class SourceParameters:
         )
 
     @ti.func
-    def _get_final_mass(self) -> ti.f64:
+    def _get_final_mass(self) -> float:
         """
         arXiv:1611.00332
         """
@@ -258,7 +258,7 @@ class SourceParameters:
         )
 
     @ti.func
-    def _get_final_spin(self) -> ti.f64:
+    def _get_final_spin(self) -> float:
         return (
             (
                 3.4641016151377544 * self.eta
@@ -316,7 +316,7 @@ class SourceParameters:
         )
 
     @ti.func
-    def _get_f_ring(self) -> ti.f64:
+    def _get_f_ring(self) -> float:
         return (
             (
                 0.05947169566573468
@@ -339,7 +339,7 @@ class SourceParameters:
         )
 
     @ti.func
-    def _get_f_damp(self) -> ti.f64:
+    def _get_f_damp(self) -> float:
         return (
             (
                 0.014158792290965177
@@ -361,7 +361,7 @@ class SourceParameters:
         )
 
     @ti.func
-    def _get_f_MECO(self) -> ti.f64:
+    def _get_f_MECO(self) -> float:
         return (
             (
                 0.018744340279608845
@@ -444,7 +444,7 @@ class SourceParameters:
         )
 
     @ti.func
-    def _get_f_ISCO(self) -> ti.f64:
+    def _get_f_ISCO(self) -> float:
         """
         Frequency of the innermost stable circular orbit (ISCO).
         """
@@ -474,37 +474,37 @@ class SourceParameters:
 @ti.dataclass
 class AmplitudeCoefficients:
     # Inspiral
-    rho_1: ti.f64
-    rho_2: ti.f64
-    rho_3: ti.f64
-    ins_colloc_points: ti.types.vector(3, ti.f64)
-    ins_colloc_values: ti.types.vector(3, ti.f64)
+    rho_1: float
+    rho_2: float
+    rho_3: float
+    ins_colloc_points: ti.types.vector(3, float)
+    ins_colloc_values: ti.types.vector(3, float)
     # Intermediate (104 model)
-    alpha_0: ti.f64
-    alpha_1: ti.f64
-    alpha_2: ti.f64
-    alpha_3: ti.f64
-    alpha_4: ti.f64
-    int_colloc_points: ti.types.vector(3, ti.f64)
-    int_colloc_values: ti.types.vector(5, ti.f64)
+    alpha_0: float
+    alpha_1: float
+    alpha_2: float
+    alpha_3: float
+    alpha_4: float
+    int_colloc_points: ti.types.vector(3, float)
+    int_colloc_values: ti.types.vector(5, float)
     # Merge-ringdown
-    gamma_1: ti.f64  # a_R in arXiv:2001.11412
-    gamma_2: ti.f64  # lambda
-    gamma_3: ti.f64  # sigma
-    f_peak: ti.f64
+    gamma_1: float  # a_R in arXiv:2001.11412
+    gamma_2: float  # lambda
+    gamma_3: float  # sigma
+    f_peak: float
     # joint frequencies
-    fjoin_int_ins: ti.f64
-    fjoin_MRD_int: ti.f64
+    fjoin_int_ins: float
+    fjoin_MRD_int: float
     _useful_powers: ti.types.struct(
         fjoin_int_ins=UsefulPowers,
         fjoin_MRD_int=UsefulPowers,
     )
     # cached parameters
-    gamma1_gamma3_fdamp: ti.f64  # a_R * f_damp * sigma
-    gamma2_over_gamma3_fdamp: ti.f64  # lambda / (f_damp * sigma)
-    gamma3_fdamp: ti.f64  # f_damp * sigma
-    gamma3_fdamp_pow2: ti.f64  # (f_damp * sigma)^2
-    common_factor: ti.f64  # sqrt(2.0/3.0/pi^(1/3)*eta) (NOT including Y22)
+    gamma1_gamma3_fdamp: float  # a_R * f_damp * sigma
+    gamma2_over_gamma3_fdamp: float  # lambda / (f_damp * sigma)
+    gamma3_fdamp: float  # f_damp * sigma
+    gamma3_fdamp_pow2: float  # (f_damp * sigma)^2
+    common_factor: float  # sqrt(2.0/3.0/pi^(1/3)*eta) (NOT including Y22)
 
     @ti.func
     def _set_ins_int_colloc_points(self, source_params: ti.template()):
@@ -647,7 +647,7 @@ class AmplitudeCoefficients:
                     self.ins_colloc_values[2],
                 ],
             ],
-            dt=ti.f64,
+            dt=float,
         )
         self.rho_1, self.rho_2, self.rho_3 = gauss_elimination(Ab_ins)
 
@@ -833,7 +833,7 @@ class AmplitudeCoefficients:
                     self.int_colloc_values[4],
                 ],
             ],
-            dt=ti.f64,
+            dt=float,
         )
         (
             self.alpha_0,
@@ -978,7 +978,7 @@ class AmplitudeCoefficients:
     @ti.func
     def _inspiral_amplitude(
         self, pn_coefficients: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.f64:
+    ) -> float:
         """
         Eq. 6.3 in arXiv:2001.11412.
         only have the 103 fit model.
@@ -993,7 +993,7 @@ class AmplitudeCoefficients:
     @ti.func
     def _inspiral_d_amplitude(
         self, pn_coefficients: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.f64:
+    ) -> float:
         """ """
         return (
             pn_coefficients.PN_d_amplitude(powers_of_Mf)
@@ -1003,7 +1003,7 @@ class AmplitudeCoefficients:
         )
 
     @ti.func
-    def _intermediate_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def _intermediate_amplitude(self, powers_of_Mf: ti.template()) -> float:
         """
         Eq. 6.7 in arXiv:2001.11412.
         Only the recommended fitting model `104` with 4th order polynomial ansatz are implemented.
@@ -1021,7 +1021,7 @@ class AmplitudeCoefficients:
     @ti.func
     def _merge_ringdown_amplitude(
         self, source_params: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.f64:
+    ) -> float:
         """
         Eq. 6.19 in arXiv:2001.11412.
         Different notation with Eq. 6.19: gamma_1: a_R, gamma_2: lambda, gamma_3: sigma
@@ -1040,7 +1040,7 @@ class AmplitudeCoefficients:
     @ti.func
     def _merge_ringdown_d_amplitude(
         self, source_params: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.f64:
+    ) -> float:
         """
         Derivative with respect to f of the amplitude merge-ringdown ansatz.
         """
@@ -1077,7 +1077,7 @@ class AmplitudeCoefficients:
         pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         # amplitude = 0.0
         # if powers_of_Mf.one < self.fjoin_int_ins:
         #     amplitude = self._inspiral_amplitude(pn_coefficients, powers_of_Mf)
@@ -1111,42 +1111,42 @@ class AmplitudeCoefficients:
 @ti.dataclass
 class PhaseCoefficients:
     # Inspiral (104 fitting model)
-    sigma_1: ti.f64
-    sigma_2: ti.f64
-    sigma_3: ti.f64
-    sigma_4: ti.f64
-    ins_colloc_points: ti.types.vector(4, ti.f64)
-    ins_colloc_values: ti.types.vector(4, ti.f64)
+    sigma_1: float
+    sigma_2: float
+    sigma_3: float
+    sigma_4: float
+    ins_colloc_points: ti.types.vector(4, float)
+    ins_colloc_values: ti.types.vector(4, float)
     # Intermediate (105 fitting model)
-    beta_0: ti.f64
-    beta_1: ti.f64
-    beta_2: ti.f64
-    beta_3: ti.f64
-    beta_4: ti.f64
-    int_colloc_points: ti.types.vector(5, ti.f64)
-    int_colloc_values: ti.types.vector(5, ti.f64)
-    C0_int: ti.f64
-    C1_int: ti.f64
+    beta_0: float
+    beta_1: float
+    beta_2: float
+    beta_3: float
+    beta_4: float
+    int_colloc_points: ti.types.vector(5, float)
+    int_colloc_values: ti.types.vector(5, float)
+    C0_int: float
+    C1_int: float
     # Merge-ringdown
-    c_0: ti.f64
-    c_1: ti.f64  # f^-1/3
-    c_2: ti.f64  # f^-2
-    c_4: ti.f64  # f_-4
-    c_L: ti.f64  # Lorentzian term
-    MRD_colloc_points: ti.types.vector(5, ti.f64)
-    MRD_colloc_values: ti.types.vector(5, ti.f64)
-    C0_MRD: ti.f64
-    C1_MRD: ti.f64
+    c_0: float
+    c_1: float  # f^-1/3
+    c_2: float  # f^-2
+    c_4: float  # f_-4
+    c_L: float  # Lorentzian term
+    MRD_colloc_points: ti.types.vector(5, float)
+    MRD_colloc_values: ti.types.vector(5, float)
+    C0_MRD: float
+    C1_MRD: float
     # joint frequencies
-    fjoin_int_ins: ti.f64
-    fjoin_MRD_int: ti.f64
+    fjoin_int_ins: float
+    fjoin_MRD_int: float
     _useful_powers: ti.types.struct(
         fjoin_int_ins=UsefulPowers,  # fmax_ins is not same with fmin_int, using fmin_int as the joint point when computing the phase and the connection coefficients
         fjoin_MRD_int=UsefulPowers,  # fmin_MRD is not same with fmax_int, using fmax_int as the joint point when computing the phase and the connection coefficients
     )
     # time and phase shift
-    time_shift: ti.f64
-    phase_shift: ti.f64
+    time_shift: float
+    phase_shift: float
 
     @ti.func
     def _set_all_colloc_points(self, source_params: ti.template()):
@@ -1479,7 +1479,7 @@ class PhaseCoefficients:
                     self.MRD_colloc_values[4],
                 ],
             ],
-            dt=ti.f64,
+            dt=float,
         )
         self.c_0, self.c_1, self.c_2, self.c_4, self.c_L = (
             gauss_elimination(Ab_MRD) / source_params.eta
@@ -1686,7 +1686,7 @@ class PhaseCoefficients:
                     self.ins_colloc_values[3],
                 ],
             ],
-            dt=ti.f64,
+            dt=float,
         )
         # absorbing common factor into the pseudo PN parameters
         # note the normalizing factor used in lalsim: dphase0=(5/128/pi^(5/3))
@@ -1996,7 +1996,7 @@ class PhaseCoefficients:
                     ),
                 ],
             ],
-            dt=ti.f64,
+            dt=float,
         )
 
         (
@@ -2059,7 +2059,7 @@ class PhaseCoefficients:
         )
 
     @ti.func
-    def _fit_of_time_at_fit_frequency(self, source_params: ti.template()) -> ti.f64:
+    def _fit_of_time_at_fit_frequency(self, source_params: ti.template()) -> float:
         """
         The fit of dphi at the fit frequency, dphi(fring-fdamp). evaluated on the
         calibration dataset
@@ -2137,7 +2137,7 @@ class PhaseCoefficients:
         self,
         pn_coefficients: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             pn_coefficients.PN_phase(powers_of_Mf)
             + self.sigma_1 * powers_of_Mf.one
@@ -2151,7 +2151,7 @@ class PhaseCoefficients:
         self,
         pn_coefficients: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             pn_coefficients.PN_d_phase(powers_of_Mf)
             + self.sigma_1
@@ -2165,7 +2165,7 @@ class PhaseCoefficients:
         self,
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             self.beta_0 * powers_of_Mf.one
             + self.beta_1 * powers_of_Mf.log
@@ -2185,7 +2185,7 @@ class PhaseCoefficients:
         self,
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             self.beta_0
             + self.beta_1 / powers_of_Mf.one
@@ -2204,7 +2204,7 @@ class PhaseCoefficients:
         self,
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             self.c_0 * powers_of_Mf.one
             + 1.5 * self.c_1 * powers_of_Mf.two_thirds
@@ -2220,7 +2220,7 @@ class PhaseCoefficients:
         self,
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             self.c_0
             + self.c_1 / powers_of_Mf.third
@@ -2253,7 +2253,7 @@ class PhaseCoefficients:
         pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         """ """
         phase = 0.0
         # The fmax_ins and fmin_MRD are not same with fmin_int and fmax_int. Taking the fmin_int
@@ -2280,7 +2280,7 @@ class PhaseCoefficients:
         pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         """ """
         return (
             self._compute_phase_core(pn_coefficients, source_params, powers_of_Mf)
@@ -2294,7 +2294,7 @@ class PhaseCoefficients:
         pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         """ """
         d_phase = 0.0
         if powers_of_Mf.one < self.fjoin_int_ins:
@@ -2315,7 +2315,7 @@ class PhaseCoefficients:
         pn_coefficients: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
 
         return (
             self._compute_d_phase_core(pn_coefficients, source_params, powers_of_Mf)
@@ -2362,8 +2362,8 @@ class IMRPhenomXAS(BaseWaveform):
         self._update_waveform_kernel(
             params["mass_1"],
             params["mass_2"],
-            params["chi1_z"],
-            params["chi2_z"],
+            params["chi_1"],
+            params["chi_2"],
             params["luminosity_distance"],
             params["inclination"],
             params["reference_phase"],
@@ -2375,21 +2375,21 @@ class IMRPhenomXAS(BaseWaveform):
         common = 0.125 * tm.sqrt(5.0 / PI)
         cos_iota = tm.cos(self.source_parameters[None].iota)
         harmonic_factors.plus = (
-            -ComplexNumber([1.0, 0.0]) * common * (1.0 + cos_iota * cos_iota)
+            -ti_complex([1.0, 0.0]) * common * (1.0 + cos_iota * cos_iota)
         )
-        harmonic_factors.cross = ComplexNumber([0.0, 1.0]) * common * (2 * cos_iota)
+        harmonic_factors.cross = ti_complex([0.0, 1.0]) * common * (2 * cos_iota)
 
     @ti.kernel
     def _update_waveform_kernel(
         self,
-        mass_1: ti.f64,
-        mass_2: ti.f64,
-        chi_1: ti.f64,
-        chi_2: ti.f64,
-        luminosity_distance: ti.f64,
-        inclination: ti.f64,
-        reference_phase: ti.f64,
-        reference_frequency: ti.f64,
+        mass_1: float,
+        mass_2: float,
+        chi_1: float,
+        chi_2: float,
+        luminosity_distance: float,
+        inclination: float,
+        reference_phase: float,
+        reference_frequency: float,
     ):
 
         self.source_parameters[None].update_source_parameters(
@@ -2411,7 +2411,7 @@ class IMRPhenomXAS(BaseWaveform):
         )
 
         harm_fac = ti.Struct(
-            plus=ComplexNumber([0.0, 0.0]), cross=ComplexNumber([0.0, 0.0])
+            plus=ti_complex([0.0, 0.0]), cross=ti_complex([0.0, 0.0])
         )
         if ti.static(self.return_form == "polarizations"):
             self._set_harmonic_factors(harm_fac)
@@ -2438,7 +2438,7 @@ class IMRPhenomXAS(BaseWaveform):
                     self.waveform_container[idx].amplitude = amplitude
                     self.waveform_container[idx].phase = phase
                 if ti.static(self.return_form == "polarizations"):
-                    h_22 = amplitude * tm.cexp(ComplexNumber([0.0, phase]))
+                    h_22 = amplitude * tm.cexp(ti_complex([0.0, phase]))
                     self.waveform_container[idx].plus = tm.cmul(harm_fac.plus, h_22)
                     self.waveform_container[idx].cross = tm.cmul(harm_fac.cross, h_22)
                 if ti.static(self.include_tf):

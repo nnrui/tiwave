@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..constants import *
-from ..utils import UsefulPowers, ComplexNumber, sub_struct_from
+from ..utils import UsefulPowers, ti_complex, sub_struct_from
 from .base_waveform import BaseWaveform
 from .common import PostNewtonianCoefficients
 from .IMRPhenomXAS import (
@@ -23,8 +23,8 @@ powers_of_pi.update(PI)
 
 @ti.func
 def rotate_z(
-    angle: ti.f64, vec: ti.types.vector(3, ti.f64)
-) -> ti.types.vector(3, ti.f64):
+    angle: float, vec: ti.types.vector(3, float)
+) -> ti.types.vector(3, float):
     cos_angle = tm.cos(angle)
     sin_angle = tm.sin(angle)
     return ti.Vector(
@@ -33,14 +33,14 @@ def rotate_z(
             vec.x * sin_angle + vec.y * cos_angle,
             vec.z,
         ],
-        dt=ti.f64,
+        dt=float,
     )
 
 
 @ti.func
 def rotate_y(
-    angle: ti.f64, vec: ti.types.vector(3, ti.f64)
-) -> ti.types.vector(3, ti.f64):
+    angle: float, vec: ti.types.vector(3, float)
+) -> ti.types.vector(3, float):
     cos_angle = tm.cos(angle)
     sin_angle = tm.sin(angle)
     return ti.Vector(
@@ -49,32 +49,32 @@ def rotate_y(
             vec.y,
             -vec.x * sin_angle + vec.z * cos_angle,
         ],
-        dt=ti.f64,
+        dt=float,
     )
 
 
 @sub_struct_from(SourceParameters)
 class SourceParametersPrecessionNNLO:
-    chi1_vec: ti.types.vector(3, dtype=ti.f64)
-    chi2_vec: ti.types.vector(3, dtype=ti.f64)
-    S1_vec: ti.types.vector(3, dtype=ti.f64)
-    S2_vec: ti.types.vector(3, dtype=ti.f64)
-    S_para: ti.f64
-    S_perp: ti.f64
-    chi_l: ti.f64
-    chi_p: ti.f64
-    chi_l_pow2: ti.f64
-    chi_p_pow2: ti.f64
-    delta_pow2: ti.f64
-    delta_pow3: ti.f64
-    m1_dimless_pow2: ti.f64
-    m1_dimless_pow3: ti.f64
-    m1_dimless_pow4: ti.f64
-    m1_dimless_pow5: ti.f64
-    m1_dimless_pow6: ti.f64
-    m1_dimless_pow7: ti.f64
-    m1_dimless_pow8: ti.f64
-    phase_ref_in: ti.f64
+    chi1_vec: ti.types.vector(3, dtype=float)
+    chi2_vec: ti.types.vector(3, dtype=float)
+    S1_vec: ti.types.vector(3, dtype=float)
+    S2_vec: ti.types.vector(3, dtype=float)
+    S_para: float
+    S_perp: float
+    chi_l: float
+    chi_p: float
+    chi_l_pow2: float
+    chi_p_pow2: float
+    delta_pow2: float
+    delta_pow3: float
+    m1_dimless_pow2: float
+    m1_dimless_pow3: float
+    m1_dimless_pow4: float
+    m1_dimless_pow5: float
+    m1_dimless_pow6: float
+    m1_dimless_pow7: float
+    m1_dimless_pow8: float
+    phase_ref_in: float
 
     @ti.func
     def _update_precessing_final_state(self):
@@ -97,18 +97,18 @@ class SourceParametersPrecessionNNLO:
     @ti.func
     def update_source_parameters(
         self,
-        mass_1: ti.f64,
-        mass_2: ti.f64,
-        chi1_x: ti.f64,
-        chi1_y: ti.f64,
-        chi1_z: ti.f64,
-        chi2_x: ti.f64,
-        chi2_y: ti.f64,
-        chi2_z: ti.f64,
-        luminosity_distance: ti.f64,
-        inclination: ti.f64,
-        reference_phase: ti.f64,
-        reference_frequency: ti.f64,
+        mass_1: float,
+        mass_2: float,
+        chi1_x: float,
+        chi1_y: float,
+        chi1_z: float,
+        chi2_x: float,
+        chi2_y: float,
+        chi2_z: float,
+        luminosity_distance: float,
+        inclination: float,
+        reference_phase: float,
+        reference_frequency: float,
     ):
         self._parent_update_source_parameters(
             mass_1,
@@ -134,8 +134,8 @@ class SourceParametersPrecessionNNLO:
         self.m1_dimless_pow7 = self.m1_dimless * self.m1_dimless_pow6
         self.m1_dimless_pow8 = self.m1_dimless * self.m1_dimless_pow7
 
-        self.chi1_vec = ti.Vector([chi1_x, chi1_y, chi1_z], dt=ti.f64)
-        self.chi2_vec = ti.Vector([chi2_x, chi2_y, chi2_z], dt=ti.f64)
+        self.chi1_vec = ti.Vector([chi1_x, chi1_y, chi1_z], dt=float)
+        self.chi2_vec = ti.Vector([chi2_x, chi2_y, chi2_z], dt=float)
         self.S1_vec = self.chi1_vec * self.m1_dimless_pow2
         self.S2_vec = self.chi2_vec * self.m2_dimless * self.m2_dimless
 
@@ -157,58 +157,58 @@ class SourceParametersPrecessionNNLO:
 
 # @ti.func
 # def spin_minus_2_spherical_harmonic(
-#     theta: ti.f64, phi: ti.f64, l: int, m: int
-# ) -> ComplexNumber:
+#     theta: float, phi: float, l: int, m: int
+# ) -> ti_complex:
 #     fac = 0.0
 #     if ti.static(l == 2):
 #         if ti.static(m == -2):
 #             pass
 
-#     return fac * tm.cexp(ComplexNumber[0.0, m * phi])
+#     return fac * tm.cexp(ti_complex[0.0, m * phi])
 
 
 # @ti.dataclass
 # class SphericalHarmonicL2:
-#     Y_2m2: ComplexNumber
-#     Y_2m1: ComplexNumber
-#     Y_20: ComplexNumber
-#     Y_21: ComplexNumber
-#     Y_22: ComplexNumber
+#     Y_2m2: ti_complex
+#     Y_2m1: ti_complex
+#     Y_20: ti_complex
+#     Y_21: ti_complex
+#     Y_22: ti_complex
 
 #     @ti.func
-#     def update(self, theta: ti.f64, phi: ti.f64):
+#     def update(self, theta: float, phi: float):
 #         pass
 
 
 # @ti.dataclass
 # class SphericalHarmonicL3:
-#     Y_3m3: ComplexNumber
-#     Y_3m2: ComplexNumber
-#     Y_3m1: ComplexNumber
-#     Y_30: ComplexNumber
-#     Y_31: ComplexNumber
-#     Y_32: ComplexNumber
-#     Y_33: ComplexNumber
+#     Y_3m3: ti_complex
+#     Y_3m2: ti_complex
+#     Y_3m1: ti_complex
+#     Y_30: ti_complex
+#     Y_31: ti_complex
+#     Y_32: ti_complex
+#     Y_33: ti_complex
 
 #     @ti.func
-#     def update(self, theta: ti.f64, phi: ti.f64):
+#     def update(self, theta: float, phi: float):
 #         pass
 
 
 # @ti.dataclass
 # class SphericalHarmonicL4:
-#     Y_4m4: ComplexNumber
-#     Y_4m3: ComplexNumber
-#     Y_4m2: ComplexNumber
-#     Y_4m1: ComplexNumber
-#     Y_40: ComplexNumber
-#     Y_41: ComplexNumber
-#     Y_42: ComplexNumber
-#     Y_43: ComplexNumber
-#     Y_44: ComplexNumber
+#     Y_4m4: ti_complex
+#     Y_4m3: ti_complex
+#     Y_4m2: ti_complex
+#     Y_4m1: ti_complex
+#     Y_40: ti_complex
+#     Y_41: ti_complex
+#     Y_42: ti_complex
+#     Y_43: ti_complex
+#     Y_44: ti_complex
 
 #     @ti.func
-#     def update(self, theta: ti.f64, phi: ti.f64):
+#     def update(self, theta: float, phi: float):
 #         pass
 
 
@@ -228,31 +228,31 @@ class SourceParametersPrecessionNNLO:
 
 @ti.dataclass
 class PrecessionCoefficientsNNLO:
-    alpha_m3: ti.f64
-    alpha_m2: ti.f64
-    alpha_m1: ti.f64
-    alpha_1: ti.f64
-    alpha_log: ti.f64
+    alpha_m3: float
+    alpha_m2: float
+    alpha_m1: float
+    alpha_1: float
+    alpha_log: float
 
-    gamma_m3: ti.f64
-    gamma_m2: ti.f64
-    gamma_m1: ti.f64
-    gamma_1: ti.f64
-    gamma_log: ti.f64
+    gamma_m3: float
+    gamma_m2: float
+    gamma_m1: float
+    gamma_1: float
+    gamma_log: float
 
-    L_0: ti.f64
-    L_1: ti.f64
-    L_2: ti.f64
-    L_3: ti.f64
-    L_4: ti.f64
-    L_5: ti.f64
-    L_6: ti.f64
+    L_0: float
+    L_1: float
+    L_2: float
+    L_3: float
+    L_4: float
+    L_5: float
+    L_6: float
 
-    alpha_0: ti.f64
-    gamma_0: ti.f64
-    cos_2zeta: ti.f64
-    sin_2zeta: ti.f64
-    spin_minus2_Y2m: ti.types.vector(5, dtype=ti.f64)
+    alpha_0: float
+    gamma_0: float
+    cos_2zeta: float
+    sin_2zeta: float
+    spin_minus2_Y2m: ti.types.vector(5, dtype=float)
 
     @ti.func
     def _set_convention_constants(self, source_params: ti.template()):
@@ -270,7 +270,7 @@ class PrecessionCoefficientsNNLO:
                 source_params.S1_vec.y + source_params.S2_vec.y,
                 source_params.S1_vec.z + source_params.S2_vec.z + L0_norm,
             ],
-            dt=ti.f64,
+            dt=float,
         )
         J_norm = tm.length(J_vec_L0)
 
@@ -320,7 +320,7 @@ class PrecessionCoefficientsNNLO:
                 -tm.cos(source_params.iota) * tm.cos(source_params.phase_ref_in),
                 tm.sin(source_params.iota),
             ],
-            dt=ti.f64,
+            dt=float,
         )  # Eq. C24 in 2004.06503
         X_vec_J = rotate_z(
             -kappa, (rotate_y(-theta_J_L0, rotate_z(-phi_J_L0, X_vec_L0)))
@@ -330,8 +330,8 @@ class PrecessionCoefficientsNNLO:
         cos_theta_J_N = tm.cos(theta_J_N)
         sin_theta_J_N = tm.sin(theta_J_N)
         # adopting convention from Arun et al, Eq. C23 in 2004.06503
-        P_vec_J = ti.Vector([cos_theta_J_N, 0.0, -sin_theta_J_N], dt=ti.f64)
-        Q_vec_J = ti.Vector([0.0, 1.0, 0.0], dt=ti.f64)
+        P_vec_J = ti.Vector([cos_theta_J_N, 0.0, -sin_theta_J_N], dt=float)
+        Q_vec_J = ti.Vector([0.0, 1.0, 0.0], dt=float)
         zeta = tm.atan2(tm.dot(X_vec_J, Q_vec_J), tm.dot(X_vec_J, P_vec_J))
         self.cos_2zeta = tm.cos(2.0 * zeta)
         self.sin_2zeta = tm.sin(2.0 * zeta)
@@ -345,7 +345,7 @@ class PrecessionCoefficientsNNLO:
                 tm.sqrt(5.0 / (16.0 * PI)) * sin_theta_J_N * (1.0 + cos_theta_J_N),
                 tm.sqrt(5.0 / (64.0 * PI)) * (1.0 + cos_theta_J_N) ** 2,
             ],
-            dt=ti.f64,  # phi=0, the harmonic factors are real
+            dt=float,  # phi=0, the harmonic factors are real
         )
 
     @ti.func
@@ -638,7 +638,7 @@ class PrecessionCoefficientsNNLO:
         self._set_convention_constants(source_params)
 
     @ti.func
-    def _compute_alpha_core(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def _compute_alpha_core(self, powers_of_Mf: ti.template()) -> float:
         return (
             self.alpha_m3 / powers_of_Mf.one
             + self.alpha_m2 / powers_of_Mf.two_thirds
@@ -648,11 +648,11 @@ class PrecessionCoefficientsNNLO:
         )
 
     @ti.func
-    def _compute_alpha(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def _compute_alpha(self, powers_of_Mf: ti.template()) -> float:
         return self._compute_alpha_core(powers_of_Mf) + self.alpha_0
 
     @ti.func
-    def _compute_gamma_core(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def _compute_gamma_core(self, powers_of_Mf: ti.template()) -> float:
         return (
             self.gamma_m3 / powers_of_Mf.one
             + self.gamma_m2 / powers_of_Mf.two_thirds
@@ -662,7 +662,7 @@ class PrecessionCoefficientsNNLO:
         )
 
     @ti.func
-    def _compute_gamma(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def _compute_gamma(self, powers_of_Mf: ti.template()) -> float:
         return self._compute_gamma_core(powers_of_Mf) + self.gamma_0
 
     @ti.func
@@ -670,14 +670,14 @@ class PrecessionCoefficientsNNLO:
         self,
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         L_norm = self._compute_L_norm_3PN(source_params.eta, powers_of_Mf)
         J_para = L_norm + source_params.S_para
         s = source_params.S_perp / J_para
         return tm.sign(J_para) / tm.sqrt(1.0 + s * s)
 
     @ti.func
-    def _compute_L_norm_3PN(self, eta: ti.f64, powers_of_Mf: ti.template()) -> ti.f64:
+    def _compute_L_norm_3PN(self, eta: float, powers_of_Mf: ti.template()) -> float:
         return eta * (
             self.L_0 / powers_of_Mf.third
             + self.L_1
@@ -691,14 +691,14 @@ class PrecessionCoefficientsNNLO:
     @ti.func
     def compute_euler_angles(
         self, source_params: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.types.vector(3, ti.f64):
+    ) -> ti.types.vector(3, float):
         return ti.Vector(
             [
                 self._compute_alpha(powers_of_Mf),
                 self._compute_gamma(powers_of_Mf),
                 self._compute_cos_beta(source_params, powers_of_Mf),
             ],
-            dt=ti.f64,
+            dt=float,
         )
 
 
@@ -716,30 +716,30 @@ class PrecessionCoefficientsMSA:
 #     Note the notation in 1703.03967 uses phiz->alpha, zeta->-gamma, thetaL->beta
 #     """
 #     # Eq. D15 - D20 in 1703.03967
-#     Omega_phiz_0_avg: ti.f64
-#     Omega_phiz_1_avg: ti.f64
-#     Omega_phiz_2_avg: ti.f64
-#     Omega_phiz_3_avg: ti.f64
-#     Omega_phiz_4_avg: ti.f64
-#     Omega_phiz_5_avg: ti.f64
+#     Omega_phiz_0_avg: float
+#     Omega_phiz_1_avg: float
+#     Omega_phiz_2_avg: float
+#     Omega_phiz_3_avg: float
+#     Omega_phiz_4_avg: float
+#     Omega_phiz_5_avg: float
 
 #     # Eq. F6 - F11 in 1703.03967
-#     Omega_zeta_0_avg: ti.f64
-#     Omega_zeta_1_avg: ti.f64
-#     Omega_zeta_2_avg: ti.f64
-#     Omega_zeta_3_avg: ti.f64
-#     Omega_zeta_4_avg: ti.f64
-#     Omega_zeta_5_avg: ti.f64
+#     Omega_zeta_0_avg: float
+#     Omega_zeta_1_avg: float
+#     Omega_zeta_2_avg: float
+#     Omega_zeta_3_avg: float
+#     Omega_zeta_4_avg: float
+#     Omega_zeta_5_avg: float
 
-#     S_avg: ti.f64
-#     S_avg_pow2: ti.f64 # Eq. 45 in 1703.03967
+#     S_avg: float
+#     S_avg_pow2: float # Eq. 45 in 1703.03967
 
-#     c1: ti.f64 # Eq.41 in 1703.03967
-#     c1_pow2:ti.f64
+#     c1: float # Eq.41 in 1703.03967
+#     c1_pow2:float
 
-#     psi_0:ti.f64
-#     psi_1:ti.f64
-#     psi_2:ti.f64
+#     psi_0:float
+#     psi_1:float
+#     psi_2:float
 
 
 #     @ti.func
@@ -835,7 +835,7 @@ class PrecessionCoefficientsMSA:
 
 
 #     @ti.func
-#     def _get_PN_beta(a:ti.f64, b:ti.f64, source_params:ti.template()):
+#     def _get_PN_beta(a:float, b:float, source_params:ti.template()):
 #         """
 #         The spin-orbit couplings for post-Newtonian orbital angular momentum
 #         TODO: reference??
@@ -843,7 +843,7 @@ class PrecessionCoefficientsMSA:
 #         return ( dotS1L* (a + b* qq) +  dotS2L*(a + b/ qq))
 
 #     @ti.func
-#     def _get_PN_sigma(a:ti.f64, b:ti.f64, source_params:ti.template()):
+#     def _get_PN_sigma(a:float, b:float, source_params:ti.template()):
 #         """
 #         The spin-spin couplings for post-Newtonian orbital angular momentum
 #         TODO: reference??
@@ -851,7 +851,7 @@ class PrecessionCoefficientsMSA:
 #         return ( inveta * (a* dotS1S2 - b* dotS1L* dotS2L))
 
 #     @ti.func
-#     def _get_PN_tau(a:ti.f64, b:ti.f64, source_params:ti.template()):
+#     def _get_PN_tau(a:float, b:float, source_params:ti.template()):
 #         """
 #         The spin-spin couplings for post-Newtonian orbital angular momentum
 #         TODO: reference??
@@ -859,7 +859,7 @@ class PrecessionCoefficientsMSA:
 #         return (( qq * ( ( S1_norm_2 * a) - b* dotS1L* dotS1L) + (a* S2_norm_2 - b* dotS2L* dotS2L) /  qq) /  eta)
 
 #     @ti.func
-#     def _get_roots_spin_evolution_equation(self)->tuple[ti.f64, ti.f64, ti.f64]:
+#     def _get_roots_spin_evolution_equation(self)->tuple[float, float, float]:
 #         """
 #         Get roots of Eq. 21 in 1703.03967, returns S_3_pow2, S_minus_pow2, S_plus_pow2.
 #         Using trigonometric solution for three real roots of cubic equation, referring https://en.wikipedia.org/wiki/Cubic_equation
@@ -903,7 +903,7 @@ class PrecessionCoefficientsMSA:
 #         return root_0, root_1, root_2
 
 #     @ti.func
-#     def _get_spin_evolution_coefficients(self, )->tuple[ti.f64, ti.f64, ti.f64]:
+#     def _get_spin_evolution_coefficients(self, )->tuple[float, float, float]:
 #         """
 #         Coefficients B, C, D in Eq. 21 of 1703.03967, given by Eq. B2, B3 and B4
 #         """
@@ -919,7 +919,7 @@ class PrecessionCoefficientsMSA:
 
 
 #     @ti.func
-#     def _compute_phiz_core(self, J_norm, L_norm, source_params: ti.template(), source_params:ti.template()) -> ti.f64:
+#     def _compute_phiz_core(self, J_norm, L_norm, source_params: ti.template(), source_params:ti.template()) -> float:
 
 
 #         phiz_0 = ((JNorm *   inveta4) * (0.5*c12 - c1*  eta2*invv/6.0 - SAv2*  eta2/3.0 -   eta4*invv2/3.0)
@@ -949,7 +949,7 @@ class PrecessionCoefficientsMSA:
 
 
 #     @ti.func
-#     def _compute_phiz(self)->ti.f64:
+#     def _compute_phiz(self)->float:
 #         ret =  self._compute_phiz_core() + self.alpha_0
 #         if tm.isnan(ret):
 #             ret = 0.0
@@ -958,7 +958,7 @@ class PrecessionCoefficientsMSA:
 #     @ti.func
 #     def _compute_zeta_core(
 #         self, source_params: ti.template(), source_params: ti.template()
-#     ) -> ti.f64:
+#     ) -> float:
 #         """
 #         Eq. F5 in 1703.03967
 #         """
@@ -976,14 +976,14 @@ class PrecessionCoefficientsMSA:
 #         )
 
 #     @ti.func
-#     def _compute_zeta(self)->ti.f64:
+#     def _compute_zeta(self)->float:
 #         ret = self._compute_zeta_core() + self.zeta_0
 #         if tm.isnan(ret):
 #             ret = 0.0
 #         return ret
 
 #     @ti.func
-#     def _compute_cos_thetaL(self, J_norm:ti.f64, L_norm:ti.f64, S_norm:ti.f64) -> ti.f64:
+#     def _compute_cos_thetaL(self, J_norm:float, L_norm:float, S_norm:float) -> float:
 #         """
 #         Eq. 8 in 1703.03967
 #         """
@@ -997,17 +997,17 @@ class PrecessionCoefficientsMSA:
 
 
 #     @ti.func
-#     def _get_L_norm_3PN(self, L_norm_Newt:ti.f64)->ti.f64:
+#     def _get_L_norm_3PN(self, L_norm_Newt:float)->float:
 #         return L_norm_Newt*(1. + v2*( constants_L[0] + v* constants_L[1] + v2*( constants_L[2] + v* constants_L[3] + v2*( constants_L[4]))))
 
 #     @ti.func
-#     def _get_J_norm(self, L_norm:ti.f64)->ti.f64:
+#     def _get_J_norm(self, L_norm:float)->float:
 #         """The magnitude of the total angular momentum, Eq. 41 in 1703.03967"""
 #         J_norm_pow2 = L_norm*L_norm + 2.0*L_norm*self.c1_over_eta + self.S_avg_pow2
 #         return tm.sqrt(J_norm_pow2)
 
 #     @ti.func
-#     def _get_S_norm(self, )->ti.f64:
+#     def _get_S_norm(self, )->float:
 #         """
 #         The magnitude of the total spin angular momentum, Eq. 23 in 1703.03967
 #         """
@@ -1029,7 +1029,7 @@ class PrecessionCoefficientsMSA:
 #         return tm.sqrt(S_norm_pow2)
 
 #     @ti.func
-#     def _get_MSA_corrections(self, L_norm, J_norm)->tuple[ti.f64, ti.f64]:
+#     def _get_MSA_corrections(self, L_norm, J_norm)->tuple[float, float]:
 #         """
 #         MSA corrections to phiz and zeta, Eq. 67 and F19 in 1703.03967
 #         """
@@ -1099,7 +1099,7 @@ class PrecessionCoefficientsMSA:
 #     @ti.func
 #     def compute_euler_angles(
 #         self, source_params: ti.template(), source_params: ti.template()
-#     ) -> ti.types.vector(3, ti.f64):
+#     ) -> ti.types.vector(3, float):
 #         """
 #         Note the notations used in 1703.03967 are different with 2004.06503, where phiz->alpha, zeta->-gamma, thetaL->beta
 #         """
@@ -1205,13 +1205,13 @@ class IMRPhenomXP(BaseWaveform):
     def _initialize_waveform_container(self) -> None:
         ret_content = {}
         if self.return_form == "polarizations":
-            ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
+            ret_content.update({"plus": ti_complex, "cross": ti_complex})
         elif self.return_form == "amplitude_phase_eulerangles":
             ret_content.update(
                 {
-                    "amplitude": ti.f64,
-                    "phase": ti.f64,
-                    "euler_angles": ti.types.vector(3, ti.f64),
+                    "amplitude": float,
+                    "phase": float,
+                    "euler_angles": ti.types.vector(3, float),
                 }
             )
         else:
@@ -1220,7 +1220,7 @@ class IMRPhenomXP(BaseWaveform):
             )
 
         if self.include_tf:
-            ret_content.update({"tf": ti.f64})
+            ret_content.update({"tf": float})
 
         self.waveform_container = ti.Struct.field(
             ret_content,
@@ -1248,18 +1248,18 @@ class IMRPhenomXP(BaseWaveform):
     @ti.kernel
     def _update_waveform_kernel_NNLO(
         self,
-        mass_1: ti.f64,
-        mass_2: ti.f64,
-        chi1_x: ti.f64,
-        chi1_y: ti.f64,
-        chi1_z: ti.f64,
-        chi2_x: ti.f64,
-        chi2_y: ti.f64,
-        chi2_z: ti.f64,
-        luminosity_distance: ti.f64,
-        inclination: ti.f64,
-        reference_phase: ti.f64,
-        reference_frequency: ti.f64,
+        mass_1: float,
+        mass_2: float,
+        chi1_x: float,
+        chi1_y: float,
+        chi1_z: float,
+        chi2_x: float,
+        chi2_y: float,
+        chi2_z: float,
+        luminosity_distance: float,
+        inclination: float,
+        reference_phase: float,
+        reference_frequency: float,
     ):
         self.source_parameters[None].update_source_parameters(
             mass_1,
@@ -1312,7 +1312,7 @@ class IMRPhenomXP(BaseWaveform):
                     self.waveform_container[idx].phase = phase
                     self.waveform_container[idx].euler_angles = euler_angles
                 if ti.static(self.return_form == "polarizations"):
-                    h22_align = amplitude * tm.cexp(ComplexNumber([0.0, phase]))
+                    h22_align = amplitude * tm.cexp(ti_complex([0.0, phase]))
                     twist_fac_p, twist_fac_c = self._get_twist_up_factors(euler_angles)
                     self.waveform_container[idx].plus = tm.cmul(twist_fac_p, h22_align)
                     self.waveform_container[idx].cross = tm.cmul(twist_fac_c, h22_align)
@@ -1375,7 +1375,7 @@ class IMRPhenomXP(BaseWaveform):
     def _get_twist_up_factors(
         self,
         euler_angles: ti.template(),
-    ) -> tuple[ComplexNumber, ComplexNumber]:
+    ) -> tuple[ti_complex, ti_complex]:
         """Eq. 3.5, 3.6 in 2004.06503"""
         alpha = euler_angles.x
         gamma = euler_angles.y
@@ -1400,7 +1400,7 @@ class IMRPhenomXP(BaseWaveform):
                 2.0 * cos_half_beta_pow3 * sin_half_beta,
                 cos_half_beta_pow4,
             ],
-            dt=ti.f64,
+            dt=float,
         )
         # d_2_m_minus2 = [d^2_{-2,-2}, d^2_{-1,-2}, d^2_{0,-2}, d^2_{1,-2}, d^2_{2,-2}]
         d_2_m_minus2 = ti.Vector(
@@ -1411,14 +1411,14 @@ class IMRPhenomXP(BaseWaveform):
                 -d_2_m_2[1],
                 d_2_m_2[0],
             ],
-            dt=ti.f64,
+            dt=float,
         )
 
         # e^{i 2 gamma}
-        gamma_term = tm.cexp(ComplexNumber([0.0, 2.0 * gamma]))
+        gamma_term = tm.cexp(ti_complex([0.0, 2.0 * gamma]))
 
         # e^{i m alpha}
-        cexp_i_alpha = tm.cexp(ComplexNumber([0.0, alpha]))
+        cexp_i_alpha = tm.cexp(ti_complex([0.0, alpha]))
         cexp_i_2alpha = tm.cmul(cexp_i_alpha, cexp_i_alpha)
         cexp_minus_i_alpha = tm.cconj(cexp_i_alpha)
         cexp_minus_i_2alpha = tm.cconj(cexp_i_2alpha)
@@ -1432,7 +1432,7 @@ class IMRPhenomXP(BaseWaveform):
                 cexp_i_alpha
                 * d_2_m_minus2[1]
                 * self.precession_coefficients[None].spin_minus2_Y2m[1],
-                ComplexNumber([1.0, 0.0])
+                ti_complex([1.0, 0.0])
                 * d_2_m_minus2[2]
                 * self.precession_coefficients[None].spin_minus2_Y2m[2],
                 cexp_minus_i_alpha
@@ -1452,7 +1452,7 @@ class IMRPhenomXP(BaseWaveform):
                 cexp_minus_i_alpha
                 * d_2_m_2[1]
                 * self.precession_coefficients[None].spin_minus2_Y2m[1],
-                ComplexNumber([1.0, 0.0])
+                ti_complex([1.0, 0.0])
                 * d_2_m_2[2]
                 * self.precession_coefficients[None].spin_minus2_Y2m[2],
                 cexp_i_alpha
@@ -1463,11 +1463,11 @@ class IMRPhenomXP(BaseWaveform):
                 * self.precession_coefficients[None].spin_minus2_Y2m[4],
             ]
         )
-        p_fac = ti.Vector([1.0] * 5, dt=ti.f64) @ (A_2_m_minus2 + A_conj_2_m_2)
-        c_fac = ti.Vector([1.0] * 5, dt=ti.f64) @ (A_2_m_minus2 - A_conj_2_m_2)
+        p_fac = ti.Vector([1.0] * 5, dt=float) @ (A_2_m_minus2 + A_conj_2_m_2)
+        c_fac = ti.Vector([1.0] * 5, dt=float) @ (A_2_m_minus2 - A_conj_2_m_2)
 
         p_fac = 0.5 * tm.cmul(gamma_term, p_fac)
-        c_fac = 0.5 * tm.cmul(tm.cmul(gamma_term, c_fac), ComplexNumber([0.0, 1.0]))
+        c_fac = 0.5 * tm.cmul(tm.cmul(gamma_term, c_fac), ti_complex([0.0, 1.0]))
 
         # additional rotation for the convention of polarization vectors, Appendix D in 2004.06503
         return (

@@ -7,7 +7,7 @@ import taichi.math as tm
 import numpy as np
 
 from ..constants import *
-from ..utils import ComplexNumber, UsefulPowers
+from ..utils import ti_complex, UsefulPowers
 from .common import PostNewtonianCoefficients
 from .base_waveform import BaseWaveform
 
@@ -23,7 +23,7 @@ check _get_polarizations_from_amplitude_phase, add spherical harmonic
 - pn coefficients, factor out f^(-8/3)
 """
 
-
+# https://setuptools.pypa.io/en/latest/userguide/datafiles.html#accessing-data-files-at-runtime
 QNMgrid_a = np.loadtxt(os.path.join(os.path.dirname(__file__), "data/QNMData_a.txt"))
 QNMgrid_fring = np.loadtxt(
     os.path.join(os.path.dirname(__file__), "data/QNMData_fring.txt")
@@ -69,7 +69,7 @@ def _solve_delta_i(f1, f2, f3, v1, v2, v3, d1, d2):
             [0.0, 1.0, 2 * f1, 3 * f1_2, 4 * f1_3, d1],
             [0.0, 1.0, 2 * f3, 3 * f3_2, 4 * f3_3, d2],
         ],
-        dt=ti.f64,
+        dt=float,
     )
 
     return _gauss_elimination_5x5(Ab)
@@ -84,7 +84,7 @@ def _gauss_elimination_5x5(Ab):
             for k in ti.static(range(i + 1, 6)):
                 Ab[j, k] -= Ab[i, k] * scale
     # Back substitution
-    x = ti.Vector.zero(ti.f64, 5)
+    x = ti.Vector.zero(float, 5)
     for i in ti.static(range(4, -1, -1)):
         x[i] = Ab[i, 5]
         for k in ti.static(range(i + 1, 5)):
@@ -298,34 +298,34 @@ def _d_phase_merge_ringdown_ansatz(powers_of_Mf, phase_coefficients, f_ring, f_d
 @ti.dataclass
 class SourceParameters:
     # passed in parameters
-    M: ti.f64  # total mass
-    q: ti.f64
-    chi_1: ti.f64
-    chi_2: ti.f64
-    dL_Mpc: ti.f64
-    iota: ti.f64
-    phase_ref: ti.f64
-    tc: ti.f64
+    M: float  # total mass
+    q: float
+    chi_1: float
+    chi_2: float
+    dL_Mpc: float
+    iota: float
+    phase_ref: float
+    tc: float
     # base parameters
-    dL_SI: ti.f64
-    mass_1: ti.f64
-    mass_2: ti.f64
-    M_sec: ti.f64  # total mass in second
-    eta: ti.f64  # symmetric_mass_ratio
-    eta_pow2: ti.f64  # eta^2
-    eta_pow3: ti.f64
-    delta: ti.f64
-    chi_s: ti.f64
-    chi_a: ti.f64
-    chi_s_pow2: ti.f64
-    chi_a_pow2: ti.f64
-    chi_PN: ti.f64
-    xi: ti.f64
+    dL_SI: float
+    mass_1: float
+    mass_2: float
+    M_sec: float  # total mass in second
+    eta: float  # symmetric_mass_ratio
+    eta_pow2: float  # eta^2
+    eta_pow3: float
+    delta: float
+    chi_s: float
+    chi_a: float
+    chi_s_pow2: float
+    chi_a_pow2: float
+    chi_PN: float
+    xi: float
     # derived parameters
-    final_spin: ti.f64
-    E_rad: ti.f64
-    f_ring: ti.f64
-    f_damp: ti.f64
+    final_spin: float
+    E_rad: float
+    f_ring: float
+    f_damp: float
 
     def update_source_parameters(self, parameters):
         # total 11 parameters: m1, m1, chi1, chi2, iota, psi, tc, phi0, dL, lon, lat
@@ -417,26 +417,26 @@ class SourceParameters:
 @ti.dataclass
 class PhaseCoefficients:
     # Inspiral (Region I)
-    sigma_1: ti.f64
-    sigma_2: ti.f64
-    sigma_3: ti.f64
-    sigma_4: ti.f64
+    sigma_1: float
+    sigma_2: float
+    sigma_3: float
+    sigma_4: float
     # Intermediate (Region IIa)
-    beta_1: ti.f64
-    beta_2: ti.f64
-    beta_3: ti.f64
+    beta_1: float
+    beta_2: float
+    beta_3: float
     # Merge-ringdown (Region IIb)
-    alpha_1: ti.f64
-    alpha_2: ti.f64
-    alpha_3: ti.f64
-    alpha_4: ti.f64
-    alpha_5: ti.f64
+    alpha_1: float
+    alpha_2: float
+    alpha_3: float
+    alpha_4: float
+    alpha_5: float
     # connection coefficients
-    C1_intermediate: ti.f64
-    C2_intermediate: ti.f64
-    C1_merge_ringdown: ti.f64
-    C2_merge_ringdown: ti.f64
-    phase_merge_ringdown_f_join: ti.f64
+    C1_intermediate: float
+    C2_intermediate: float
+    C1_merge_ringdown: float
+    C2_merge_ringdown: float
+    phase_merge_ringdown_f_join: float
 
     @ti.func
     def compute_phase_coefficients(self, source_params, pn_coefficients):
@@ -767,22 +767,22 @@ class PhaseCoefficients:
 @ti.dataclass
 class AmplitudeCoefficients:
     # Inspiral (Region I)
-    rho_1: ti.f64
-    rho_2: ti.f64
-    rho_3: ti.f64
+    rho_1: float
+    rho_2: float
+    rho_3: float
     # Intermediate (Region IIa)
-    delta_0: ti.f64
-    delta_1: ti.f64
-    delta_2: ti.f64
-    delta_3: ti.f64
-    delta_4: ti.f64
+    delta_0: float
+    delta_1: float
+    delta_2: float
+    delta_3: float
+    delta_4: float
     # Merge-ringdown (Region IIb)
-    gamma_1: ti.f64
-    gamma_2: ti.f64
-    gamma_3: ti.f64
+    gamma_1: float
+    gamma_2: float
+    gamma_3: float
     # derived coefficients
-    f_peak: ti.f64
-    amp0: ti.f64
+    f_peak: float
+    amp0: float
 
     @ti.func
     def compute_amplitude_coefficients(self, source_params, pn_coefficients):
@@ -1073,8 +1073,8 @@ def _compute_tf(powers_of_Mf, phase_coefficients, pn_coefficients, f_ring, f_dam
 def _get_polarizations_from_amplitude_phase(amplitude, phase, iota):
     cross_coefficient = tm.cos(iota)
     plus_coefficient = 0.5 * (1.0 + cross_coefficient**2)
-    plus = amplitude * tm.cexp(ComplexNumber([0.0, -1.0] * phase))
-    cross = tm.cmul(ComplexNumber([0.0, -1.0]), plus) * cross_coefficient
+    plus = amplitude * tm.cexp(ti_complex([0.0, -1.0] * phase))
+    cross = tm.cmul(ti_complex([0.0, -1.0]), plus) * cross_coefficient
     plus *= plus_coefficient
     return cross, plus
 
@@ -1174,16 +1174,16 @@ class IMRPhenomD(BaseWaveform):
     ) -> None:
         ret_content = {}
         if return_form == "polarizations":
-            ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
+            ret_content.update({"plus": ti_complex, "cross": ti_complex})
         elif return_form == "amplitude_phase":
-            ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
+            ret_content.update({"amplitude": float, "phase": float})
         else:
             raise Exception(
                 f"{return_form} is unknown. `return_form` can only be one of `polarizations` and `amplitude_phase`"
             )
 
         if include_tf:
-            ret_content.update({"tf": ti.f64})
+            ret_content.update({"tf": float})
 
         self.waveform_container = ti.Struct.field(
             ret_content,

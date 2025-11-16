@@ -8,7 +8,7 @@ from numpy.typing import NDArray
 from .constants import *
 
 
-ComplexNumber = ti.types.vector(2, ti.f64)
+ti_complex = ti.types.vector(2, float)
 
 
 def sub_struct_from(parent):
@@ -64,23 +64,23 @@ def complex_ti_field_to_np_array(
 
 @ti.dataclass
 class UsefulPowers:
-    third: ti.f64
-    two_thirds: ti.f64
-    one: ti.f64
-    four_thirds: ti.f64
-    five_thirds: ti.f64
-    two: ti.f64
-    seven_thirds: ti.f64
-    eight_thirds: ti.f64
-    three: ti.f64
-    four: ti.f64
-    fourth: ti.f64
-    three_fourths: ti.f64
-    seven_sixths: ti.f64
-    log: ti.f64
+    third: float
+    two_thirds: float
+    one: float
+    four_thirds: float
+    five_thirds: float
+    two: float
+    seven_thirds: float
+    eight_thirds: float
+    three: float
+    four: float
+    fourth: float
+    three_fourths: float
+    seven_sixths: float
+    log: float
 
     @ti.pyfunc
-    def update(self, number: ti.f64):
+    def update(self, number: float):
         self.third = number ** (1 / 3)
         self.two_thirds = self.third * self.third
         self.one = number
@@ -121,7 +121,7 @@ def gauss_elimination(Ab: ti.template()) -> ti.template():
             for k in ti.static(range(i + 1, Ab.m)):
                 Ab[j, k] -= Ab[i, k] * scale
     # Back substitution
-    x = ti.Vector.zero(ti.f64, Ab.n)
+    x = ti.Vector.zero(float, Ab.n)
     for i in ti.static(range(Ab.n - 1, -1, -1)):
         x[i] = Ab[i, Ab.m - 1]
         for k in ti.static(range(i + 1, Ab.n)):
@@ -130,35 +130,35 @@ def gauss_elimination(Ab: ti.template()) -> ti.template():
     return x
 
 
-def initialize_waveform_container_from_frequencies_array(
-    frequencies, return_form="polarization", include_tf=True
-):
-    """
-    Parparing waveform_container of ti.field from frequencies of np.array
+# def initialize_waveform_container_from_frequencies_array(
+#     frequencies, return_form="polarization", include_tf=True
+# ):
+#     """
+#     Parparing waveform_container of ti.field from frequencies of np.array
 
-    Parameters:
-    ===========
-        frequencies: np.array
+#     Parameters:
+#     ===========
+#         frequencies: np.array
 
-    Returns:
-    ========
-        frequency_field: ti.field
-        waveform_container: ti.Struct.field({'plus': ComplexNumber, 'cross': ComplexNumber, 'tf': ti.f64})
-    """
-    ret_content = {}
-    if return_form == "polarizations":
-        ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
-    elif return_form == "amplitude_phase":
-        ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
-    if include_tf:
-        ret_content.update({"tf": ti.f64})
-    waveform_field = ti.Struct.field(ret_content)
+#     Returns:
+#     ========
+#         frequency_field: ti.field
+#         waveform_container: ti.Struct.field({'plus': ti_complex, 'cross': ti_complex, 'tf': float})
+#     """
+#     ret_content = {}
+#     if return_form == "polarizations":
+#         ret_content.update({"plus": ti_complex, "cross": ti_complex})
+#     elif return_form == "amplitude_phase":
+#         ret_content.update({"amplitude": float, "phase": float})
+#     if include_tf:
+#         ret_content.update({"tf": float})
+#     waveform_field = ti.Struct.field(ret_content)
 
-    data_length = len(frequencies)
-    ti.root.dense(ti.i, data_length).place(waveform_field)
-    waveform_container = waveform_field
+#     data_length = len(frequencies)
+#     ti.root.dense(ti.i, data_length).place(waveform_field)
+#     waveform_container = waveform_field
 
-    frequency_field = ti.field(dtype=ti.f64, shape=(data_length,))
-    frequency_field.from_numpy(frequencies)
+#     frequency_field = ti.field(dtype=float, shape=(data_length,))
+#     frequency_field.from_numpy(frequencies)
 
-    return frequency_field, waveform_container
+#     return frequency_field, waveform_container

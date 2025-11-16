@@ -15,7 +15,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from ..constants import *
-from ..utils import ComplexNumber, gauss_elimination, UsefulPowers, sub_struct_from
+from ..utils import ti_complex, gauss_elimination, UsefulPowers, sub_struct_from
 from .common import PostNewtonianCoefficients as PostNewtonianCoefficientsMode22
 from .base_waveform import BaseWaveform
 from .IMRPhenomXAS import PHENOMXAS_HIGH_FREQUENCY_CUT
@@ -37,10 +37,10 @@ useful_powers_pi_over_2 = UsefulPowers()
 useful_powers_pi_over_2.update(0.5 * PI)
 
 QNM_frequencies_struct = ti.types.struct(
-    f_ring=ti.f64,
-    f_damp=ti.f64,
+    f_ring=float,
+    f_damp=float,
     # cache for repeatedly using
-    f_damp_pow2=ti.f64,
+    f_damp_pow2=float,
 )
 
 
@@ -48,17 +48,17 @@ QNM_frequencies_struct = ti.types.struct(
 class PostNewtonianCoefficientsHighModesBase:
 
     # amplitude coeffients
-    A_0: ComplexNumber
-    A_1: ComplexNumber
-    A_2: ComplexNumber
-    A_3: ComplexNumber
-    A_4: ComplexNumber
-    A_5: ComplexNumber
-    A_6: ComplexNumber
+    A_0: ti_complex
+    A_1: ti_complex
+    A_2: ti_complex
+    A_3: ti_complex
+    A_4: ti_complex
+    A_5: ti_complex
+    A_6: ti_complex
 
     @ti.func
     def _set_rescaling_phase_coefficients(
-        self, m: ti.f64, pn_coefficients_22: ti.template()
+        self, m: float, pn_coefficients_22: ti.template()
     ):
         """
         Note in the XAS model, we only implemente the default 104 inspiral configuration
@@ -84,7 +84,7 @@ class PostNewtonianCoefficientsHighModesBase:
         self.phi_8l = pn_coefficients_22.phi_8l
 
     @ti.func
-    def PN_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def PN_amplitude(self, powers_of_Mf: ti.template()) -> float:
         return tm.length(
             self.A_0
             + self.A_1 * powers_of_Mf.third
@@ -96,7 +96,7 @@ class PostNewtonianCoefficientsHighModesBase:
         )
 
     @ti.func
-    def PN_d_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def PN_d_amplitude(self, powers_of_Mf: ti.template()) -> float:
         """
         Note the derivative need to incorporate the absolute value function.
         """
@@ -124,23 +124,23 @@ class PostNewtonianCoefficientsHighModesBase:
 @ti.dataclass
 class AmplitudeCoefficientsHighModesBase:
     # Inspiral
-    rho_1: ti.f64
-    rho_2: ti.f64
-    rho_3: ti.f64
+    rho_1: float
+    rho_2: float
+    rho_3: float
     # Intermediate (note the intermediate in PhenomXHMReleaseVersion 122022 is totally different from that presented in the paper)
-    int_ansatz_coeffs: ti.types.vector(8, ti.f64)  # for modes with no-mixing
+    int_ansatz_coeffs: ti.types.vector(8, float)  # for modes with no-mixing
     # Merge-ringdown
-    gamma_1: ti.f64  # scaling factor of Lorenrzian, a_R * f_damp * sigma, (in lalsim: RDCoefficient[0] * f_damp) # fmt: skip
-    gamma_2: ti.f64  # decay rate of exponential, lambda / (f_damp * sigma), (in lalsim: RDCoefficient[1] / (RDCoefficient[2] * f_damp) ) # fmt: skip
-    gamma_3: ti.f64  # width factor, (f_damp * sigma)^2, (in lalsim: (RDCoefficient[2] * f_damp)^2) # fmt: skip
-    falloff_gamma_1: ti.f64  # scaling factor in fall-off range, (in lalsim: RDCoefficient[3]) # fmt: skip
-    falloff_gamma_2: ti.f64  # decay rate in fall-off range, (in lalsim: RDCoefficient[4]) # fmt: skip
+    gamma_1: float  # scaling factor of Lorenrzian, a_R * f_damp * sigma, (in lalsim: RDCoefficient[0] * f_damp) # fmt: skip
+    gamma_2: float  # decay rate of exponential, lambda / (f_damp * sigma), (in lalsim: RDCoefficient[1] / (RDCoefficient[2] * f_damp) ) # fmt: skip
+    gamma_3: float  # width factor, (f_damp * sigma)^2, (in lalsim: (RDCoefficient[2] * f_damp)^2) # fmt: skip
+    falloff_gamma_1: float  # scaling factor in fall-off range, (in lalsim: RDCoefficient[3]) # fmt: skip
+    falloff_gamma_2: float  # decay rate in fall-off range, (in lalsim: RDCoefficient[4]) # fmt: skip
     # joint frequencies
-    ins_f_end: ti.f64
-    int_f_end: ti.f64
-    MRD_f_falloff: ti.f64
+    ins_f_end: float
+    int_f_end: float
+    MRD_f_falloff: float
     # common factor
-    common_factor: ti.f64  # sqrt(2.0/3.0/pi^(1/3)*eta) * (2/m)^(-7/6)
+    common_factor: float  # sqrt(2.0/3.0/pi^(1/3)*eta) * (2/m)^(-7/6)
 
     """
     In release 122022: 
@@ -159,7 +159,7 @@ class AmplitudeCoefficientsHighModesBase:
     """
 
     @ti.func
-    def _fit_ins_f_end_EMR(self, m: ti.f64, source_params: ti.template()) -> ti.f64:
+    def _fit_ins_f_end_EMR(self, m: float, source_params: ti.template()) -> float:
         """The end frequency of inspiral amplitude for extreme mass ratio."""
         return (
             m
@@ -175,8 +175,8 @@ class AmplitudeCoefficientsHighModesBase:
 
     @ti.func
     def _get_ins_f_end(
-        self, m: ti.f64, f_MECO_lm: ti.f64, source_params: ti.template()
-    ) -> ti.f64:
+        self, m: float, f_MECO_lm: float, source_params: ti.template()
+    ) -> float:
         f_end = 0.0
         if source_params.eta < 0.04535147392290249:  # for extreme mass ratios (q>20)
             # using a smoothing function to perform a smooth transition from fit_ins_f_end_EMR
@@ -199,8 +199,8 @@ class AmplitudeCoefficientsHighModesBase:
     @ti.func
     def _set_joint_frequencies(
         self,
-        m: ti.f64,
-        f_MECO_lm: ti.f64,
+        m: float,
+        f_MECO_lm: float,
         QNM_freqs_lm: ti.template(),
         source_params: ti.template(),
     ):
@@ -215,14 +215,14 @@ class AmplitudeCoefficientsHighModesBase:
         self.MRD_f_falloff = QNM_freqs_lm.f_ring + 2.0 * QNM_freqs_lm.f_damp
 
     @ti.func
-    def _get_ins_colloc_points(self) -> ti.types.vector(3, dtype=ti.f64):
+    def _get_ins_colloc_points(self) -> ti.types.vector(3, dtype=float):
         return ti.Vector(
             [0.5 * self.ins_f_end, 0.75 * self.ins_f_end, self.ins_f_end],
-            dt=ti.f64,
+            dt=float,
         )
 
     @ti.func
-    def _get_int_colloc_points(self) -> ti.types.vector(6, dtype=ti.f64):
+    def _get_int_colloc_points(self) -> ti.types.vector(6, dtype=float):
         int_f_space = (self.int_f_end - self.ins_f_end) / 5.0
         return ti.Vector(
             [
@@ -233,7 +233,7 @@ class AmplitudeCoefficientsHighModesBase:
                 self.ins_f_end + 4.0 * int_f_space,
                 self.int_f_end,
             ],
-            dt=ti.f64,
+            dt=float,
         )
 
     @ti.func
@@ -251,7 +251,7 @@ class AmplitudeCoefficientsHighModesBase:
         powers_ins_f2 = UsefulPowers()
         powers_ins_f2.update(ins_colloc_points[2])
         # the pseudeo-PN coeffs obtained here are with the denominator of f_lm^Ins powers
-        ins_colloc_values = ti.Vector([0.0] * 3, dt=ti.f64)
+        ins_colloc_values = ti.Vector([0.0] * 3, dt=float)
         ins_colloc_values[0] = (
             self._ins_fit_v0(source_params)
             * powers_ins_f0.seven_sixths
@@ -288,7 +288,7 @@ class AmplitudeCoefficientsHighModesBase:
                     ins_colloc_values[2],
                 ],
             ],
-            dt=ti.f64,
+            dt=float,
         )
         self.rho_1, self.rho_2, self.rho_3 = gauss_elimination(Ab_ins)
 
@@ -356,7 +356,7 @@ class AmplitudeCoefficientsHighModesBase:
         powers_int_f0 = UsefulPowers()
         powers_int_f0.update(int_colloc_points[0])
 
-        int_colloc_values = ti.Vector([0.0] * 8, dt=ti.f64)
+        int_colloc_values = ti.Vector([0.0] * 8, dt=float)
         # left boundary
         int_colloc_values[0] = self._inspiral_amplitude(
             pn_coefficients_lm, powers_int_f0
@@ -381,7 +381,7 @@ class AmplitudeCoefficientsHighModesBase:
         )
 
         # set the augmented matrix
-        Ab = ti.Matrix([[0.0] * 9 for _ in range(8)], dt=ti.f64)
+        Ab = ti.Matrix([[0.0] * 9 for _ in range(8)], dt=float)
         row_idx = 0
         for i in ti.static(range(6)):
             # set the value at the collocation point
@@ -416,7 +416,7 @@ class AmplitudeCoefficientsHighModesBase:
         self,
         pn_coefficients_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         """ """
         return (
             self.common_factor
@@ -434,7 +434,7 @@ class AmplitudeCoefficientsHighModesBase:
         self,
         pn_coefficients_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         """ """
         return (
             self.common_factor
@@ -453,7 +453,7 @@ class AmplitudeCoefficientsHighModesBase:
         )
 
     @ti.func
-    def _intermediate_amplitude(self, powers_of_Mf: ti.template()) -> ti.f64:
+    def _intermediate_amplitude(self, powers_of_Mf: ti.template()) -> float:
         """ """
         fpower = 1.0 / powers_of_Mf.seven_sixths
         ret = 0.0
@@ -463,7 +463,7 @@ class AmplitudeCoefficientsHighModesBase:
         return ret
 
     @ti.func
-    def _merge_ringdown_amplitude_Lorentzian(self, f_minus_fring: ti.f64) -> ti.f64:
+    def _merge_ringdown_amplitude_Lorentzian(self, f_minus_fring: float) -> float:
         """
         Lorentzian with exponential falloff, f < MRD_f_falloff
         """
@@ -474,7 +474,7 @@ class AmplitudeCoefficientsHighModesBase:
         )
 
     @ti.func
-    def _merge_ringdown_d_amplitude_Lorentzian(self, f_minus_fring: ti.f64) -> ti.f64:
+    def _merge_ringdown_d_amplitude_Lorentzian(self, f_minus_fring: float) -> float:
         divisor = f_minus_fring**2 + self.gamma_3
         return (
             -self.gamma_1
@@ -484,7 +484,7 @@ class AmplitudeCoefficientsHighModesBase:
         )
 
     @ti.func
-    def _merge_ringdown_amplitude_falloff(self, Mf: ti.f64) -> ti.f64:
+    def _merge_ringdown_amplitude_falloff(self, Mf: float) -> float:
         """
         entire exponential falloff, f > MRD_f_falloff
         """
@@ -498,7 +498,7 @@ class AmplitudeCoefficientsHighModesBase:
         QNM_freqs_lm: ti.template(),
         pn_coefficients_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         amplitude = 0.0
         f_minus_fring = powers_of_Mf.one - QNM_freqs_lm.f_ring
 
@@ -520,33 +520,33 @@ class AmplitudeCoefficientsHighModesBase:
 @ti.dataclass
 class PhaseCoefficientsHighModesBase:
     # Inspiral (only 4 pseudo-PN coefficients in the default 104 inspiral configuration of XAS model)
-    sigma_1: ti.f64
-    sigma_2: ti.f64
-    sigma_3: ti.f64
-    sigma_4: ti.f64
-    Lambda_lm: ti.f64  # corrections for the complex PN amplitudes, eq 4.9
+    sigma_1: float
+    sigma_2: float
+    sigma_3: float
+    sigma_4: float
+    Lambda_lm: float  # corrections for the complex PN amplitudes, eq 4.9
     # Intermediate
-    c_0: ti.f64
-    c_1: ti.f64
-    c_2: ti.f64
-    c_3: ti.f64  # only used for mode 32, set to 0.0 for mode 21, 33, 44
-    c_4: ti.f64
-    c_L: ti.f64
-    _int_colloc_points: ti.types.vector(6, dtype=ti.f64)
-    _int_colloc_values: ti.types.vector(6, dtype=ti.f64)
+    c_0: float
+    c_1: float
+    c_2: float
+    c_3: float  # only used for mode 32, set to 0.0 for mode 21, 33, 44
+    c_4: float
+    c_L: float
+    _int_colloc_points: ti.types.vector(6, dtype=float)
+    _int_colloc_values: ti.types.vector(6, dtype=float)
     # Merge-ringdown
-    alpha_2: ti.f64
-    alpha_L: ti.f64
+    alpha_2: float
+    alpha_L: float
     # joint frequencies
-    ins_f_end: ti.f64
-    int_f_end: ti.f64
+    ins_f_end: float
+    int_f_end: float
     # continuity condition coefficients
-    ins_C0: ti.f64
-    ins_C1: ti.f64
-    MRD_C0: ti.f64
-    MRD_C1: ti.f64
+    ins_C0: float
+    ins_C1: float
+    MRD_C0: float
+    MRD_C1: float
     # constant for aligning each mode under the choice of tetrad convention
-    delta_phi_lm: ti.f64
+    delta_phi_lm: float
     # cache powers of some collocation points for converience
     _useful_powers: ti.types.struct(
         ins_f_end=UsefulPowers,
@@ -563,7 +563,7 @@ class PhaseCoefficientsHighModesBase:
 
     @ti.func
     def _set_joint_frequencies_no_mixing(
-        self, f_MECO_lm: ti.f64, QNM_freqs_lm: ti.template()
+        self, f_MECO_lm: float, QNM_freqs_lm: ti.template()
     ):
         self.ins_f_end = f_MECO_lm
         self.int_f_end = QNM_freqs_lm.f_ring - QNM_freqs_lm.f_damp
@@ -571,7 +571,7 @@ class PhaseCoefficientsHighModesBase:
         self._useful_powers.int_f_end.update(self.int_f_end)
 
     @ti.func
-    def _set_int_colloc_points_no_mixing(self, f_ring_lm: ti.f64, eta: ti.f64):
+    def _set_int_colloc_points_no_mixing(self, f_ring_lm: float, eta: float):
         # shifting forward the frequency of the first collocation points for small eta
         beta = 1.0 + 0.001 * (0.25 / eta - 1.0)
 
@@ -594,8 +594,8 @@ class PhaseCoefficientsHighModesBase:
     @ti.func
     def _get_int_augmented_matrix_no_mixing(
         self, QNM_freqs_lm: ti.template(), idx: ti.template()
-    ) -> ti.types.matrix(5, 6, ti.f64):
-        Ab = ti.Matrix([[0.0] * 6 for _ in range(5)], dt=ti.f64)
+    ) -> ti.types.matrix(5, 6, float):
+        Ab = ti.Matrix([[0.0] * 6 for _ in range(5)], dt=float)
         for i in ti.static(range(5)):
             row = [
                 1.0,
@@ -616,7 +616,7 @@ class PhaseCoefficientsHighModesBase:
     @ti.func
     def _set_ins_rescaling_coefficients(
         self,
-        m: ti.f64,
+        m: float,
         phase_coefficients_22: ti.template(),
     ):
         m_over_2 = 0.5 * m
@@ -628,7 +628,7 @@ class PhaseCoefficientsHighModesBase:
     @ti.func
     def _set_MRD_rescaling_coefficients(
         self,
-        w_lm: ti.f64,
+        w_lm: float,
         source_params: ti.template(),
     ):
         """
@@ -641,7 +641,7 @@ class PhaseCoefficientsHighModesBase:
         self.alpha_2 = w_lm * self._fit_alpha_2(source_params)
 
     @ti.func
-    def _fit_alpha_2(self, source_params: ti.template()) -> ti.f64:
+    def _fit_alpha_2(self, source_params: ti.template()) -> float:
         return (
             0.2088669311744758
             - 0.37138987533788487 * source_params.eta
@@ -670,7 +670,7 @@ class PhaseCoefficientsHighModesBase:
         )
 
     @ti.func
-    def _fit_alpha_L(self, source_params: ti.template()) -> ti.f64:
+    def _fit_alpha_L(self, source_params: ti.template()) -> float:
         return (
             (
                 -1.1926122248825484
@@ -760,8 +760,8 @@ class PhaseCoefficientsHighModesBase:
     @ti.func
     def _set_delta_phi_lm(
         self,
-        m: ti.f64,
-        f_MECO_lm: ti.f64,
+        m: float,
+        f_MECO_lm: float,
         pn_coefficients_22: ti.template(),
         pn_coefficients_lm: ti.template(),
         phase_coefficients_22: ti.template(),
@@ -805,7 +805,7 @@ class PhaseCoefficientsHighModesBase:
         self,
         pn_coefficients_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             pn_coefficients_lm.PN_phase(powers_of_Mf)
             + (
@@ -822,7 +822,7 @@ class PhaseCoefficientsHighModesBase:
         self,
         pn_coefficients_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             pn_coefficients_lm.PN_d_phase(powers_of_Mf)
             + (
@@ -839,7 +839,7 @@ class PhaseCoefficientsHighModesBase:
         self,
         QNM_freqs_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             self.c_0 * powers_of_Mf.one
             + self.c_1 * powers_of_Mf.log
@@ -855,7 +855,7 @@ class PhaseCoefficientsHighModesBase:
         self,
         QNM_freqs_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         return (
             self.c_0
             + self.c_1 / powers_of_Mf.one
@@ -872,7 +872,7 @@ class PhaseCoefficientsHighModesBase:
         self,
         QNM_freqs_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         """for no mixing modes"""
         return -self.alpha_2 / powers_of_Mf.one + self.alpha_L * tm.atan2(
             (powers_of_Mf.one - QNM_freqs_lm.f_ring), QNM_freqs_lm.f_damp
@@ -883,7 +883,7 @@ class PhaseCoefficientsHighModesBase:
         self,
         QNM_freqs_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         """for no mixing modes"""
         return self.alpha_2 / powers_of_Mf.two + self.alpha_L * QNM_freqs_lm.f_damp / (
             QNM_freqs_lm.f_damp_pow2 + (powers_of_Mf.one - QNM_freqs_lm.f_ring) ** 2
@@ -895,7 +895,7 @@ class PhaseCoefficientsHighModesBase:
         QNM_freqs_lm: ti.template(),
         pn_coefficients_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         # Note the time-shift for making the peak around t=0 has been incorporated in the construction of intermediate phase, here only the constants delta_phi_lm for aligning different modes are needed. And thus the continuity condition parameters needs to be added in the inspiral and merge-ringdown phase.
         phase = 0.0
         if powers_of_Mf.one < self.ins_f_end:
@@ -920,7 +920,7 @@ class PhaseCoefficientsHighModesBase:
         QNM_freqs_lm: ti.template(),
         pn_coefficients_lm: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         d_phase = 0.0
         if powers_of_Mf.one < self.ins_f_end:
             d_phase = (
@@ -937,14 +937,14 @@ class PhaseCoefficientsHighModesBase:
 
 @sub_struct_from(SourceParametersMode22)
 class SourceParametersHighModes:
-    eta_sqrt: ti.f64
-    eta_pow7: ti.f64
-    eta_pow8: ti.f64
+    eta_sqrt: float
+    eta_pow7: float
+    eta_pow8: float
 
-    chi_1_pow2: ti.f64
-    chi_2_pow2: ti.f64
-    delta_chi_half: ti.f64
-    delta_chi_half_pow2: ti.f64
+    chi_1_pow2: float
+    chi_2_pow2: float
+    delta_chi_half: float
+    delta_chi_half_pow2: float
 
     # QNM frequencies
     QNM_freqs_lm: ti.types.struct(
@@ -957,24 +957,24 @@ class SourceParametersHighModes:
     )
     # rescaling frequencies
     f_MECO_lm: ti.types.struct(
-        **{"21": ti.f64, "33": ti.f64, "32": ti.f64, "44": ti.f64}
+        **{"21": float, "33": float, "32": float, "44": float}
     )
     # TODO: f_ISCO_lm are not used??
     f_ISCO_lm: ti.types.struct(
-        **{"21": ti.f64, "33": ti.f64, "32": ti.f64, "44": ti.f64}
+        **{"21": float, "33": float, "32": float, "44": float}
     )
 
     @ti.func
     def update_source_parameters(
         self,
-        mass_1: ti.f64,
-        mass_2: ti.f64,
-        chi_1: ti.f64,
-        chi_2: ti.f64,
-        luminosity_distance: ti.f64,
-        inclination: ti.f64,
-        reference_phase: ti.f64,
-        reference_frequency: ti.f64,
+        mass_1: float,
+        mass_2: float,
+        chi_1: float,
+        chi_2: float,
+        luminosity_distance: float,
+        inclination: float,
+        reference_phase: float,
+        reference_frequency: float,
         high_modes: ti.template(),
     ):
         self._parent_update_source_parameters(
@@ -1175,27 +1175,27 @@ class SourceParametersHighModes:
 @ti.dataclass
 class SpheroidalMergeRingdownMode32:
     # for amplitude ansatz of spheroidal
-    amp_aux_coeffs: ti.types.vector(4, dtype=ti.f64)
-    gamma_1: ti.f64  # in lalsim: RDCoefficient[0] * f_damp
-    gamma_2: ti.f64  # in lalsim: RDCoefficient[1] / (RDCoefficient[2] * f_damp)
-    gamma_3: ti.f64  # in lalsim: (RDCoefficient[2] * f_damp)^2
-    falloff_gamma_1: ti.f64  # in lalsim: RDCoefficient[3]
-    falloff_gamma_2: ti.f64  # in lalsim: RDCoefficient[4]
-    amp_f_falloff: ti.f64
-    amp_f_aux: ti.f64
+    amp_aux_coeffs: ti.types.vector(4, dtype=float)
+    gamma_1: float  # in lalsim: RDCoefficient[0] * f_damp
+    gamma_2: float  # in lalsim: RDCoefficient[1] / (RDCoefficient[2] * f_damp)
+    gamma_3: float  # in lalsim: (RDCoefficient[2] * f_damp)^2
+    falloff_gamma_1: float  # in lalsim: RDCoefficient[3]
+    falloff_gamma_2: float  # in lalsim: RDCoefficient[4]
+    amp_f_falloff: float
+    amp_f_aux: float
     # for phase ansatz of spheroidal
-    alpha_0: ti.f64
-    alpha_2: ti.f64
-    alpha_4: ti.f64
-    alpha_L: ti.f64
-    dphi0: ti.f64
-    phi0: ti.f64
+    alpha_0: float
+    alpha_2: float
+    alpha_4: float
+    alpha_L: float
+    dphi0: float
+    phi0: float
     # mixing coefficients
-    a_322: ComplexNumber
-    a_332: ComplexNumber
+    a_322: ti_complex
+    a_332: ti_complex
 
     @ti.func
-    def _spheroidal_amplitude_Lorentzian(self, f_minus_fring: ti.f64) -> ti.f64:
+    def _spheroidal_amplitude_Lorentzian(self, f_minus_fring: float) -> float:
         """
         Lorentzian with exponential falloff, f < amp_f_falloff
         """
@@ -1206,7 +1206,7 @@ class SpheroidalMergeRingdownMode32:
         )
 
     @ti.func
-    def _spheroidal_d_amplitude_Lorentzian(self, f_minus_fring: ti.f64) -> ti.f64:
+    def _spheroidal_d_amplitude_Lorentzian(self, f_minus_fring: float) -> float:
         divisor = f_minus_fring**2 + self.gamma_3
         return (
             -self.gamma_1
@@ -1216,7 +1216,7 @@ class SpheroidalMergeRingdownMode32:
         )
 
     @ti.func
-    def _spheroidal_amplitude_falloff(self, Mf: ti.f64) -> ti.f64:
+    def _spheroidal_amplitude_falloff(self, Mf: float) -> float:
         """
         entire exponential falloff, f > amp_f_falloff
         """
@@ -1225,7 +1225,7 @@ class SpheroidalMergeRingdownMode32:
         )
 
     @ti.func
-    def _spheroidal_amplitude_powers(self, Mf: ti.f64) -> ti.f64:
+    def _spheroidal_amplitude_powers(self, Mf: float) -> float:
         amp = 0.0
         fpower = 1.0
         for i in ti.static(range(4)):
@@ -1234,7 +1234,7 @@ class SpheroidalMergeRingdownMode32:
         return amp
 
     @ti.func
-    def _spheroidal_amplitude(self, f_ring_32: ti.f64, Mf: ti.f64) -> ti.f64:
+    def _spheroidal_amplitude(self, f_ring_32: float, Mf: float) -> float:
         amp = 0.0
         if Mf < self.amp_f_aux:
             amp = self._spheroidal_amplitude_powers(Mf)
@@ -1247,7 +1247,7 @@ class SpheroidalMergeRingdownMode32:
     @ti.func
     def _spheroidal_d_phase_core(
         self, QNM_freqs_32: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.f64:
+    ) -> float:
         return (
             self.alpha_0
             + self.alpha_2 / powers_of_Mf.two
@@ -1260,13 +1260,13 @@ class SpheroidalMergeRingdownMode32:
     @ti.func
     def _spheroidal_d_phase(
         self, QNM_freqs_32: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.f64:
+    ) -> float:
         return self._spheroidal_d_phase_core(QNM_freqs_32, powers_of_Mf) + self.dphi0
 
     @ti.func
     def _spheroidal_phase_core(
         self, QNM_freqs_32: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.f64:
+    ) -> float:
         return (
             self.alpha_0 * powers_of_Mf.one
             - self.alpha_2 / powers_of_Mf.one
@@ -1278,7 +1278,7 @@ class SpheroidalMergeRingdownMode32:
     @ti.func
     def _spheroidal_phase(
         self, QNM_freqs_32: ti.template(), powers_of_Mf: ti.template()
-    ) -> ti.f64:
+    ) -> float:
         return (
             self._spheroidal_phase_core(QNM_freqs_32, powers_of_Mf)
             + self.dphi0 * powers_of_Mf.one
@@ -1288,10 +1288,10 @@ class SpheroidalMergeRingdownMode32:
     @ti.func
     def _spheroidal_h32(
         self, QNM_freqs_32: ti.template(), powers_of_Mf: ti.template()
-    ) -> ComplexNumber:
+    ) -> ti_complex:
         amp = self._spheroidal_amplitude(QNM_freqs_32.f_ring, powers_of_Mf.one)
         phi = self._spheroidal_phase(QNM_freqs_32, powers_of_Mf)
-        return amp * tm.cexp(ComplexNumber([0.0, phi]))
+        return amp * tm.cexp(ti_complex([0.0, phi]))
 
     @ti.func
     def spherical_h32(
@@ -1299,7 +1299,7 @@ class SpheroidalMergeRingdownMode32:
         h_22: ti.template(),
         QNM_freqs_32: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ComplexNumber:
+    ) -> ti_complex:
         """
         The passed-in h_22 has incorporated the common constant factor and f^(-7/6) factor,
         but does not include the dimension factor.
@@ -1587,7 +1587,7 @@ class SpheroidalMergeRingdownMode32:
                 self._spheroidal_amplitude_Lorentzian(self.amp_f_aux - f_ring_32),
                 self._spheroidal_d_amplitude_Lorentzian(self.amp_f_aux - f_ring_32),
             ],
-            dt=ti.f64,
+            dt=float,
         )
         int_f_end = source_params.f_ring - 0.5 * source_params.f_damp
         aux_colloc_points = ti.Vector(
@@ -1596,9 +1596,9 @@ class SpheroidalMergeRingdownMode32:
                 0.5 * (int_f_end + self.amp_f_aux),
                 self.amp_f_aux,
             ],
-            dt=ti.f64,
+            dt=float,
         )
-        Ab = ti.Matrix([[0.0] * 5 for _ in range(4)], dt=ti.f64)
+        Ab = ti.Matrix([[0.0] * 5 for _ in range(4)], dt=float)
         row_idx = 0
         for i in ti.static(range(3)):
             # set the value for 3 collocation points
@@ -1629,8 +1629,8 @@ class SpheroidalMergeRingdownMode32:
         phase_coefficients_22: ti.template(),
         source_params: ti.template(),
     ):
-        colloc_points = ti.Vector([0.0] * 4, dt=ti.f64)
-        colloc_values = ti.Vector([0.0] * 4, dt=ti.f64)
+        colloc_points = ti.Vector([0.0] * 4, dt=float)
+        colloc_values = ti.Vector([0.0] * 4, dt=float)
 
         colloc_points[0] = source_params.f_ring
         colloc_points[1] = (
@@ -1812,7 +1812,7 @@ class SpheroidalMergeRingdownMode32:
             * source_params.eta_pow2
         )
 
-        Ab = ti.Matrix([[0.0] * 5 for _ in range(4)], dt=ti.f64)
+        Ab = ti.Matrix([[0.0] * 5 for _ in range(4)], dt=float)
         for i in ti.static(range(4)):
             row = [
                 1,
@@ -2073,15 +2073,15 @@ class PostNewtonianCoefficientsMode21:
 
         # since only absolute values are used, the minus and i are dropped.
         amp_global = tm.sqrt(2.0) / 3.0
-        self.A_0 = amp_global * ComplexNumber([0.0, 0.0])
+        self.A_0 = amp_global * ti_complex([0.0, 0.0])
         self.A_1 = (
             amp_global
-            * ComplexNumber([source_params.delta, 0.0])
+            * ti_complex([source_params.delta, 0.0])
             * useful_powers_2pi.third
         )
         self.A_2 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     -3.0
                     / 2.0
@@ -2093,7 +2093,7 @@ class PostNewtonianCoefficientsMode21:
         )
         self.A_3 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         3.35 / 6.72 * source_params.delta
@@ -2106,7 +2106,7 @@ class PostNewtonianCoefficientsMode21:
         )
         self.A_4 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         -source_params.delta * PI
@@ -2126,7 +2126,7 @@ class PostNewtonianCoefficientsMode21:
         )
         self.A_5 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         -0.964357 / 8.128512 * source_params.delta
@@ -2159,7 +2159,7 @@ class PostNewtonianCoefficientsMode21:
         )
         self.A_6 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         -2.455 / 1.344 * source_params.delta * PI
@@ -2232,16 +2232,16 @@ class PostNewtonianCoefficientsMode33:
 
         # since only absolute values are used, the minus and i are dropped.
         amp_global = 0.75 * tm.sqrt(5.0 / 7.0)
-        self.A_0 = amp_global * ComplexNumber([0.0, 0.0])
+        self.A_0 = amp_global * ti_complex([0.0, 0.0])
         self.A_1 = (
             amp_global
-            * ComplexNumber([source_params.delta, 0.0])
+            * ti_complex([source_params.delta, 0.0])
             * useful_powers_2pi_over_3.third
         )
-        self.A_2 = amp_global * ComplexNumber([0.0, 0.0])
+        self.A_2 = amp_global * ti_complex([0.0, 0.0])
         self.A_3 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         -19.45 / 6.72 * source_params.delta
@@ -2254,7 +2254,7 @@ class PostNewtonianCoefficientsMode33:
         )
         self.A_4 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         source_params.delta * PI
@@ -2274,7 +2274,7 @@ class PostNewtonianCoefficientsMode33:
         )
         self.A_5 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         -10.77664867 / 4.47068160 * source_params.delta
@@ -2308,7 +2308,7 @@ class PostNewtonianCoefficientsMode33:
         )
         self.A_6 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         -5.675 / 1.344 * source_params.delta * PI
@@ -2353,21 +2353,21 @@ class PostNewtonianCoefficientsMode32:
 
         # since only absolute values are used, the minus and i are dropped.
         amp_global = tm.sqrt(5.0 / 7.0) / 3.0
-        self.A_0 = amp_global * ComplexNumber([0.0, 0.0])
-        self.A_1 = amp_global * ComplexNumber([0.0, 0.0])
+        self.A_0 = amp_global * ti_complex([0.0, 0.0])
+        self.A_1 = amp_global * ti_complex([0.0, 0.0])
         self.A_2 = (
             amp_global
-            * ComplexNumber([(-1.0 + 3.0 * source_params.eta), 0.0])
+            * ti_complex([(-1.0 + 3.0 * source_params.eta), 0.0])
             * useful_powers_pi.two_thirds
         )
         self.A_3 = (
             amp_global
-            * ComplexNumber([(-4.0 * source_params.chi_s * source_params.eta), 0.0])
+            * ti_complex([(-4.0 * source_params.chi_s * source_params.eta), 0.0])
             * useful_powers_pi.one
         )
         self.A_4 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         1.0471 / 1.0080
@@ -2381,7 +2381,7 @@ class PostNewtonianCoefficientsMode32:
         )
         self.A_5 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         -11.3 / 2.4 * source_params.chi_a * source_params.delta
@@ -2401,7 +2401,7 @@ class PostNewtonianCoefficientsMode32:
         )
         self.A_6 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         8.24173699 / 4.47068160
@@ -2447,17 +2447,17 @@ class PostNewtonianCoefficientsMode44:
 
         # since only absolute values are used, the minus and i are dropped.
         amp_global = 4.0 / 9.0 * tm.sqrt(10.0 / 7.0)
-        self.A_0 = amp_global * ComplexNumber([0.0, 0.0])
-        self.A_1 = amp_global * ComplexNumber([0.0, 0.0])
+        self.A_0 = amp_global * ti_complex([0.0, 0.0])
+        self.A_1 = amp_global * ti_complex([0.0, 0.0])
         self.A_2 = (
             amp_global
-            * ComplexNumber([(1.0 - 3.0 * source_params.eta), 0.0])
+            * ti_complex([(1.0 - 3.0 * source_params.eta), 0.0])
             * useful_powers_pi_over_2.two_thirds
         )
-        self.A_3 = amp_global * ComplexNumber([0.0, 0.0])
+        self.A_3 = amp_global * ti_complex([0.0, 0.0])
         self.A_4 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         -15.8383 / 3.6960
@@ -2471,7 +2471,7 @@ class PostNewtonianCoefficientsMode44:
         )
         self.A_5 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         2.0 * PI
@@ -2497,7 +2497,7 @@ class PostNewtonianCoefficientsMode44:
         )
         self.A_6 = (
             amp_global
-            * ComplexNumber(
+            * ti_complex(
                 [
                     (
                         0.7888301437 / 2.9059430400
@@ -2537,10 +2537,10 @@ class AmplitudeCoefficientsMode21:
     for the intermediate of mode 21.
     """
 
-    int_ansatz_coeffs: ti.types.vector(5, ti.f64)
+    int_ansatz_coeffs: ti.types.vector(5, float)
 
     @ti.func
-    def _ins_fit_v0(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v0(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta_chi_half
             * source_params.eta_pow5
@@ -2599,7 +2599,7 @@ class AmplitudeCoefficientsMode21:
         )
 
     @ti.func
-    def _ins_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta_chi_half
             * source_params.eta_pow5
@@ -2678,7 +2678,7 @@ class AmplitudeCoefficientsMode21:
         )
 
     @ti.func
-    def _ins_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta_chi_half
             * source_params.eta_pow5
@@ -2747,7 +2747,7 @@ class AmplitudeCoefficientsMode21:
         )
 
     @ti.func
-    def _MRD_fit_v0(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v0(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * source_params.eta
@@ -2810,7 +2810,7 @@ class AmplitudeCoefficientsMode21:
         )
 
     @ti.func
-    def _MRD_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * (9.112452928978168 - 7.5304766811877455 * source_params.eta)
@@ -2873,7 +2873,7 @@ class AmplitudeCoefficientsMode21:
         )
 
     @ti.func
-    def _MRD_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * (2.920930733198033 - 3.038523690239521 * source_params.eta)
@@ -2946,7 +2946,7 @@ class AmplitudeCoefficientsMode21:
         boundary is skip and the two collocation points in the middle are dropped (using
         collocation points of 0, 1, 3, 5).
         """
-        int_colloc_points = ti.Vector([0.0] * 4, dt=ti.f64)
+        int_colloc_points = ti.Vector([0.0] * 4, dt=float)
         int_f_space = (self.int_f_end - self.ins_f_end) / 5.0
         int_colloc_points[0] = self.ins_f_end
         int_colloc_points[1] = self.ins_f_end + int_f_space
@@ -2955,7 +2955,7 @@ class AmplitudeCoefficientsMode21:
         powers_int_f0 = UsefulPowers()
         powers_int_f0.update(int_colloc_points[0])
 
-        int_colloc_values = ti.Vector([0.0] * 5, dt=ti.f64)
+        int_colloc_values = ti.Vector([0.0] * 5, dt=float)
         # left boundary
         int_colloc_values[0] = self._inspiral_amplitude(
             pn_coefficients_21, powers_int_f0
@@ -3125,7 +3125,7 @@ class AmplitudeCoefficientsMode21:
         )
 
         # set the augmented matrix
-        Ab = ti.Matrix([[0.0] * 6 for _ in range(5)], dt=ti.f64)
+        Ab = ti.Matrix([[0.0] * 6 for _ in range(5)], dt=float)
         row_idx = 0
         for i in ti.static(range(4)):
             # set the value at the collocation point
@@ -3180,7 +3180,7 @@ class AmplitudeCoefficientsMode33:
     """ """
 
     @ti.func
-    def _ins_fit_v0(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v0(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta_chi_half
             * source_params.eta_pow5
@@ -3252,7 +3252,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _ins_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta_chi_half
             * source_params.eta_pow5
@@ -3324,7 +3324,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _ins_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta_chi_half
             * source_params.delta
@@ -3384,7 +3384,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _MRD_fit_v0(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v0(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * source_params.eta
@@ -3455,7 +3455,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _MRD_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * source_params.eta
@@ -3512,7 +3512,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _MRD_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * source_params.eta
@@ -3583,7 +3583,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _int_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta_chi_half
             * source_params.delta
@@ -3645,7 +3645,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _int_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * source_params.eta
@@ -3715,7 +3715,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _int_fit_v3(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v3(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * source_params.eta
@@ -3785,7 +3785,7 @@ class AmplitudeCoefficientsMode33:
         )
 
     @ti.func
-    def _int_fit_v4(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v4(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.delta
             * source_params.eta
@@ -3935,7 +3935,7 @@ class AmplitudeCoefficientsMode32:
         powers_int_f5 = UsefulPowers()
         powers_int_f5.update(int_colloc_points[5])
 
-        int_colloc_values = ti.Vector([0.0] * 8, dt=ti.f64)
+        int_colloc_values = ti.Vector([0.0] * 8, dt=float)
         # left boundary
         int_colloc_values[0] = self._inspiral_amplitude(
             pn_coefficients_32, powers_int_f0
@@ -3969,7 +3969,7 @@ class AmplitudeCoefficientsMode32:
         )
 
         # set the augmented matrix
-        Ab = ti.Matrix([[0.0] * 9 for _ in range(8)], dt=ti.f64)
+        Ab = ti.Matrix([[0.0] * 9 for _ in range(8)], dt=float)
         row_idx = 0
         for i in ti.static(range(6)):
             # set the value at the collocation point
@@ -4008,7 +4008,7 @@ class AmplitudeCoefficientsMode32:
         phase_coefficients_22: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         amp_22 = (
             amplitude_coefficients_22._merge_ringdown_amplitude(
                 source_params, powers_of_Mf
@@ -4019,7 +4019,7 @@ class AmplitudeCoefficientsMode32:
         phi_22 = phase_coefficients_22.compute_phase(
             pn_coefficients_22, source_params, powers_of_Mf
         )
-        h_22 = amp_22 * tm.cexp(ComplexNumber([0.0, phi_22]))
+        h_22 = amp_22 * tm.cexp(ti_complex([0.0, phi_22]))
         h_32 = spheroidal_merge_ringdown_32.spherical_h32(
             h_22, source_params.QNM_freqs_lm["32"], powers_of_Mf
         )
@@ -4034,7 +4034,7 @@ class AmplitudeCoefficientsMode32:
         phase_coefficients_22: ti.template(),
         source_params: ti.template(),
         Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
 
         powers_Mf_left2 = UsefulPowers()
         powers_Mf_left = UsefulPowers()
@@ -4084,7 +4084,7 @@ class AmplitudeCoefficientsMode32:
         )
 
     @ti.func
-    def _ins_fit_v0(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v0(self, source_params: ti.template()) -> float:
         return ti.abs(
             (
                 source_params.delta_chi_half
@@ -4150,7 +4150,7 @@ class AmplitudeCoefficientsMode32:
         )
 
     @ti.func
-    def _ins_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             (
                 source_params.delta_chi_half_pow2
@@ -4202,7 +4202,7 @@ class AmplitudeCoefficientsMode32:
         )
 
     @ti.func
-    def _ins_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             (
                 source_params.delta_chi_half_pow2
@@ -4263,7 +4263,7 @@ class AmplitudeCoefficientsMode32:
         )
 
     @ti.func
-    def _int_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             (
                 source_params.delta_chi_half_pow2
@@ -4328,7 +4328,7 @@ class AmplitudeCoefficientsMode32:
         )
 
     @ti.func
-    def _int_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -4389,7 +4389,7 @@ class AmplitudeCoefficientsMode32:
         )
 
     @ti.func
-    def _int_fit_v3(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v3(self, source_params: ti.template()) -> float:
         return ti.abs(
             3.881450518842405 * source_params.eta
             - 12.580316392558837 * source_params.eta_pow2
@@ -4449,7 +4449,7 @@ class AmplitudeCoefficientsMode32:
         )
 
     @ti.func
-    def _int_fit_v4(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v4(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -4539,7 +4539,7 @@ class AmplitudeCoefficientsMode32:
         spheroidal_merge_ringdown_32: ti.template(),
         QNM_freqs_32: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         amplitude = 0.0
 
         if powers_of_Mf.one < self.ins_f_end:
@@ -4559,7 +4559,7 @@ class AmplitudeCoefficientsMode32:
 class AmplitudeCoefficientsMode44:
 
     @ti.func
-    def _ins_fit_v0(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v0(self, source_params: ti.template()) -> float:
         return ti.abs(
             (
                 source_params.delta_chi_half
@@ -4624,7 +4624,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _ins_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             (
                 source_params.delta_chi_half_pow2
@@ -4709,7 +4709,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _ins_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _ins_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             (
                 source_params.delta_chi_half
@@ -4783,7 +4783,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _MRD_fit_v0(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v0(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -4847,7 +4847,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _MRD_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -4910,7 +4910,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _MRD_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _MRD_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -4963,7 +4963,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _int_fit_v1(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v1(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -5019,7 +5019,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _int_fit_v2(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v2(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -5073,7 +5073,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _int_fit_v3(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v3(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -5129,7 +5129,7 @@ class AmplitudeCoefficientsMode44:
         )
 
     @ti.func
-    def _int_fit_v4(self, source_params: ti.template()) -> ti.f64:
+    def _int_fit_v4(self, source_params: ti.template()) -> float:
         return ti.abs(
             source_params.eta
             * (
@@ -5219,11 +5219,11 @@ class AmplitudeCoefficientsMode44:
 class PhaseCoefficientsMode21:
 
     @ti.func
-    def _Lambda_21_PN(self) -> ti.f64:
+    def _Lambda_21_PN(self) -> float:
         return 2.0 * PI * (0.5 + 2.0 * tm.log(2.0))
 
     @ti.func
-    def _Lambda_21_fit(self, source_params: ti.template()) -> ti.f64:
+    def _Lambda_21_fit(self, source_params: ti.template()) -> float:
         return (
             13.664473636545068
             - 170.08866400251395 * source_params.eta
@@ -5290,7 +5290,7 @@ class PhaseCoefficientsMode21:
         # special operation for 21 mode to avoide sharp transitions in high-spin cases
         if source_params.S_tot_hat >= 0.8:
             powers_22_fi = UsefulPowers()
-            int_22_vals = ti.Vector([0.0] * 3, dt=ti.f64)
+            int_22_vals = ti.Vector([0.0] * 3, dt=float)
             for i in ti.static(range(3)):
                 powers_22_fi.update(2.0 * self._int_colloc_points[i])
                 int_22_vals[i] = phase_coefficients_22._compute_d_phase_core(
@@ -5636,11 +5636,11 @@ class PhaseCoefficientsMode21:
 class PhaseCoefficientsMode33:
 
     @ti.func
-    def _Lambda_33_PN(self) -> ti.f64:
+    def _Lambda_33_PN(self) -> float:
         return 2.0 / 3.0 * PI * (21.0 / 5.0 - 6.0 * tm.log(1.5))
 
     @ti.func
-    def _Lambda_33_fit(self, source_params: ti.template()) -> ti.f64:
+    def _Lambda_33_fit(self, source_params: ti.template()) -> float:
         return (
             4.1138398568400705
             + 9.772510519809892 * source_params.eta
@@ -5977,19 +5977,19 @@ class PhaseCoefficientsMode33:
 @sub_struct_from(PhaseCoefficientsHighModesBase)
 class PhaseCoefficientsMode32:
 
-    _int_phi_fend: ti.f64  # phase at the int_f_end
-    _int_dphi_fend: ti.f64  # derivative of phase at the int_f_end
+    _int_phi_fend: float  # phase at the int_f_end
+    _int_dphi_fend: float  # derivative of phase at the int_f_end
 
     removed_members = ["alpha_2", "alpha_L"]
 
     @ti.func
-    def _Lambda_32_PN(self, source_params: ti.template()) -> ti.f64:
+    def _Lambda_32_PN(self, source_params: ti.template()) -> float:
         return (2376.0 * PI * (-5.0 + 22.0 * source_params.eta)) / (
             -3960.0 + 11880 * source_params.eta
         )
 
     @ti.func
-    def _Lambda_32_fit(self, source_params: ti.template()) -> ti.f64:
+    def _Lambda_32_fit(self, source_params: ti.template()) -> float:
         return (
             (
                 9.913819875501506
@@ -6084,7 +6084,7 @@ class PhaseCoefficientsMode32:
         """
         # get the derivatives at the boundary using finite-difference
         step = 1e-7
-        phi = ti.Vector([0.0] * 3, dt=ti.f64)
+        phi = ti.Vector([0.0] * 3, dt=float)
         powers_fi = UsefulPowers()
         for i in ti.static(range(3)):
             fi = self.int_f_end + (i - 1) * step
@@ -6123,7 +6123,7 @@ class PhaseCoefficientsMode32:
             self._set_int_colloc_value_4(source_params)
         self._int_colloc_values[5] = d2_phi
 
-        Ab = ti.Matrix([[0.0] * 7 for _ in range(6)], dt=ti.f64)
+        Ab = ti.Matrix([[0.0] * 7 for _ in range(6)], dt=float)
         for i in ti.static(range(5)):
             row = [
                 1.0,
@@ -6415,7 +6415,7 @@ class PhaseCoefficientsMode32:
         phase_coefficients_22: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         amp_22 = (
             amplitude_coefficients_22._merge_ringdown_amplitude(
                 source_params, powers_of_Mf
@@ -6426,7 +6426,7 @@ class PhaseCoefficientsMode32:
         phi_22 = phase_coefficients_22.compute_phase(
             pn_coefficients_22, source_params, powers_of_Mf
         )
-        h_22 = amp_22 * tm.cexp(ComplexNumber([0.0, phi_22]))
+        h_22 = amp_22 * tm.cexp(ti_complex([0.0, phi_22]))
         h_32 = spheroidal_merge_ringdown_32.spherical_h32(
             h_22, source_params.QNM_freqs_lm["32"], powers_of_Mf
         )
@@ -6441,7 +6441,7 @@ class PhaseCoefficientsMode32:
         phase_coefficients_22: ti.template(),
         source_params: ti.template(),
         Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         step = 1e-7
         powers_Mf_left = UsefulPowers()
         powers_Mf_left.update(Mf - step)
@@ -6522,7 +6522,7 @@ class PhaseCoefficientsMode32:
         spheroidal_merge_ringdown_32: ti.template(),
         QNM_freqs_32: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         # Note the time-shift for making the peak around t=0 has been incorporated in the construction of intermediate phase, here only the constants delta_phi_lm for aligning different modes are needed. And thus the continuity condition parameters needs to be added in the inspiral and merge-ringdown phase.
         phase = 0.0
         if powers_of_Mf.one < self.ins_f_end:
@@ -6554,7 +6554,7 @@ class PhaseCoefficientsMode32:
         phase_coefficients_22: ti.template(),
         source_params: ti.template(),
         powers_of_Mf: ti.template(),
-    ) -> ti.f64:
+    ) -> float:
         d_phase = 0.0
         if powers_of_Mf.one < self.ins_f_end:
             d_phase = (
@@ -6583,7 +6583,7 @@ class PhaseCoefficientsMode32:
 class PhaseCoefficientsMode44:
 
     @ti.func
-    def _Lambda_44_PN(self, source_params: ti.template()) -> ti.f64:
+    def _Lambda_44_PN(self, source_params: ti.template()) -> float:
         return (
             45045.0
             * PI
@@ -6596,7 +6596,7 @@ class PhaseCoefficientsMode44:
         )
 
     @ti.func
-    def _Lambda_44_fit(self, source_params: ti.template()) -> ti.f64:
+    def _Lambda_44_fit(self, source_params: ti.template()) -> float:
         return (
             5.254484747463392
             - 21.277760168559862 * source_params.eta
@@ -7028,7 +7028,7 @@ class IMRPhenomXHM(BaseWaveform):
         if self.return_form == "polarizations":
             self._harmonic_factors = ti.Struct.field(
                 {
-                    mode: ti.types.struct(plus=ComplexNumber, cross=ComplexNumber)
+                    mode: ti.types.struct(plus=ti_complex, cross=ti_complex)
                     for mode in ("22", *self.high_modes)
                 },
                 shape=(),
@@ -7060,15 +7060,15 @@ class IMRPhenomXHM(BaseWaveform):
     def _initialize_waveform_container(self) -> None:
         ret_content = {}
         if self.return_form == "amplitude_phase":
-            ret_content.update({"amplitude": ti.f64, "phase": ti.f64})
+            ret_content.update({"amplitude": float, "phase": float})
         elif self.return_form == "polarizations":
-            ret_content.update({"plus": ComplexNumber, "cross": ComplexNumber})
+            ret_content.update({"plus": ti_complex, "cross": ti_complex})
         else:
             raise Exception(
                 f"{self.return_form} is unknown. `return_form` can only be one of `polarizations` and `amplitude_phase`"
             )
         if self.include_tf:
-            ret_content.update({"tf": ti.f64})
+            ret_content.update({"tf": float})
         ret_struct = ti.types.struct(**ret_content)
 
         # containing 22 mode at least
@@ -7076,8 +7076,8 @@ class IMRPhenomXHM(BaseWaveform):
         # if combined modes is required, only polarizations are given
         if self.combine_modes:
             modes_content["combined"] = ti.types.struct(
-                plus=ComplexNumber,
-                cross=ComplexNumber,
+                plus=ti_complex,
+                cross=ti_complex,
             )
 
         # Using a AoS layout here, put the loop for modes into the inner layer
@@ -7096,8 +7096,8 @@ class IMRPhenomXHM(BaseWaveform):
         self._update_waveform_common(
             params["mass_1"],
             params["mass_2"],
-            params["chi1_z"],
-            params["chi2_z"],
+            params["chi_1"],
+            params["chi_2"],
             params["luminosity_distance"],
             params["inclination"],
             params["reference_phase"],
@@ -7110,13 +7110,13 @@ class IMRPhenomXHM(BaseWaveform):
     @ti.kernel
     def _update_waveform_common(
         self,
-        mass_1: ti.f64,
-        mass_2: ti.f64,
-        chi_1: ti.f64,
-        chi_2: ti.f64,
-        luminosity_distance: ti.f64,
-        inclination: ti.f64,
-        reference_phase: ti.f64,
+        mass_1: float,
+        mass_2: float,
+        chi_1: float,
+        chi_2: float,
+        luminosity_distance: float,
+        inclination: float,
+        reference_phase: float,
     ):
         self.source_parameters[None].update_source_parameters(
             mass_1,
@@ -7221,7 +7221,7 @@ class IMRPhenomXHM(BaseWaveform):
                     powers_of_Mf,
                 )
                 # h22 without dimension_factor
-                h22_dimless = amp_22 * tm.cexp(ComplexNumber([0.0, phi_22]))
+                h22_dimless = amp_22 * tm.cexp(ti_complex([0.0, phi_22]))
                 if ti.static(self.return_form == "amplitude_phase"):
                     self.waveform_container[idx]["22"]["amplitude"] = (
                         self.source_parameters[None].dimension_factor * amp_22
@@ -7265,7 +7265,7 @@ class IMRPhenomXHM(BaseWaveform):
                                 + self.phase_coefficients[None]["32"]["MRD_C1"] * Mf
                             )
                             h_32 = tm.cmul(
-                                tm.cexp(ComplexNumber([0.0, delta_phi])), h_32
+                                tm.cexp(ti_complex([0.0, delta_phi])), h_32
                             )
                             h_32 *= self.source_parameters[None].dimension_factor
                             if ti.static(self.return_form == "amplitude_phase"):
@@ -7302,7 +7302,7 @@ class IMRPhenomXHM(BaseWaveform):
                                 self.waveform_container[idx]["32"]["amplitude"] = amp_32
                                 self.waveform_container[idx]["32"]["phase"] = phi_32
                             if ti.static(self.return_form == "polarizations"):
-                                h_32 = amp_32 * tm.cexp(ComplexNumber([0.0, phi_32]))
+                                h_32 = amp_32 * tm.cexp(ti_complex([0.0, phi_32]))
                                 self.waveform_container[idx]["32"]["plus"] = tm.cmul(
                                     self._harmonic_factors[None]["32"].plus, h_32
                                 )
@@ -7344,7 +7344,7 @@ class IMRPhenomXHM(BaseWaveform):
                             self.waveform_container[idx][mode]["amplitude"] = amp_lm
                             self.waveform_container[idx][mode]["phase"] = phi_lm
                         if ti.static(self.return_form == "polarizations"):
-                            h_lm = amp_lm * tm.cexp(ComplexNumber([0.0, phi_lm]))
+                            h_lm = amp_lm * tm.cexp(ti_complex([0.0, phi_lm]))
                             self.waveform_container[idx][mode]["plus"] = tm.cmul(
                                 self._harmonic_factors[None][mode].plus, h_lm
                             )
@@ -7365,8 +7365,8 @@ class IMRPhenomXHM(BaseWaveform):
                             self.waveform_container[idx][mode]["tf"] = -dphi_lm
                 # combine all modes if required
                 if ti.static(self.combine_modes):
-                    combined_hp = ComplexNumber([0.0, 0.0])
-                    combined_hc = ComplexNumber([0.0, 0.0])
+                    combined_hp = ti_complex([0.0, 0.0])
+                    combined_hc = ti_complex([0.0, 0.0])
                     if ti.static(self.return_form == "polarizations"):
                         for mode in ti.static(("22",) + self.high_modes):
                             combined_hp += self.waveform_container[idx][mode]["plus"]
@@ -7375,7 +7375,7 @@ class IMRPhenomXHM(BaseWaveform):
                         for mode in ti.static(("22",) + self.high_modes):
                             amp_lm = self.waveform_container[idx][mode]["amplitude"]
                             phi_lm = self.waveform_container[idx][mode]["phase"]
-                            h_lm = amp_lm * tm.cexp(ComplexNumber([0.0, phi_lm]))
+                            h_lm = amp_lm * tm.cexp(ti_complex([0.0, phi_lm]))
                             combined_hp += tm.cmul(
                                 self._harmonic_factors[None][mode].plus, h_lm
                             )
@@ -7413,31 +7413,31 @@ class IMRPhenomXHM(BaseWaveform):
         # 22 mode
         common = 0.125 * tm.sqrt(5.0 / PI)
         self._harmonic_factors[None]["22"].plus = (
-            -ComplexNumber([1.0, 0.0]) * common * (1.0 + cos_iota_pow2)
+            -ti_complex([1.0, 0.0]) * common * (1.0 + cos_iota_pow2)
         )
         self._harmonic_factors[None]["22"].cross = (
-            ComplexNumber([0.0, 1.0]) * common * (2.0 * cos_iota)
+            ti_complex([0.0, 1.0]) * common * (2.0 * cos_iota)
         )
         # high mode
         if ti.static("21" in self.high_modes):
             common = 0.25 * tm.sqrt(5.0 / PI)
             self._harmonic_factors[None]["21"].plus = (
-                -ComplexNumber([0.0, 1.0]) * common * sin_iota
+                -ti_complex([0.0, 1.0]) * common * sin_iota
             )
             self._harmonic_factors[None]["21"].cross = (
-                -ComplexNumber([1.0, 0.0]) * common * sin_iota * cos_iota
+                -ti_complex([1.0, 0.0]) * common * sin_iota * cos_iota
             )
         if ti.static("33" in self.high_modes):
             common = 0.25 * tm.sqrt(21.0 / (2 * PI))
             self._harmonic_factors[None]["33"].plus = (
-                ComplexNumber([0.0, 1.0])
+                ti_complex([0.0, 1.0])
                 * common
                 * 0.5
                 * (1.0 + cos_iota_pow2)
                 * sin_iota
             )
             self._harmonic_factors[None]["33"].cross = (
-                ComplexNumber([1.0, 0.0]) * common * cos_iota * sin_iota
+                ti_complex([1.0, 0.0]) * common * cos_iota * sin_iota
             )
             # including (-1)^l for h_l-m
             self._harmonic_factors[None]["33"].plus *= -1.0
@@ -7445,10 +7445,10 @@ class IMRPhenomXHM(BaseWaveform):
         if ti.static("32" in self.high_modes):
             common = 0.25 * tm.sqrt(7.0 / PI)
             self._harmonic_factors[None]["32"].plus = (
-                ComplexNumber([1.0, 0.0]) * common * (1.0 - 2.0 * sin_iota_pow2)
+                ti_complex([1.0, 0.0]) * common * (1.0 - 2.0 * sin_iota_pow2)
             )
             self._harmonic_factors[None]["32"].cross = (
-                -ComplexNumber([0.0, 1.0])
+                -ti_complex([0.0, 1.0])
                 * common
                 * (1.0 - 1.5 * sin_iota_pow2)
                 * cos_iota
@@ -7459,14 +7459,14 @@ class IMRPhenomXHM(BaseWaveform):
         if ti.static("44" in self.high_modes):
             common = 3.0 / 8.0 * tm.sqrt(7.0 / PI)
             self._harmonic_factors[None]["44"].plus = (
-                ComplexNumber([1.0, 0.0])
+                ti_complex([1.0, 0.0])
                 * common
                 * 0.5
                 * sin_iota_pow2
                 * (1 + cos_iota_pow2)
             )
             self._harmonic_factors[None]["44"].cross = (
-                -ComplexNumber([0.0, 1.0]) * common * sin_iota_pow2 * cos_iota
+                -ti_complex([0.0, 1.0]) * common * sin_iota_pow2 * cos_iota
             )
 
     @property

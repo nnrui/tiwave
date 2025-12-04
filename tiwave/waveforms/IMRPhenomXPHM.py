@@ -22,9 +22,7 @@ powers_of_pi.update(PI)
 
 
 @ti.func
-def rotate_z(
-    angle: float, vec: ti.types.vector(3, float)
-) -> ti.types.vector(3, float):
+def rotate_z(angle: float, vec: ti.types.vector(3, float)) -> ti.types.vector(3, float):
     cos_angle = tm.cos(angle)
     sin_angle = tm.sin(angle)
     return ti.Vector(
@@ -38,9 +36,7 @@ def rotate_z(
 
 
 @ti.func
-def rotate_y(
-    angle: float, vec: ti.types.vector(3, float)
-) -> ti.types.vector(3, float):
+def rotate_y(angle: float, vec: ti.types.vector(3, float)) -> ti.types.vector(3, float):
     cos_angle = tm.cos(angle)
     sin_angle = tm.sin(angle)
     return ti.Vector(
@@ -1158,7 +1154,7 @@ class IMRPhenomXP(BaseWaveform):
 
     def __init__(
         self,
-        frequencies: ti.ScalarField | NDArray[np.float64],
+        frequencies: ti.ScalarField | NDArray,
         reference_frequency: float | None = None,
         return_form: str = "polarizations",  # "amplitude_phase_eulerangles" or "polarizations"
         include_tf: bool = True,

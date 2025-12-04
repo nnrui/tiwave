@@ -14,17 +14,18 @@ class BaseWaveform(ABC):
 
     def __init__(
         self,
-        frequencies: ti.ScalarField | NDArray[np.float64],
+        frequencies: ti.ScalarField | NDArray,
         reference_frequency: float | None = None,
         return_form: str = "polarizations",
         include_tf: bool = True,
+        scaling: bool = False,
         check_parameters: bool = False,
         parameter_conversion: Callable | None = None,
     ) -> None:
         """
         Parameters
         ==========
-        frequencies: ti.field of f64, frequencies maybe not uniform spaced
+        frequencies: ti.field, frequencies maybe not uniform spaced
         return_form: str
             `polarizations` or `amplitude_phase`, if waveform_container is given, this attribute will be neglected.
         include_tf: bool = True,
@@ -50,6 +51,19 @@ class BaseWaveform(ABC):
         else:
             self.reference_frequency = reference_frequency
 
+        self.return_form = return_form
+        self.include_tf = include_tf
+        self._initialize_waveform_container()
+
+        self.scaling = scaling
+        if (not scaling) and (
+            ti.lang.impl.current_cfg().default_fp.to_string() == "f32"
+        ):
+            warnings.warn(
+                "The current default float precision is f32, but no scaling has been applied. "
+                "Please be aware of potential numerical errors or underflow issues. "
+            )
+
         self.check_parameters = check_parameters
         if not self.check_parameters:
             warnings.warn(
@@ -60,10 +74,6 @@ class BaseWaveform(ABC):
             self.parameter_conversion = self._default_parameter_conversion
         else:
             self.parameter_conversion = parameter_conversion
-
-        self.return_form = return_form
-        self.include_tf = include_tf
-        self._initialize_waveform_container()
 
         self.source_parameters = None
         self.phase_coefficients = None

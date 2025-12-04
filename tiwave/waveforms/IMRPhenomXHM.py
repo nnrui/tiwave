@@ -956,13 +956,9 @@ class SourceParametersHighModes:
         }
     )
     # rescaling frequencies
-    f_MECO_lm: ti.types.struct(
-        **{"21": float, "33": float, "32": float, "44": float}
-    )
+    f_MECO_lm: ti.types.struct(**{"21": float, "33": float, "32": float, "44": float})
     # TODO: f_ISCO_lm are not used??
-    f_ISCO_lm: ti.types.struct(
-        **{"21": float, "33": float, "32": float, "44": float}
-    )
+    f_ISCO_lm: ti.types.struct(**{"21": float, "33": float, "32": float, "44": float})
 
     @ti.func
     def update_source_parameters(
@@ -6976,14 +6972,15 @@ class IMRPhenomXHM(BaseWaveform):
 
     def __init__(
         self,
-        frequencies: ti.ScalarField | NDArray[np.float64],
+        frequencies: ti.ScalarField | NDArray,
         reference_frequency: float | None,
         return_form: str = "polarizations",
         include_tf: bool = True,
-        high_modes: tuple[str] = ("21", "33", "32", "44"),
-        combine_modes: bool = False,
+        scaling: bool = False,
         check_parameters: bool = False,
         parameter_conversion: Callable | None = None,
+        high_modes: tuple[str] = ("21", "33", "32", "44"),
+        combine_modes: bool = False,
         mode_major: bool = True,  # mode major or frequency major in waveform_container
         container_layout: str = "AOS",  # TODO, AOS or SOA
     ) -> None:
@@ -6996,6 +6993,7 @@ class IMRPhenomXHM(BaseWaveform):
             reference_frequency,
             return_form,
             include_tf,
+            scaling,
             check_parameters,
             parameter_conversion,
         )
@@ -7203,6 +7201,12 @@ class IMRPhenomXHM(BaseWaveform):
         else:
             f_max = PHENOMXAS_HIGH_FREQUENCY_CUT
 
+        dimension_factor = 0.0
+        if ti.static(self.scaling):
+            dimension_factor = self.source_parameters[None].dimension_factor_scaling
+        else:
+            dimension_factor = self.source_parameters[None].dimension_factor_SI
+
         # main loop for building the waveform, auto-parallelized.
         powers_of_Mf = UsefulPowers()
         for idx in self.waveform_container:
@@ -7224,11 +7228,11 @@ class IMRPhenomXHM(BaseWaveform):
                 h22_dimless = amp_22 * tm.cexp(ti_complex([0.0, phi_22]))
                 if ti.static(self.return_form == "amplitude_phase"):
                     self.waveform_container[idx]["22"]["amplitude"] = (
-                        self.source_parameters[None].dimension_factor * amp_22
+                        dimension_factor * amp_22
                     )
                     self.waveform_container[idx]["22"]["phase"] = phi_22
                 if ti.static(self.return_form == "polarizations"):
-                    h_22 = self.source_parameters[None].dimension_factor * h22_dimless
+                    h_22 = dimension_factor * h22_dimless
                     self.waveform_container[idx]["22"]["plus"] = tm.cmul(
                         self._harmonic_factors[None]["22"].plus, h_22
                     )
@@ -7264,10 +7268,8 @@ class IMRPhenomXHM(BaseWaveform):
                                 + self.phase_coefficients[None]["32"]["MRD_C0"]
                                 + self.phase_coefficients[None]["32"]["MRD_C1"] * Mf
                             )
-                            h_32 = tm.cmul(
-                                tm.cexp(ti_complex([0.0, delta_phi])), h_32
-                            )
-                            h_32 *= self.source_parameters[None].dimension_factor
+                            h_32 = tm.cmul(tm.cexp(ti_complex([0.0, delta_phi])), h_32)
+                            h_32 *= dimension_factor
                             if ti.static(self.return_form == "amplitude_phase"):
                                 amp_32 = tm.length(h_32)
                                 phi_32 = tm.atan2(h_32[1], h_32[0])
@@ -7290,7 +7292,7 @@ class IMRPhenomXHM(BaseWaveform):
                                 self.source_parameters[None]["QNM_freqs_lm"]["32"],
                                 powers_of_Mf,
                             )
-                            amp_32 *= self.source_parameters[None].dimension_factor
+                            amp_32 *= dimension_factor
                             phi_32 = self.phase_coefficients[None]["32"].compute_phase(
                                 h22_dimless,
                                 self.pn_coefficients[None]["32"],
@@ -7334,7 +7336,7 @@ class IMRPhenomXHM(BaseWaveform):
                             self.pn_coefficients[None][mode],
                             powers_of_Mf,
                         )
-                        amp_lm *= self.source_parameters[None].dimension_factor
+                        amp_lm *= dimension_factor
                         phi_lm = self.phase_coefficients[None][mode].compute_phase(
                             self.source_parameters[None]["QNM_freqs_lm"][mode],
                             self.pn_coefficients[None][mode],
@@ -7430,11 +7432,7 @@ class IMRPhenomXHM(BaseWaveform):
         if ti.static("33" in self.high_modes):
             common = 0.25 * tm.sqrt(21.0 / (2 * PI))
             self._harmonic_factors[None]["33"].plus = (
-                ti_complex([0.0, 1.0])
-                * common
-                * 0.5
-                * (1.0 + cos_iota_pow2)
-                * sin_iota
+                ti_complex([0.0, 1.0]) * common * 0.5 * (1.0 + cos_iota_pow2) * sin_iota
             )
             self._harmonic_factors[None]["33"].cross = (
                 ti_complex([1.0, 0.0]) * common * cos_iota * sin_iota

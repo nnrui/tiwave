@@ -38,7 +38,10 @@ class SourceParameters:
     dL_SI: float  # luminosity distance in meter
     M_sec: float  # total mass in second
     Mf_ref: float  # dimensionless reference frequency
-    dimension_factor: float  # dimension factor of mass and distance in amplitude
+    dimension_factor_SI: float  # dimension factor of mass and distance in amplitude
+    dimension_factor_scaling: (
+        float  # dimension factor of mass and distance in amplitude
+    )
     eta: float  # symmetric_mass_ratio
     eta_pow2: float  # eta^2
     eta_pow3: float
@@ -112,7 +115,8 @@ class SourceParameters:
         self.dL_SI = self.dL_Mpc * 1e6 * PC_SI
         self.M_sec = self.M * MTSUN_SI
         self.Mf_ref = self.M_sec * reference_frequency
-        self.dimension_factor = self.M**2 / self.dL_SI * MRSUN_SI * MTSUN_SI
+        self.dimension_factor_SI = self.M**2 / self.dL_SI * MRSUN_SI * MTSUN_SI
+        self.dimension_factor_scaling = self.M**2 / (self.dL_Mpc * 1e6)
 
         self.eta = self.m_1 * self.m_2 / (self.M * self.M)
         self.eta_pow2 = self.eta * self.eta
@@ -2333,10 +2337,11 @@ class IMRPhenomXAS(BaseWaveform):
 
     def __init__(
         self,
-        frequencies: ti.ScalarField | NDArray[np.float64],
+        frequencies: ti.ScalarField | NDArray,
         reference_frequency: float | None = None,
         return_form: str = "polarizations",
         include_tf: bool = True,
+        scaling: bool = False,
         check_parameters: bool = False,
         parameter_conversion: Callable | None = None,
     ) -> None:
@@ -2345,6 +2350,7 @@ class IMRPhenomXAS(BaseWaveform):
             reference_frequency,
             return_form,
             include_tf,
+            scaling,
             check_parameters,
             parameter_conversion,
         )
@@ -2410,11 +2416,15 @@ class IMRPhenomXAS(BaseWaveform):
             self.pn_coefficients[None], self.source_parameters[None]
         )
 
-        harm_fac = ti.Struct(
-            plus=ti_complex([0.0, 0.0]), cross=ti_complex([0.0, 0.0])
-        )
+        harm_fac = ti.Struct(plus=ti_complex([0.0, 0.0]), cross=ti_complex([0.0, 0.0]))
         if ti.static(self.return_form == "polarizations"):
             self._set_harmonic_factors(harm_fac)
+
+        dimension_factor = 0.0
+        if ti.static(self.scaling):
+            dimension_factor = self.source_parameters[None].dimension_factor_scaling
+        else:
+            dimension_factor = self.source_parameters[None].dimension_factor_SI
 
         # main loop for building the waveform, auto-parallelized.
         powers_of_Mf = UsefulPowers()
@@ -2427,7 +2437,7 @@ class IMRPhenomXAS(BaseWaveform):
                     self.source_parameters[None],
                     powers_of_Mf,
                 )
-                amplitude *= self.source_parameters[None].dimension_factor
+                amplitude *= dimension_factor
                 phase = self.phase_coefficients[None].compute_phase(
                     self.pn_coefficients[None],
                     self.source_parameters[None],

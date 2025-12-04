@@ -48,15 +48,15 @@ def sub_struct_from(parent):
     return sub_struct
 
 
-def complex_ti_field_to_np_array(
-    input_field: ti.MatrixField,
-) -> NDArray[np.complex128]:
-    np_array = input_field.to_numpy()
-    return np_array[:, 0] + 1j * np_array[:, 1]
+# def complex_ti_field_to_np_array(
+#     input_field: ti.MatrixField,
+# ) -> NDArray:
+#     np_array = input_field.to_numpy()
+#     return np_array[:, 0] + 1j * np_array[:, 1]
 
 
 # def complex_np_array_to_ti_field(
-#     input_array: NDArray[np.complex128], field_container: ti.MatrixField
+#     input_array: NDArray, field_container: ti.MatrixField
 # ) -> None:
 #     field_container.from_numpy(np.vstack([input_array.real, input_array.imag]).T)
 #     return None

@@ -16,6 +16,8 @@ class BaseWaveform(ABC):
         self,
         frequencies: ti.ScalarField | NDArray,
         reference_frequency: float | None = None,
+        needs_grad: bool = False,
+        needs_dual: bool = False,
         return_form: str = "polarizations",
         include_tf: bool = True,
         scaling: bool = False,
@@ -50,6 +52,9 @@ class BaseWaveform(ABC):
             self.reference_frequency = self.frequencies[0]
         else:
             self.reference_frequency = reference_frequency
+
+        self.needs_grad = needs_grad
+        self.needs_dual = needs_dual
 
         self.return_form = return_form
         self.include_tf = include_tf
@@ -100,6 +105,8 @@ class BaseWaveform(ABC):
         self.waveform_container = ti.Struct.field(
             ret_content,
             shape=self.frequencies.shape,
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
         )
         return None
 

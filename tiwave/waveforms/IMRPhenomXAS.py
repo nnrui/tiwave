@@ -2339,6 +2339,8 @@ class IMRPhenomXAS(BaseWaveform):
         self,
         frequencies: ti.ScalarField | NDArray,
         reference_frequency: float | None = None,
+        needs_grad: bool = False,
+        needs_dual: bool = False,
         return_form: str = "polarizations",
         include_tf: bool = True,
         scaling: bool = False,
@@ -2346,67 +2348,104 @@ class IMRPhenomXAS(BaseWaveform):
         parameter_conversion: Callable | None = None,
     ) -> None:
         super().__init__(
-            frequencies,
-            reference_frequency,
-            return_form,
-            include_tf,
-            scaling,
-            check_parameters,
-            parameter_conversion,
+            frequencies=frequencies,
+            reference_frequency=reference_frequency,
+            needs_grad=needs_grad,
+            needs_dual=needs_dual,
+            return_form=return_form,
+            include_tf=include_tf,
+            scaling=scaling,
+            check_parameters=check_parameters,
+            parameter_conversion=parameter_conversion,
         )
+
         # instantiating scalar fields for global accessing
-        self.source_parameters = SourceParameters.field(shape=())
-        self.phase_coefficients = PhaseCoefficients.field(shape=())
-        self.amplitude_coefficients = AmplitudeCoefficients.field(shape=())
-        self.pn_coefficients = PostNewtonianCoefficients.field(shape=())
+        self.source_parameters = SourceParameters.field(
+            shape=(),
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
+        )
+        self.phase_coefficients = PhaseCoefficients.field(
+            shape=(),
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
+        )
+        self.amplitude_coefficients = AmplitudeCoefficients.field(
+            shape=(),
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
+        )
+        self.pn_coefficients = PostNewtonianCoefficients.field(
+            shape=(),
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
+        )
+
+        # useful intermediate variable for get the waveform
+        # stored in the taichi field for auto-diff
+        self._params = ti.Struct.field(
+            dict(
+                m1=float,
+                m2=float,
+                chi_1=float,
+                chi_2=float,
+                dL=float,
+                iota=float,
+                phi_ref=float,
+            ),
+            shape=(),
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
+        )
+        self._harm_factors = ti.Struct.field(
+            dict(plus=ti_complex, cross=ti_complex),
+            shape=(),
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
+        )
+        self._dim_factor = ti.field(
+            float,
+            shape=(),
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
+        )
+        self._powers_Mf = UsefulPowers.field(
+            shape=self.frequencies.shape,
+            needs_grad=self.needs_grad,
+            needs_dual=self.needs_dual,
+        )
 
     def update_waveform(self, input_params: dict[str, float]) -> None:
         """
         necessary preparation which need to be finished in python scope
         """
         params = self.parameter_conversion(input_params)
-        self._update_waveform_kernel(
-            params["mass_1"],
-            params["mass_2"],
-            params["chi_1"],
-            params["chi_2"],
-            params["luminosity_distance"],
-            params["inclination"],
-            params["reference_phase"],
-            self.reference_frequency,
-        )
+        self._update_input_params(params)
+        self._kernel_non_loop()
+        self._kernel_loop_frequencies()
 
-    @ti.func
-    def _set_harmonic_factors(self, harmonic_factors: ti.template()):
-        common = 0.125 * tm.sqrt(5.0 / PI)
-        cos_iota = tm.cos(self.source_parameters[None].iota)
-        harmonic_factors.plus = (
-            -ti_complex([1.0, 0.0]) * common * (1.0 + cos_iota * cos_iota)
-        )
-        harmonic_factors.cross = ti_complex([0.0, 1.0]) * common * (2 * cos_iota)
+    def _update_input_params(self, params: dict[str, float]):
+        # write the params field, can be done in python scope
+        # avoid read the params field in python scope, if autodiff is needed
+        self._params[None].m1 = params["mass_1"]
+        self._params[None].m2 = params["mass_2"]
+        self._params[None].chi_1 = params["chi_1"]
+        self._params[None].chi_2 = params["chi_2"]
+        self._params[None].dL = params["luminosity_distance"]
+        self._params[None].iota = params["inclination"]
+        self._params[None].phi_ref = params["reference_phase"]
 
     @ti.kernel
-    def _update_waveform_kernel(
-        self,
-        mass_1: float,
-        mass_2: float,
-        chi_1: float,
-        chi_2: float,
-        luminosity_distance: float,
-        inclination: float,
-        reference_phase: float,
-        reference_frequency: float,
-    ):
-
+    def _kernel_non_loop(self):
         self.source_parameters[None].update_source_parameters(
-            mass_1,
-            mass_2,
-            chi_1,
-            chi_2,
-            luminosity_distance,
-            inclination,
-            reference_phase,
-            reference_frequency,
+            self._params[None].m1,
+            self._params[None].m2,
+            self._params[None].chi_1,
+            self._params[None].chi_2,
+            self._params[None].dL,
+            self._params[None].iota,
+            self._params[None].phi_ref,
+            self.reference_frequency,
         )
         self.pn_coefficients[None].update_pn_coefficients(self.source_parameters[None])
         self.amplitude_coefficients[None].update_amplitude_coefficients(
@@ -2416,32 +2455,31 @@ class IMRPhenomXAS(BaseWaveform):
             self.pn_coefficients[None], self.source_parameters[None]
         )
 
-        harm_fac = ti.Struct(plus=ti_complex([0.0, 0.0]), cross=ti_complex([0.0, 0.0]))
         if ti.static(self.return_form == "polarizations"):
-            self._set_harmonic_factors(harm_fac)
+            self._set_harmonic_factors()
 
-        dimension_factor = 0.0
         if ti.static(self.scaling):
-            dimension_factor = self.source_parameters[None].dimension_factor_scaling
+            self._dim_factor[None] = self.source_parameters[None].dimension_factor_scaling # fmt: skip
         else:
-            dimension_factor = self.source_parameters[None].dimension_factor_SI
+            self._dim_factor[None] = self.source_parameters[None].dimension_factor_SI
 
+    @ti.kernel
+    def _kernel_loop_frequencies(self):
         # main loop for building the waveform, auto-parallelized.
-        powers_of_Mf = UsefulPowers()
         for idx in self.frequencies:
             Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
             if Mf < PHENOMXAS_HIGH_FREQUENCY_CUT:
-                powers_of_Mf.update(Mf)
+                self._powers_Mf[idx].update(Mf)
                 amplitude = self.amplitude_coefficients[None].compute_amplitude(
                     self.pn_coefficients[None],
                     self.source_parameters[None],
-                    powers_of_Mf,
+                    self._powers_Mf[idx],
                 )
-                amplitude *= dimension_factor
+                amplitude *= self._dim_factor[None]
                 phase = self.phase_coefficients[None].compute_phase(
                     self.pn_coefficients[None],
                     self.source_parameters[None],
-                    powers_of_Mf,
+                    self._powers_Mf[idx],
                 )
 
                 if ti.static(self.return_form == "amplitude_phase"):
@@ -2449,13 +2487,17 @@ class IMRPhenomXAS(BaseWaveform):
                     self.waveform_container[idx].phase = phase
                 if ti.static(self.return_form == "polarizations"):
                     h_22 = amplitude * tm.cexp(ti_complex([0.0, phase]))
-                    self.waveform_container[idx].plus = tm.cmul(harm_fac.plus, h_22)
-                    self.waveform_container[idx].cross = tm.cmul(harm_fac.cross, h_22)
+                    self.waveform_container[idx].plus = tm.cmul(
+                        self._harm_factors[None].plus, h_22
+                    )
+                    self.waveform_container[idx].cross = tm.cmul(
+                        self._harm_factors[None].cross, h_22
+                    )
                 if ti.static(self.include_tf):
                     dphi = self.phase_coefficients[None].compute_d_phase(
                         self.pn_coefficients[None],
                         self.source_parameters[None],
-                        powers_of_Mf,
+                        self._powers_Mf[idx],
                     )
                     dphi *= self.source_parameters[None].M_sec / PI / 2  # to second
                     self.waveform_container[idx].tf = -dphi
@@ -2468,6 +2510,99 @@ class IMRPhenomXAS(BaseWaveform):
                     self.waveform_container[idx].cross.fill(0.0)
                 if ti.static(self.include_tf):
                     self.waveform_container[idx].tf = 0.0
+
+    @ti.func
+    def _set_harmonic_factors(self):
+        common = 0.125 * tm.sqrt(5.0 / PI)
+        cos_iota = tm.cos(self.source_parameters[None].iota)
+        self._harm_factors[None].plus = (
+            -ti_complex([1.0, 0.0]) * common * (1.0 + cos_iota * cos_iota)
+        )
+        self._harm_factors[None].cross = ti_complex([0.0, 1.0]) * common * (2 * cos_iota) # fmt: skip
+
+    # @ti.kernel
+    # def _update_waveform_kernel(
+    #     self,
+    #     mass_1: float,
+    #     mass_2: float,
+    #     chi_1: float,
+    #     chi_2: float,
+    #     luminosity_distance: float,
+    #     inclination: float,
+    #     reference_phase: float,
+    #     reference_frequency: float,
+    # ):
+
+    #     self.source_parameters[None].update_source_parameters(
+    #         mass_1,
+    #         mass_2,
+    #         chi_1,
+    #         chi_2,
+    #         luminosity_distance,
+    #         inclination,
+    #         reference_phase,
+    #         reference_frequency,
+    #     )
+    #     self.pn_coefficients[None].update_pn_coefficients(self.source_parameters[None])
+    #     self.amplitude_coefficients[None].update_amplitude_coefficients(
+    #         self.pn_coefficients[None], self.source_parameters[None]
+    #     )
+    #     self.phase_coefficients[None].update_phase_coefficients(
+    #         self.pn_coefficients[None], self.source_parameters[None]
+    #     )
+
+    #     harm_fac = ti.Struct(plus=ti_complex([0.0, 0.0]), cross=ti_complex([0.0, 0.0]))
+    #     if ti.static(self.return_form == "polarizations"):
+    #         self._set_harmonic_factors(harm_fac)
+
+    #     dimension_factor = 0.0
+    #     if ti.static(self.scaling):
+    #         dimension_factor = self.source_parameters[None].dimension_factor_scaling
+    #     else:
+    #         dimension_factor = self.source_parameters[None].dimension_factor_SI
+
+    #     # main loop for building the waveform, auto-parallelized.
+    #     powers_of_Mf = UsefulPowers()
+    #     for idx in self.frequencies:
+    #         Mf = self.source_parameters[None].M_sec * self.frequencies[idx]
+    #         if Mf < PHENOMXAS_HIGH_FREQUENCY_CUT:
+    #             powers_of_Mf.update(Mf)
+    #             amplitude = self.amplitude_coefficients[None].compute_amplitude(
+    #                 self.pn_coefficients[None],
+    #                 self.source_parameters[None],
+    #                 powers_of_Mf,
+    #             )
+    #             amplitude *= dimension_factor
+    #             phase = self.phase_coefficients[None].compute_phase(
+    #                 self.pn_coefficients[None],
+    #                 self.source_parameters[None],
+    #                 powers_of_Mf,
+    #             )
+
+    #             if ti.static(self.return_form == "amplitude_phase"):
+    #                 self.waveform_container[idx].amplitude = amplitude
+    #                 self.waveform_container[idx].phase = phase
+    #             if ti.static(self.return_form == "polarizations"):
+    #                 h_22 = amplitude * tm.cexp(ti_complex([0.0, phase]))
+    #                 self.waveform_container[idx].plus = tm.cmul(harm_fac.plus, h_22)
+    #                 self.waveform_container[idx].cross = tm.cmul(harm_fac.cross, h_22)
+    #             if ti.static(self.include_tf):
+    #                 dphi = self.phase_coefficients[None].compute_d_phase(
+    #                     self.pn_coefficients[None],
+    #                     self.source_parameters[None],
+    #                     powers_of_Mf,
+    #                 )
+    #                 dphi *= self.source_parameters[None].M_sec / PI / 2  # to second
+    #                 self.waveform_container[idx].tf = -dphi
+    #         else:
+    #             if ti.static(self.return_form == "amplitude_phase"):
+    #                 self.waveform_container[idx].amplitude = 0.0
+    #                 self.waveform_container[idx].phase = 0.0
+    #             if ti.static(self.return_form == "polarizations"):
+    #                 self.waveform_container[idx].plus.fill(0.0)
+    #                 self.waveform_container[idx].cross.fill(0.0)
+    #             if ti.static(self.include_tf):
+    #                 self.waveform_container[idx].tf = 0.0
 
     def parameter_validity_check(self, parameters):
         # TODO: check paramters in taichi scope for improving performance

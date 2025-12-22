@@ -2420,20 +2420,38 @@ class IMRPhenomXAS(BaseWaveform):
         necessary preparation which need to be finished in python scope
         """
         params = self.parameter_conversion(input_params)
-        self._update_input_params(params)
+        self._update_input_params(
+            params["mass_1"],
+            params["mass_2"],
+            params["chi_1"],
+            params["chi_2"],
+            params["luminosity_distance"],
+            params["inclination"],
+            params["reference_phase"],
+        )
         self._kernel_non_loop()
         self._kernel_loop_frequencies()
 
-    def _update_input_params(self, params: dict[str, float]):
+    @ti.kernel
+    def _update_input_params(
+        self,
+        m1: float,
+        m2: float,
+        chi_1: float,
+        chi_2: float,
+        dL: float,
+        iota: float,
+        phi_ref: float,
+    ):
         # write the params field, can be done in python scope
         # avoid read the params field in python scope, if autodiff is needed
-        self._params[None].m1 = params["mass_1"]
-        self._params[None].m2 = params["mass_2"]
-        self._params[None].chi_1 = params["chi_1"]
-        self._params[None].chi_2 = params["chi_2"]
-        self._params[None].dL = params["luminosity_distance"]
-        self._params[None].iota = params["inclination"]
-        self._params[None].phi_ref = params["reference_phase"]
+        self._params[None].m1 = m1
+        self._params[None].m2 = m2
+        self._params[None].chi_1 = chi_1
+        self._params[None].chi_2 = chi_2
+        self._params[None].dL = dL
+        self._params[None].iota = iota
+        self._params[None].phi_ref = phi_ref
 
     @ti.kernel
     def _kernel_non_loop(self):

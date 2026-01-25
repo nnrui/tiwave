@@ -22,7 +22,7 @@ dependencies = [
     "taichi != 1.7.1", 
     "numpy",
 ]
-keywords = ["gravitational-wave", "taichi-lang"]
+keywords = ["gravitational-wave", "taichi-lang", "waveform"]
 dynamic = ["version"]
 
 [project.optional-dependencies]
@@ -43,7 +43,7 @@ Documentation = "https://github.com/niuiniuin/tiwave"
 Repository = "https://github.com/niuiniuin/tiwave"
 
 [tool.setuptools.packages.find]
-where = ["tiwave"]
+include = ["tiwave*"]
 
 [tool.setuptools.package-data]
 "tiwave.waveforms.data" = [

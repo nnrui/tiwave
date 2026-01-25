@@ -1,48 +1,36 @@
-# tiwave - commonly used gravitational waveform models implemented with taichi-lang
+# `tiwave` - gravitational waveforms implemented using taichi-lang
 
-![last commit](https://img.shields.io/github/last-commit/niuiniuin/tiwave)
+![last commit](https://img.shields.io/github/last-commit/nnrui/tiwave)
 [![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-[![docs:]()]
-[![test.yaml:]()]
-[![test coverage:]()]
-[![downloads:]()]
+[![docs](https://img.shields.io/badge/docs-under%20development-yellow)]()
+<!-- [![docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue)](https://nrui.github.io/tiwave/) -->
 
-`tiwave` is a python implementation of several commonly used gravitational waveform models powered by [`taichi-lang`](https://www.taichi-lang.org/), developed mainly for preparatory science of space-borne gravitaional wave observation projects. It can be used to generate waveforms in high performance on both CPUs and GPUs, with useful features like automatic differentiation, while keeping python's virtues of usability and maintainability. 
+> [!WARNING]
+> This is an experimental project under active development. The design and APIs are not stable and may change frequently.
 
-
-## Supported models
-
-- [x] TaylorF2 (arXiv: )
-- [x] IMRPhenomD (arXiv: [1508.07250](https://arxiv.org/abs/1508.07250), [1508.07253](https://arxiv.org/abs/1508.07253))
-- [x] IMRPhenomXAS (arXiv: [2001.11412](https://arxiv.org/abs/2001.11412))
-- [x] IMRPhenomXHM (arXiv: [2001.10914](https://arxiv.org/abs/2001.10914))
-- [ ] IMRPhenomXPHM (arXiv: [2004.06503](https://arxiv.org/abs/2004.06503))
-- [ ] IMRPhenomXP 
-- [ ] FASTGB (arXiv: [0704.1808](https://arxiv.org/abs/0704.1808))
-- [ ] AAK (arXiv: )
-
-*(For waveforms of X family, only the default configuration are implemented, see [docs](https://git.ligo.org/lscsoft/lalsuite/-/blob/master/lalsimulation/lib/LALSimIMRPhenomX.c#L136) in lalsimulation for more details.)*
+`tiwave` is a python implementation of several gravitational waveform models powered by [`taichi-lang`](https://www.taichi-lang.org/), developed primarily for the preparatory science of space-borne gravitaional-wave missions.
+This package enables high-performance waveform generation across CPUs and GPUs, while keeping pythonic usability and maintainability. 
 
 
 ## Installation
-Using pip is the easiest way to install.
-```sh
-pip install git+https://github.com/niuiniuin/tiwave.git@master
+Install from PyPI:
+```bash
+pip install tiwave
+```
+Install the latest or specific commit version:
+```bash
+# install the latest development version
+pip install git+https://github.com/nnrui/tiwave
+# install a specific commit
+pip install git+https://github.com/nnrui/tiwave@<commit-hash>
 ```
 
-While, if you are concerned that this may mess up your environment, you can use conda to create an isolated environment.
-```sh
-conda create -f https://raw.githubusercontent.com/niuiniuin/tiwave/refs/heads/master/environment.yml
-conda activate tiwave
-pip install git+https://github.com/niuiniuin/tiwave.git@master
-```
-
-
-## Quickstart
+## Usage
 ```python
 import taichi as ti
 ti.init(arch=ti.cpu, default_fp=ti.f64)
 
+import numpy as np
 from tiwave.waveforms import IMRPhenomXAS
 
 reference_frequency = 20.0
@@ -58,7 +46,7 @@ freqs = full_freqs[freqs_mask]
 freqs_ti = ti.field(ti.f64, shape=freqs.shape)
 freqs_ti.from_numpy(freqs)
 
-params_in = dict(
+params = dict(
     mass_1=36.0,
     mass_2=29.0,
     chi_1=-0.4,
@@ -69,46 +57,46 @@ params_in = dict(
 )
 
 xas_tiw = IMRPhenomXAS(freqs_ti, reference_frequency)
-xas_tiw.update_waveform(parameters)
+xas_tiw.update_waveform(params)
 xas_tiw.waveform_container_numpy
 ```
-More examples and detail APIs can be found in the [document]().
+More examples or tutorials can be found in the [document]().
 
 
-## Testing with lalsimulation
-
-*Comparing the waveform*
-
-*Mismatch in the whole parameter space*
-
-*Performance*
-
-(The performance tests are highly depending on the hardware and software environment. The results shown above are obtained on the [hanhai20](https://scc.ustc.edu.cn/zlsc/user_doc/html/introduction/hanhai20-introduction.html) system in USTC with Intel Xeon Scale 6248 and NVIDIA Tesla V100.)
-
-More thorough tests can be found [here]().
-
-
-## Other tools
-If `tiwave` cannot meet your needs, you may find other packages for gravitaional waveform generation (Please open a new issue or PR if you know more):
-
+## Other Tools
+If `tiwave` cannot meet your needs, you may find other packages for gravitaional waveform generation (welcome to open issues or pull requests if you know more):
 - [`lalsimulation`](https://github.com/lscsoft/lalsuite)
 - [`bbhx`](https://github.com/mikekatz04/BBHx)
 - [`wf4py`](https://github.com/CosmoStatGW/WF4Py)
 - [`ripple`](https://github.com/tedwards2412/ripple)
 
 
+## Known Limitations
+- For waveforms of X family, only the recommended configuration are implemented, except the multibanding settings which is currently not supported in `tiwave`. The details of recommended settings can be found in the document of `lalsimulation`, [LALSimIMRPhenomX.c](https://docs.ligo.org/lscsoft/lalsuite/lalsimulation/group___l_a_l_sim_i_m_r_phenom_x__c.html);
+- The 32 mode in IMRPhenomXHM has relatively large numerical errors. However, we believe it is still safe to use for sources with moderate mass ratio and spins (more details can be found in the [notebook]() and Appendix A in the [paper]());
+- Currently, automatic differentiation is only available for IMRPhenomXAS, and limited to the backward mode;
+
+
 ## Contact
-Any suggestions and comments are extremely welcome. Feel free to open issues or email me (nrui@mail.ustc.edu.cn).
+The author strive to make this package easy-to-use and maintainable. But the author's experience and knowledge in software engineering is limited. Any feedback, comments, and suggestions are greatly appreciated. Feel free to open issues or contact.
 
 
 ## Citation
-If you think this package is useful, please considering cite
-```
-```
-The development of this package depending on many previous works including:
-```
-```
-Please cite the original works for the corresponding modules you have used.
+If you think this package is useful, please considering cite [arxiv: 2601.xxxx]().
 
-
+The development of this package depending on many previous works, Please cite the original works for the corresponding modules you have used.
+> IMRPhenomD: (validation for reimplemented IMRPhenomD in `tiwave` over the entire parameter space is still in progress)
+> - Sascha Husa, et al. *Frequency-domain gravitational waves from nonprecessing black-hole binaries. I. New numerical waveforms and anatomy of the signal*, [Phys. Rev. D 93, 044006](https://doi.org/10.1103/PhysRevD.93.044006)
+> - Sebastian Khan, et al. *Frequency-domain gravitational waves from nonprecessing black-hole binaries. II. A phenomenological model for the advanced detector era*, [Phys. Rev. D 93, 044007](https://doi.org/10.1103/PhysRevD.93.044007)
+> 
+> IMRPhenomXAS:
+> - Geraint Pratten, et al. *Setting the cornerstone for a family of models for gravitational waves from compact binaries: The dominant harmonic for nonprecessing quasicircular black holes*, [Phys. Rev. D 102, 064001](https://doi.org/10.1103/PhysRevD.102.064001)
+> 
+> IMRPhenomXHM:
+> - Cecilio García-Quirós, et al. *Multimode frequency-domain model for the gravitational wave signal from nonprecessing black-hole binaries*, [Phys. Rev. D 102, 064002](https://doi.org/10.1103/PhysRevD.102.064002)
+> 
+> IMRPhenomXPHM: (support for the precession effects in `tiwave` is still ongoing)
+> - Geraint Pratten, et al. *Computationally efficient models for the dominant and subdominant harmonic modes of precessing binary black holes*, [Phys. Rev. D 103, 104056](https://doi.org/10.1103/PhysRevD.103.104056)
+> - (the single-spin model) Mark Hannam, et al. *Simple Model of Complete Precessing Black-Hole-Binary Gravitational Waveforms*, [Phys. Rev. Lett. 113, 151101](https://doi.org/10.1103/PhysRevLett.113.151101)
+> - (the double-spin model) Katerina Chatziioannou, et, al. *Constructing gravitational waves from generic spin-precessing compact binary inspirals*, [Phys. Rev. D 95, 104004](https://doi.org/10.1103/PhysRevD.95.104004)
 
